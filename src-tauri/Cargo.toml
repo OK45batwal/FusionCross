@@ -1,0 +1,18 @@
+[package]
+name = "fusionwine-backend"
+version = "1.0.0"
+description = "FusionWine backend architecture"
+authors = ["Omkar <omkar@fusionwine.app>"]
+edition = "2021"
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-build = "2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sysinfo = "0.30"
+tokio = { version = "1.0", features = ["full"] }
+rand = "0.8"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
