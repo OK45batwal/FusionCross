@@ -9,7 +9,7 @@ import { PerformanceMonitor } from './pages/PerformanceMonitor';
 import { DownloadCenter } from './pages/DownloadCenter';
 import { Settings } from './pages/Settings';
 import { InstallWizard } from './pages/InstallWizard';
-import { SoftwareCatalog } from './pages/SoftwareCatalog'; // Pre-optimized configurations store
+import { SoftwareCatalog } from './pages/SoftwareCatalog.tsx'; // Pre-optimized configurations store
 
 const AppContent: React.FC = () => {
   const { onboarded, activeTab, showWizard, setShowWizard } = useApp();
