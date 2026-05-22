@@ -15,7 +15,9 @@ import {
   FileCode,
   X,
   Plus,
-  Terminal
+  Terminal,
+  FolderOpen,
+  RefreshCw
 } from 'lucide-react';
 
 export const BottleManager: React.FC = () => {
@@ -28,7 +30,9 @@ export const BottleManager: React.FC = () => {
     runtimes,
     runCustomExe,
     logs,
-    clearLogs
+    clearLogs,
+    openPrefixInFinder,
+    resetSandbox
   } = useApp();
   const [selectedId, setSelectedId] = useState<string>(bottles[0]?.id || '');
   const [activeSubTab, setActiveSubTab] = useState<'overrides' | 'env' | 'registry' | 'graphics'>('overrides');
@@ -253,7 +257,32 @@ export const BottleManager: React.FC = () => {
               >
                 <Trash2 className="w-3.5 h-3.5" /> DELETE
               </button>
+              <button 
+                onClick={() => openPrefixInFinder(selectedBottle.path)}
+                className="btn-secondary py-2 text-xs font-mono"
+                title="Open WinePrefix folder in macOS Finder"
+              >
+                <FolderOpen className="w-3.5 h-3.5" /> SHOW ON DISK
+              </button>
+              <button 
+                onClick={() => {
+                  const confirmed = window.confirm(`Reset the sandbox for "${selectedBottle.name}"? This will wipe all installed programs and registry changes inside this bottle and recreate a fresh environment.`);
+                  if (confirmed) resetSandbox(selectedBottle.id, selectedBottle.path);
+                }}
+                className="btn-secondary py-2 text-xs font-mono"
+                title="Wipe and recreate a fresh WinePrefix sandbox"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> RESET
+              </button>
             </div>
+          </div>
+
+          {/* Prefix Path Display */}
+          <div className="px-6 py-2.5 border-b border-graphite-800/40 bg-graphite-950/30 flex items-center gap-2">
+            <FolderOpen className="w-3.5 h-3.5 text-graphite-500 shrink-0" />
+            <span className="text-[10px] font-mono text-graphite-400 truncate" title={selectedBottle.path}>
+              Sandbox: <strong className="text-graphite-300">{selectedBottle.path}</strong>
+            </span>
           </div>
 
           {/* Sub-tabs buttons */}

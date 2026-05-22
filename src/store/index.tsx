@@ -27,6 +27,8 @@ interface AppContextType {
   installRecipe: (recipeId: string, bottleName: string, bottleType: string, wineVersion: string) => Promise<void>;
   runCustomExe: (bottleId: string, exePath: string, args: string) => Promise<void>;
   addCustomRecipe: (recipe: Omit<SoftwareRecipe, 'id'>) => void;
+  openPrefixInFinder: (prefixPath: string) => Promise<void>;
+  resetSandbox: (bottleId: string, prefixPath: string) => Promise<void>;
   showWizard: boolean;
   setShowWizard: (val: boolean) => void;
   wizardRecipeId: string | 'custom' | null;
@@ -694,6 +696,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setRecipes((prev) => [...prev, newRecipe]);
   };
 
+  const openPrefixInFinder = async (prefixPath: string) => {
+    if (isTauri()) {
+      const { invoke } = await import('@tauri-apps/api/core');
+      try {
+        await invoke('open_prefix_in_finder', { prefixPath });
+      } catch (err) {
+        console.error('Failed to open prefix in Finder:', err);
+      }
+    } else {
+      console.log('Open in Finder (browser mode):', prefixPath);
+    }
+  };
+
+  const resetSandbox = async (bottleId: string, prefixPath: string) => {
+    if (isTauri()) {
+      const { invoke } = await import('@tauri-apps/api/core');
+      try {
+        await invoke('reset_sandbox', { bottleId, prefixPath });
+      } catch (err) {
+        console.error('Failed to reset sandbox:', err);
+      }
+    } else {
+      console.log('Reset sandbox (browser mode):', bottleId);
+    }
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -722,6 +750,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         installRecipe,
         runCustomExe,
         addCustomRecipe,
+        openPrefixInFinder,
+        resetSandbox,
         showWizard,
         setShowWizard,
         wizardRecipeId,

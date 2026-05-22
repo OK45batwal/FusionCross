@@ -5,9 +5,13 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::fs;
+use std::io::{BufRead, BufReader, Write};
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::sync::Mutex;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, State};
 
 // ========================================================
 // DATA STRUCTURES
@@ -83,6 +87,30 @@ pub struct SysMetrics {
 }
 
 // ========================================================
+// SANDBOX RESULT STRUCTURES
+// ========================================================
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct SandboxInfo {
+  pub bottle_id: String,
+  pub prefix_path: String,
+  pub drive_c_path: String,
+  pub system32_path: String,
+  pub program_files_path: String,
+  pub registry_files: Vec<String>,
+  pub dll_overrides_injected: Vec<String>,
+  pub total_files_created: u32,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct DownloadProgress {
+  pub id: String,
+  pub progress: u32,
+  pub status: String,
+  pub message: String,
+}
+
+// ========================================================
 // GLOBAL MUTABLE STATE
 // ========================================================
 
@@ -91,6 +119,63 @@ pub struct AppState {
   pub apps: Mutex<Vec<AppConfig>>,
   pub runtimes: Mutex<Vec<Runtime>>,
   pub active_process_id: Mutex<Option<String>>,
+  pub active_child_pid: Mutex<Option<u32>>,
+}
+
+// ========================================================
+// PATH SECURITY & SANITIZATION
+// ========================================================
+
+/// Base directory where all FusionWine sandboxes are stored.
+/// All path validations ensure we never escape this directory.
+fn get_fusionwine_base_dir() -> PathBuf {
+  let home = std::env::var("HOME").unwrap_or_else(|_| "/Users/omkar".to_string());
+  PathBuf::from(home)
+    .join("Library")
+    .join("Application Support")
+    .join("FusionWine")
+}
+
+/// Validates that a given path resolves within the allowed FusionWine base directory.
+/// Prevents path traversal attacks (e.g., ../../etc/passwd).
+fn validate_sandbox_path(target: &Path) -> Result<PathBuf, String> {
+  let base = get_fusionwine_base_dir();
+  let canonical_base = fs::canonicalize(&base).unwrap_or_else(|_| base.clone());
+
+  // Resolve the target path relative to base
+  let resolved = if target.is_absolute() {
+    target.to_path_buf()
+  } else {
+    base.join(target)
+  };
+
+  // If the target doesn't exist yet, verify its parent chain
+  let check_path = if resolved.exists() {
+    fs::canonicalize(&resolved).map_err(|e| format!("Path resolution failed: {}", e))?
+  } else {
+    // Walk up to find the closest existing ancestor
+    let mut ancestor = resolved.clone();
+    while !ancestor.exists() {
+      ancestor = ancestor.parent()
+        .ok_or_else(|| "Invalid path: no existing ancestor".to_string())?
+        .to_path_buf();
+    }
+    let canonical_ancestor = fs::canonicalize(&ancestor)
+      .map_err(|e| format!("Ancestor path resolution failed: {}", e))?;
+    // Re-append the remaining suffix
+    let suffix = resolved.strip_prefix(&ancestor).unwrap_or(Path::new(""));
+    canonical_ancestor.join(suffix)
+  };
+
+  if check_path.starts_with(&canonical_base) || check_path.starts_with(&base) {
+    Ok(resolved)
+  } else {
+    Err(format!(
+      "Security: path '{}' escapes the FusionWine sandbox directory '{}'",
+      resolved.display(),
+      base.display()
+    ))
+  }
 }
 
 // ========================================================
@@ -113,7 +198,9 @@ fn create_bottle(
   let mut bottles = state.bottles.lock().map_err(|e| e.to_string())?;
   
   let new_id = format!("bottle-{}", rand::random::<u16>());
-  let path = format!("/Users/omkar/.gemini/antigravity/scratch/fusionwine/bottles/{}", new_id);
+  let base = get_fusionwine_base_dir();
+  let bottle_dir = base.join("bottles").join(&new_id);
+  let path = bottle_dir.to_string_lossy().to_string();
 
   let default_env = HashMap::from([
     ("DXVK_HUD".to_string(), "fps".to_string()),
@@ -142,6 +229,12 @@ fn create_bottle(
     }
   ];
 
+  // Actually create the sandbox directories on disk
+  let _ = initialize_prefix_sandbox_impl(&path, &prefix_type);
+
+  // Calculate real size on disk
+  let real_size = calculate_dir_size(&bottle_dir);
+
   let new_bottle = Bottle {
     id: new_id,
     name,
@@ -153,7 +246,7 @@ fn create_bottle(
     env_vars: default_env,
     dll_overrides: default_overrides,
     registry_keys: default_registry,
-    size_bytes: 420_000_000, // mock initial bottle size (420MB)
+    size_bytes: real_size,
     path,
     created_at: "2026-05-22".to_string(),
   };
@@ -168,6 +261,16 @@ fn delete_bottle(id: String, state: State<'_, AppState>) -> Result<String, Strin
   let index = bottles.iter().position(|b| b.id == id)
     .ok_or_else(|| "Bottle not found".to_string())?;
   
+  // Clean up the real filesystem sandbox if it exists
+  let bottle_path = bottles[index].path.clone();
+  let path = Path::new(&bottle_path);
+  if path.exists() {
+    // Validate we're only deleting inside FusionWine directories
+    if let Ok(_) = validate_sandbox_path(path) {
+      let _ = fs::remove_dir_all(path);
+    }
+  }
+
   bottles.remove(index);
   
   // Clean up any apps assigned to this bottle
@@ -428,6 +531,461 @@ fn get_system_metrics(state: State<'_, AppState>) -> Result<SysMetrics, String> 
 }
 
 // ========================================================
+// REAL SANDBOXING COMMANDS
+// ========================================================
+
+/// Internal implementation for creating the WinePrefix directory structure.
+/// Called both from `create_bottle` and `initialize_prefix_sandbox` commands.
+fn initialize_prefix_sandbox_impl(prefix_path: &str, prefix_type: &str) -> Result<SandboxInfo, String> {
+  let base_path = Path::new(prefix_path);
+
+  // Validate path stays within FusionWine sandbox
+  validate_sandbox_path(base_path)?;
+
+  // Core directory structure mimicking a real WinePrefix
+  let directories = vec![
+    base_path.join("drive_c"),
+    base_path.join("drive_c").join("windows"),
+    base_path.join("drive_c").join("windows").join("system32"),
+    base_path.join("drive_c").join("windows").join("syswow64"),
+    base_path.join("drive_c").join("windows").join("Fonts"),
+    base_path.join("drive_c").join("windows").join("Installer"),
+    base_path.join("drive_c").join("windows").join("temp"),
+    base_path.join("drive_c").join("Program Files"),
+    base_path.join("drive_c").join("Program Files (x86)"),
+    base_path.join("drive_c").join("ProgramData"),
+    base_path.join("drive_c").join("users"),
+    base_path.join("drive_c").join("users").join("steamuser"),
+    base_path.join("drive_c").join("users").join("steamuser").join("Desktop"),
+    base_path.join("drive_c").join("users").join("steamuser").join("Documents"),
+    base_path.join("drive_c").join("users").join("steamuser").join("Downloads"),
+    base_path.join("drive_c").join("users").join("steamuser").join("AppData"),
+    base_path.join("drive_c").join("users").join("steamuser").join("AppData").join("Local"),
+    base_path.join("drive_c").join("users").join("steamuser").join("AppData").join("Roaming"),
+    base_path.join("dosdevices"),
+  ];
+
+  let mut total_files: u32 = 0;
+
+  for dir in &directories {
+    fs::create_dir_all(dir).map_err(|e| format!("Failed to create directory {}: {}", dir.display(), e))?;
+    total_files += 1;
+  }
+
+  // Create DOS device symlinks (c: -> drive_c)
+  let dos_c = base_path.join("dosdevices").join("c:");
+  if !dos_c.exists() {
+    #[cfg(unix)]
+    {
+      let _ = std::os::unix::fs::symlink(base_path.join("drive_c"), &dos_c);
+      total_files += 1;
+    }
+  }
+
+  // Create Wine-compatible registry files with valid default values
+  let system_reg_content = format!(
+    r#"WINE REGISTRY Version 2
+;; FusionWine Auto-Generated System Registry
+;; Prefix Type: {prefix_type}
+;; Generated: 2026-05-22
+
+[System\\CurrentControlSet\\Control\\Windows]
+"CSDVersion"=dword:00000200
+
+[Software\\Microsoft\\Windows\\CurrentVersion]
+"ProgramFilesDir"="C:\\Program Files"
+"CommonFilesDir"="C:\\Program Files\\Common Files"
+
+[Software\\Microsoft\\Windows NT\\CurrentVersion]
+"CurrentBuild"="19045"
+"CurrentBuildNumber"="19045"
+"CurrentVersion"="6.3"
+"ProductName"="Windows 10 Pro"
+
+[Software\\Wine\\DllOverrides]
+"d3d11"="native,builtin"
+"d3d9"="native,builtin"
+"dxgi"="native,builtin"
+"d3d10core"="native,builtin"
+
+[Software\\Wine\\Direct3D]
+"MaxShaderModelVS"=dword:00000005
+"MaxShaderModelPS"=dword:00000005
+"MaxShaderModelGS"=dword:00000005
+"csmt"=dword:00000003
+"#
+  );
+
+  let user_reg_content = format!(
+    r#"WINE REGISTRY Version 2
+;; FusionWine Auto-Generated User Registry
+;; Generated: 2026-05-22
+
+[Software\\Wine\\Mac Driver]
+"RetinaMode"="Y"
+
+[Software\\Wine\\DllOverrides]
+"winemenubuilder.exe"=""
+
+[Control Panel\\Desktop]
+"FontSmoothing"="2"
+"FontSmoothingType"=dword:00000002
+"FontSmoothingGamma"=dword:00000578
+"#
+  );
+
+  let system_reg_path = base_path.join("system.reg");
+  let user_reg_path = base_path.join("user.reg");
+  let userdef_reg_path = base_path.join("userdef.reg");
+
+  let mut f = fs::File::create(&system_reg_path)
+    .map_err(|e| format!("Failed to create system.reg: {}", e))?;
+  f.write_all(system_reg_content.as_bytes())
+    .map_err(|e| format!("Failed to write system.reg: {}", e))?;
+  total_files += 1;
+
+  let mut f = fs::File::create(&user_reg_path)
+    .map_err(|e| format!("Failed to create user.reg: {}", e))?;
+  f.write_all(user_reg_content.as_bytes())
+    .map_err(|e| format!("Failed to write user.reg: {}", e))?;
+  total_files += 1;
+
+  let mut f = fs::File::create(&userdef_reg_path)
+    .map_err(|e| format!("Failed to create userdef.reg: {}", e))?;
+  f.write_all(b"WINE REGISTRY Version 2\n;; Default user registry\n")
+    .map_err(|e| format!("Failed to write userdef.reg: {}", e))?;
+  total_files += 1;
+
+  // Inject placeholder DLL override stubs into system32
+  let mut dll_stubs: Vec<String> = Vec::new();
+  let dlls_to_inject = ["d3d11.dll", "d3d9.dll", "dxgi.dll", "d3d10core.dll"];
+  for dll_name in &dlls_to_inject {
+    let dll_path = base_path.join("drive_c").join("windows").join("system32").join(dll_name);
+    let stub_content = format!(
+      "FusionWine DLL Override Stub\nLibrary: {}\nType: native,builtin\nNote: Replace this stub with real DXVK library for graphics translation.\n",
+      dll_name
+    );
+    let mut f = fs::File::create(&dll_path)
+      .map_err(|e| format!("Failed to create stub {}: {}", dll_name, e))?;
+    f.write_all(stub_content.as_bytes())
+      .map_err(|e| format!("Failed to write stub {}: {}", dll_name, e))?;
+    dll_stubs.push(dll_name.to_string());
+    total_files += 1;
+  }
+
+  // Create a .update-timestamp marker (Wine compatibility)
+  let timestamp_path = base_path.join(".update-timestamp");
+  fs::write(&timestamp_path, "1716393600").map_err(|e| format!("Failed to write timestamp: {}", e))?;
+  total_files += 1;
+
+  let info = SandboxInfo {
+    bottle_id: String::new(), // filled by caller
+    prefix_path: prefix_path.to_string(),
+    drive_c_path: base_path.join("drive_c").to_string_lossy().to_string(),
+    system32_path: base_path.join("drive_c").join("windows").join("system32").to_string_lossy().to_string(),
+    program_files_path: base_path.join("drive_c").join("Program Files").to_string_lossy().to_string(),
+    registry_files: vec![
+      system_reg_path.to_string_lossy().to_string(),
+      user_reg_path.to_string_lossy().to_string(),
+      userdef_reg_path.to_string_lossy().to_string(),
+    ],
+    dll_overrides_injected: dll_stubs,
+    total_files_created: total_files,
+  };
+
+  Ok(info)
+}
+
+/// Calculate the total size of a directory recursively.
+fn calculate_dir_size(path: &Path) -> u64 {
+  if !path.exists() {
+    return 0;
+  }
+  let mut total: u64 = 0;
+  if let Ok(entries) = fs::read_dir(path) {
+    for entry in entries.flatten() {
+      let meta = entry.metadata();
+      if let Ok(m) = meta {
+        if m.is_dir() {
+          total += calculate_dir_size(&entry.path());
+        } else {
+          total += m.len();
+        }
+      }
+    }
+  }
+  total
+}
+
+#[tauri::command]
+fn initialize_prefix_sandbox(bottle_id: String, prefix_path: String, prefix_type: String) -> Result<SandboxInfo, String> {
+  let mut info = initialize_prefix_sandbox_impl(&prefix_path, &prefix_type)?;
+  info.bottle_id = bottle_id;
+  Ok(info)
+}
+
+#[tauri::command]
+fn reset_sandbox(bottle_id: String, prefix_path: String) -> Result<String, String> {
+  let path = Path::new(&prefix_path);
+  
+  // Security: validate path is within FusionWine sandbox
+  validate_sandbox_path(path)?;
+
+  if path.exists() {
+    fs::remove_dir_all(path).map_err(|e| format!("Failed to remove sandbox: {}", e))?;
+  }
+
+  // Recreate a fresh sandbox
+  let _ = initialize_prefix_sandbox_impl(&prefix_path, "gaming")?;
+
+  Ok(format!("Sandbox '{}' has been reset successfully", bottle_id))
+}
+
+#[tauri::command]
+fn open_prefix_in_finder(prefix_path: String) -> Result<bool, String> {
+  let path = Path::new(&prefix_path);
+  
+  if !path.exists() {
+    return Err(format!("Path does not exist: {}", prefix_path));
+  }
+
+  Command::new("open")
+    .arg(&prefix_path)
+    .spawn()
+    .map_err(|e| format!("Failed to open Finder: {}", e))?;
+
+  Ok(true)
+}
+
+#[tauri::command]
+fn download_wine_engine(
+  engine_url: String,
+  target_id: String,
+  app_handle: AppHandle,
+) -> Result<String, String> {
+  let base = get_fusionwine_base_dir();
+  let runtimes_dir = base.join("runtimes");
+  let target_dir = runtimes_dir.join(&target_id);
+  
+  fs::create_dir_all(&target_dir)
+    .map_err(|e| format!("Failed to create runtime directory: {}", e))?;
+
+  let target_id_clone = target_id.clone();
+  let target_dir_clone = target_dir.clone();
+
+  // Spawn async download thread with progress emission
+  std::thread::spawn(move || {
+    // Emit starting progress
+    let _ = app_handle.emit("download-progress", DownloadProgress {
+      id: target_id_clone.clone(),
+      progress: 0,
+      status: "downloading".to_string(),
+      message: format!("Starting download from {}...", engine_url),
+    });
+
+    // Use native curl to download (zero external Rust dependencies)
+    let archive_path = target_dir_clone.join("engine.tar.gz");
+    let curl_result = Command::new("curl")
+      .args(["-L", "-o"])
+      .arg(archive_path.to_string_lossy().as_ref())
+      .arg(&engine_url)
+      .arg("--progress-bar")
+      .stdout(Stdio::piped())
+      .stderr(Stdio::piped())
+      .output();
+
+    match curl_result {
+      Ok(output) => {
+        if !output.status.success() {
+          let err = String::from_utf8_lossy(&output.stderr);
+          let _ = app_handle.emit("download-progress", DownloadProgress {
+            id: target_id_clone.clone(),
+            progress: 0,
+            status: "error".to_string(),
+            message: format!("Download failed: {}", err),
+          });
+          return;
+        }
+
+        let _ = app_handle.emit("download-progress", DownloadProgress {
+          id: target_id_clone.clone(),
+          progress: 60,
+          status: "extracting".to_string(),
+          message: "Download complete. Extracting archive...".to_string(),
+        });
+
+        // Extract with tar
+        let tar_result = Command::new("tar")
+          .args(["-xzf"])
+          .arg(archive_path.to_string_lossy().as_ref())
+          .arg("-C")
+          .arg(target_dir_clone.to_string_lossy().as_ref())
+          .output();
+
+        match tar_result {
+          Ok(tar_out) => {
+            if tar_out.status.success() {
+              // Clean up the archive file
+              let _ = fs::remove_file(&archive_path);
+
+              let _ = app_handle.emit("download-progress", DownloadProgress {
+                id: target_id_clone.clone(),
+                progress: 100,
+                status: "complete".to_string(),
+                message: "Engine installed successfully!".to_string(),
+              });
+            } else {
+              let err = String::from_utf8_lossy(&tar_out.stderr);
+              let _ = app_handle.emit("download-progress", DownloadProgress {
+                id: target_id_clone.clone(),
+                progress: 60,
+                status: "error".to_string(),
+                message: format!("Extraction failed: {}", err),
+              });
+            }
+          }
+          Err(e) => {
+            let _ = app_handle.emit("download-progress", DownloadProgress {
+              id: target_id_clone.clone(),
+              progress: 60,
+              status: "error".to_string(),
+              message: format!("Failed to run tar: {}", e),
+            });
+          }
+        }
+      }
+      Err(e) => {
+        let _ = app_handle.emit("download-progress", DownloadProgress {
+          id: target_id_clone.clone(),
+          progress: 0,
+          status: "error".to_string(),
+          message: format!("Failed to start curl: {}", e),
+        });
+      }
+    }
+  });
+
+  Ok(format!("Download started for engine '{}'", target_id))
+}
+
+#[tauri::command]
+fn execute_windows_binary(
+  prefix_path: String,
+  exe_path: String,
+  arguments: String,
+  app_handle: AppHandle,
+  _state: State<'_, AppState>,
+) -> Result<String, String> {
+  // Try to find a Wine binary on the system
+  let wine_candidates = [
+    // Homebrew Wine
+    "/usr/local/bin/wine64",
+    "/opt/homebrew/bin/wine64",
+    // CrossOver Wine
+    "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine64",
+    // Game Porting Toolkit
+    "/usr/local/Cellar/game-porting-toolkit/1.1/bin/wine64",
+    // Whisky bundled Wine
+    "/Applications/Whisky.app/Contents/Resources/Wine/bin/wine64",
+  ];
+
+  let wine_path = wine_candidates.iter()
+    .find(|p| Path::new(p).exists())
+    .map(|p| p.to_string());
+
+  let prefix_clone = prefix_path.clone();
+  let exe_clone = exe_path.clone();
+
+  match wine_path {
+    Some(wine_bin) => {
+      // Real Wine execution path
+      let wine_bin_clone = wine_bin.clone();
+      
+      std::thread::spawn(move || {
+        let _ = app_handle.emit("wine-log-stream", format!(
+          "[FusionWine] Detected Wine binary at: {}", wine_bin_clone
+        ));
+        let _ = app_handle.emit("wine-log-stream", format!(
+          "[FusionWine] WINEPREFIX={}", prefix_clone
+        ));
+        let _ = app_handle.emit("wine-log-stream", format!(
+          "[FusionWine] Launching: {} {}", exe_clone, arguments
+        ));
+
+        let child = Command::new(&wine_bin_clone)
+          .env("WINEPREFIX", &prefix_clone)
+          .env("WINEDLLOVERRIDES", "d3d11,dxgi=n,b")
+          .env("DXVK_HUD", "fps")
+          .env("WINEESYNC", "1")
+          .env("WINEFSYNC", "1")
+          .arg(&exe_clone)
+          .args(arguments.split_whitespace())
+          .stdout(Stdio::piped())
+          .stderr(Stdio::piped())
+          .spawn();
+
+        match child {
+          Ok(mut process) => {
+            let _ = app_handle.emit("wine-log-stream", format!(
+              "[FusionWine] Process spawned with PID: {}", process.id()
+            ));
+
+            // Stream stderr (Wine outputs its logs to stderr)
+            if let Some(stderr) = process.stderr.take() {
+              let reader = BufReader::new(stderr);
+              for line in reader.lines() {
+                if let Ok(log_line) = line {
+                  let _ = app_handle.emit("wine-log-stream", format!("[Wine] {}", log_line));
+                }
+              }
+            }
+
+            let _ = process.wait();
+            let _ = app_handle.emit("wine-log-stream", "[FusionWine] Process exited.".to_string());
+          }
+          Err(e) => {
+            let _ = app_handle.emit("wine-log-stream", format!(
+              "[FusionWine:Error] Failed to spawn Wine process: {}", e
+            ));
+          }
+        }
+      });
+
+      Ok(format!("Launching via Wine: {}", exe_path))
+    }
+    None => {
+      // No Wine found — run simulated logs for demonstration
+      let exe_name = exe_path.clone();
+
+      std::thread::spawn(move || {
+        let logs = vec![
+          "[FusionWine] No Wine binary found on system. Running in simulation mode.".to_string(),
+          format!("[FusionWine] WINEPREFIX={}", prefix_clone),
+          format!("[FusionWine] Target executable: {}", exe_name),
+          "[sim] esync: up and running.".to_string(),
+          "[sim] wine: WGL-MoltenVK graphics backend preloaded.".to_string(),
+          "[sim] dxvk: DXVK 2.3 loader initialized.".to_string(),
+          "[sim] dxvk: MoltenVK dynamic loading: vkGetInstanceProcAddr found.".to_string(),
+          "[sim] win: Direct3D11Device adapter config successful.".to_string(),
+          "[sim] render: Shader compiler cached 240 Vulkan state pipelines.".to_string(),
+          "[sim] audio: OpenAL device configured on CoreAudio.".to_string(),
+          format!("[sim] game: Launching primary executable: {}...", exe_name),
+          "[FusionWine] Install Wine via Homebrew to enable real execution:".to_string(),
+          "[FusionWine]   brew install --cask --no-quarantine wine-stable".to_string(),
+        ];
+
+        for log in logs {
+          std::thread::sleep(Duration::from_millis(500));
+          let _ = app_handle.emit("wine-log-stream", log);
+        }
+      });
+
+      Ok(format!("Simulated launch (no Wine binary found): {}", exe_path))
+    }
+  }
+}
+
+// ========================================================
 // APPLICATION BOOTSTRAP
 // ========================================================
 
@@ -561,11 +1119,17 @@ fn main() {
     }
   ];
 
+  // Ensure the FusionWine base directories exist on first launch
+  let base = get_fusionwine_base_dir();
+  let _ = fs::create_dir_all(base.join("bottles"));
+  let _ = fs::create_dir_all(base.join("runtimes"));
+
   let state = AppState {
     bottles: Mutex::new(default_bottles),
     apps: Mutex::new(default_apps),
     runtimes: Mutex::new(default_runtimes),
     active_process_id: Mutex::new(None),
+    active_child_pid: Mutex::new(None),
   };
 
   tauri::Builder::default()
@@ -583,7 +1147,13 @@ fn main() {
       stop_active_app,
       list_runtimes,
       trigger_runtime_download,
-      get_system_metrics
+      get_system_metrics,
+      // Real sandboxing commands
+      initialize_prefix_sandbox,
+      reset_sandbox,
+      open_prefix_in_finder,
+      download_wine_engine,
+      execute_windows_binary
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
