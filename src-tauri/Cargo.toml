@@ -1,8 +1,8 @@
 [package]
-name = "fusionwine-backend"
+name = "fusioncross-backend"
 version = "1.0.0"
-description = "FusionWine backend architecture"
-authors = ["Omkar <omkar@fusionwine.app>"]
+description = "FusionCross backend architecture"
+authors = ["Omkar <omkar@fusioncross.app>"]
 edition = "2021"
 
 [dependencies]

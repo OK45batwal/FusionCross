@@ -24,7 +24,7 @@ export const Dashboard: React.FC = () => {
             System Workspace
           </span>
           <h1 className="text-3xl font-extrabold text-white tracking-tight font-mono">
-            Welcome to FusionWine
+            Welcome to FusionCross
           </h1>
           <p className="text-sm text-graphite-300 leading-relaxed">
             Unleash Windows application power natively on macOS. Manage isolated bottles, configure Vulkan/DXVK backends, and run your library with Apple Silicon optimization.

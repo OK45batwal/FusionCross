@@ -850,7 +850,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "fusionwine-backend"
+name = "fusioncross-backend"
 version = "1.0.0"
 dependencies = [
  "rand",

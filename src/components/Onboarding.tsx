@@ -40,7 +40,7 @@ export const Onboarding: React.FC = () => {
 
   const steps = [
     {
-      title: "Welcome to FusionWine",
+      title: "Welcome to FusionCross",
       desc: "An advanced CrossOver-inspired launcher designed for playing Windows .exe games and applications seamlessly on macOS using Wine and Proton translation layers.",
       icon: Sparkles,
     },

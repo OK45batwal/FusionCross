@@ -1,7 +1,7 @@
 {
-  "productName": "FusionWine",
+  "productName": "FusionCross",
   "version": "1.0.0",
-  "identifier": "com.omkar.fusionwine",
+  "identifier": "com.omkar.fusioncross",
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "FusionWine",
+        "title": "FusionCross",
         "width": 1160,
         "height": 760,
         "resizable": true,
@@ -22,7 +22,7 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self' tauri: 'unsafe-inline'; img-src 'self' tauri: data: asset: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' ipc: http://localhost:* https://*"
     }
   },
   "bundle": {

@@ -120,10 +120,7 @@ export const InstallWizard: React.FC<InstallWizardProps> = ({ isOpen, onClose })
 
     try {
       if (selectedRecipeId === 'custom') {
-        // Mock custom installation trigger
-        // We will call installRecipe under a dummy id or register it manually
-        // For simplicity, we trigger a generic installer simulation
-        await installRecipe('winamp', finalBottleName, finalBottleType, finalWineVersion);
+        await installRecipe('custom', finalBottleName, finalBottleType, finalWineVersion, customAppName, customExePath);
       } else if (selectedRecipeId) {
         await installRecipe(selectedRecipeId, finalBottleName, finalBottleType, finalWineVersion);
       }
@@ -272,13 +269,41 @@ export const InstallWizard: React.FC<InstallWizardProps> = ({ isOpen, onClose })
                     </div>
                     <div className="flex flex-col gap-1">
                       <label className="text-[9px] font-bold font-mono text-graphite-400 uppercase">Local Installer Path (.exe)</label>
-                      <input 
-                        type="text" 
-                        placeholder="e.g. /Users/omkar/Downloads/setup.exe"
-                        value={customExePath}
-                        onChange={(e) => setCustomExePath(e.target.value)}
-                        className="glass-input py-1.5 font-mono text-xs w-full"
-                      />
+                      <div className="flex gap-1.5">
+                        <input 
+                          type="text" 
+                          placeholder="e.g. /Users/omkar/Downloads/setup.exe"
+                          value={customExePath}
+                          onChange={(e) => setCustomExePath(e.target.value)}
+                          className="glass-input py-1.5 font-mono text-xs flex-1"
+                        />
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              const { invoke } = await import('@tauri-apps/api/core');
+                              const path = await invoke<string>('open_file_picker', {
+                                title: 'Select Windows Executable (.exe)',
+                                fileTypes: ['exe']
+                              });
+                              if (path) {
+                                setCustomExePath(path);
+                                if (!customAppName) {
+                                  const parts = path.split('/');
+                                  const file = parts[parts.length - 1];
+                                  setCustomAppName(file.replace('.exe', '').replace('.EXE', ''));
+                                }
+                              }
+                            } catch (e) {
+                              console.error('Error invoking open_file_picker:', e);
+                            }
+                          }}
+                          className="btn-secondary py-1.5 px-3 text-[10px] font-mono font-bold flex items-center gap-1.5 text-neon-blue border-neon-blue/20 hover:border-neon-blue bg-neon-blue/5 hover:bg-neon-blue/10 rounded-lg cursor-pointer"
+                        >
+                          <FolderOpen className="w-3.5 h-3.5" />
+                          <span>Browse...</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -402,7 +427,7 @@ export const InstallWizard: React.FC<InstallWizardProps> = ({ isOpen, onClose })
             <div className="space-y-5">
               <div className="space-y-1">
                 <span className="text-xs font-bold font-mono uppercase text-white tracking-wide">Deployment Pipeline & System Telemetry</span>
-                <p className="text-[11px] text-graphite-400">Please stand by. FusionWine is currently generating the sandbox folders, setting up registry tables, preloading library bindings, and launching installer components.</p>
+                <p className="text-[11px] text-graphite-400">Please stand by. FusionCross is currently generating the sandbox folders, setting up registry tables, preloading library bindings, and launching installer components.</p>
               </div>
 
               {/* Progress bar */}

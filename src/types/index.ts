@@ -72,3 +72,17 @@ export interface SoftwareRecipe {
   popular: boolean;
 }
 
+export interface RosettaStatus {
+  is_apple_silicon: boolean;
+  is_translated: boolean;
+  rosetta_installed: boolean;
+  wine_installed: boolean;
+  cpu_brand: string;
+}
+
+export interface DiscoveredApp {
+  name: string;
+  path: string;
+  size_bytes: number;
+}
+

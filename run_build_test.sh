@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ========================================================
-# FusionWine Build & Verification Script
+# FusionCross Build & Verification Script
 # ========================================================
 
 set -e
@@ -14,7 +14,7 @@ NC='\033[0;30m' # No Color
 RESET='\033[0m'
 
 echo -e "${PURPLE}====================================================${RESET}"
-echo -e "${PURPLE}           FUSIONWINE COMPILATION RUNNER            ${RESET}"
+echo -e "${PURPLE}           FUSIONCROSS COMPILATION RUNNER           ${RESET}"
 echo -e "${PURPLE}====================================================${RESET}"
 
 echo -e "\n${BLUE}[1/3] Validating system parameters...${RESET}"

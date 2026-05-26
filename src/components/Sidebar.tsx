@@ -33,7 +33,7 @@ export const Sidebar: React.FC = () => {
       {/* Title bar draggable area spacing for macOS titlebar buttons */}
       <div className="h-12 border-b border-graphite-800/40 flex items-center px-6 select-none cursor-default">
         <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-neon-indigo via-neon-purple to-neon-pink tracking-wide text-lg mt-1 font-mono">
-          FUSIONWINE
+          FUSIONCROSS
         </span>
         <span className="text-[10px] bg-neon-indigo/20 text-neon-indigo border border-neon-indigo/30 font-semibold px-1.5 py-0.5 rounded ml-2.5 mt-1 font-mono tracking-wider">
           V1.0

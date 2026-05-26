@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../store';
-import { Bottle, DllOverride, RegistryKey } from '../types';
+import { Bottle, DllOverride, RegistryKey, DiscoveredApp } from '../types';
 import { 
   Layers, 
   Trash2, 
@@ -17,7 +17,10 @@ import {
   Plus,
   Terminal,
   FolderOpen,
-  RefreshCw
+  RefreshCw,
+  Search,
+  Download,
+  Check
 } from 'lucide-react';
 
 export const BottleManager: React.FC = () => {
@@ -32,10 +35,18 @@ export const BottleManager: React.FC = () => {
     logs,
     clearLogs,
     openPrefixInFinder,
-    resetSandbox
+    resetSandbox,
+    installDependencies,
+    installDxvk,
+    backupBottle,
+    scanApps,
+    apps,
+    registerApp,
+    downloadProgress
   } = useApp();
+
   const [selectedId, setSelectedId] = useState<string>(bottles[0]?.id || '');
-  const [activeSubTab, setActiveSubTab] = useState<'overrides' | 'env' | 'registry' | 'graphics'>('overrides');
+  const [activeSubTab, setActiveSubTab] = useState<'overrides' | 'env' | 'registry' | 'graphics' | 'dependencies' | 'scanner' | 'backups'>('overrides');
 
   // Creation State
   const [showCreator, setShowCreator] = useState<boolean>(false);
@@ -64,7 +75,24 @@ export const BottleManager: React.FC = () => {
   const [isRunningCommand, setIsRunningCommand] = useState<boolean>(false);
   const [runComplete, setRunComplete] = useState<boolean>(false);
 
+  // App Scanner State
+  const [isScanning, setIsScanning] = useState<boolean>(false);
+  const [scannedApps, setScannedApps] = useState<DiscoveredApp[]>([]);
+
+  // Backup State
+  const [backupPath, setBackupPath] = useState<string>('');
+  const [isBackingUp, setIsBackingUp] = useState<boolean>(false);
+  const [backupMessage, setBackupMessage] = useState<string>( '');
+
   const selectedBottle = bottles.find(b => b.id === selectedId) || bottles[0];
+
+  useEffect(() => {
+    if (selectedBottle) {
+      setBackupPath(`/Users/omkar/Desktop/${selectedBottle.name.toLowerCase().replace(/\s+/g, '_')}_backup.tar.gz`);
+      setBackupMessage('');
+      setScannedApps([]);
+    }
+  }, [selectedId, selectedBottle]);
 
   const handleCreate = async () => {
     if (newName.trim()) {
@@ -77,7 +105,6 @@ export const BottleManager: React.FC = () => {
   const handleAddOverride = () => {
     if (newLibName.trim() && selectedBottle) {
       const overrides = [...selectedBottle.dll_overrides];
-      // Avoid duplicates
       if (!overrides.some(o => o.library.toLowerCase() === newLibName.toLowerCase())) {
         overrides.push({ library: newLibName, override_type: newLibType });
         updateBottle({ ...selectedBottle, dll_overrides: overrides });
@@ -178,7 +205,51 @@ export const BottleManager: React.FC = () => {
     }
   };
 
-  const activeRuntimes = runtimes.filter(r => r.downloaded && r.category === 'wine' || r.category === 'proton');
+  const handleScanApps = async () => {
+    if (!selectedBottle) return;
+    setIsScanning(true);
+    try {
+      const res = await scanApps(selectedBottle.id);
+      setScannedApps(res);
+    } catch (err) {
+      console.error("Scanner failed:", err);
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const handleRegisterScannedApp = async (scannedApp: DiscoveredApp) => {
+    if (!selectedBottle) return;
+    try {
+      await registerApp(
+        scannedApp.name,
+        scannedApp.path,
+        "",
+        selectedBottle.id,
+        "Games",
+        ["Scanned", "Local"]
+      );
+      alert(`Successfully registered '${scannedApp.name}' in library!`);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleGenerateBackup = async () => {
+    if (!selectedBottle || !backupPath.trim()) return;
+    setIsBackingUp(true);
+    setBackupMessage('');
+    try {
+      const res = await backupBottle(selectedBottle.id, backupPath.trim());
+      setBackupMessage(res);
+    } catch (err: any) {
+      setBackupMessage(`Backup failed: ${err}`);
+    } finally {
+      setIsBackingUp(false);
+    }
+  };
+
+  const activeRuntimes = runtimes.filter(r => r.downloaded && (r.category === 'wine' || r.category === 'proton'));
 
   return (
     <div className="flex-1 flex overflow-hidden h-full bg-graphite-900/40 relative">
@@ -238,7 +309,7 @@ export const BottleManager: React.FC = () => {
             </div>
 
             {/* Quick Actions */}
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button 
                 onClick={() => setShowRunCommand(true)}
                 className="btn-primary py-2 text-xs font-mono flex items-center gap-1.5"
@@ -260,19 +331,9 @@ export const BottleManager: React.FC = () => {
               <button 
                 onClick={() => openPrefixInFinder(selectedBottle.path)}
                 className="btn-secondary py-2 text-xs font-mono"
-                title="Open WinePrefix folder in macOS Finder"
+                title="Open WinePrefix folder in Finder"
               >
                 <FolderOpen className="w-3.5 h-3.5" /> SHOW ON DISK
-              </button>
-              <button 
-                onClick={() => {
-                  const confirmed = window.confirm(`Reset the sandbox for "${selectedBottle.name}"? This will wipe all installed programs and registry changes inside this bottle and recreate a fresh environment.`);
-                  if (confirmed) resetSandbox(selectedBottle.id, selectedBottle.path);
-                }}
-                className="btn-secondary py-2 text-xs font-mono"
-                title="Wipe and recreate a fresh WinePrefix sandbox"
-              >
-                <RefreshCw className="w-3.5 h-3.5" /> RESET
               </button>
             </div>
           </div>
@@ -281,17 +342,20 @@ export const BottleManager: React.FC = () => {
           <div className="px-6 py-2.5 border-b border-graphite-800/40 bg-graphite-950/30 flex items-center gap-2">
             <FolderOpen className="w-3.5 h-3.5 text-graphite-500 shrink-0" />
             <span className="text-[10px] font-mono text-graphite-400 truncate" title={selectedBottle.path}>
-              Sandbox: <strong className="text-graphite-300">{selectedBottle.path}</strong>
+              Sandbox prefix: <strong className="text-graphite-300">{selectedBottle.path}</strong>
             </span>
           </div>
 
           {/* Sub-tabs buttons */}
-          <div className="flex border-b border-graphite-800/40 px-6 bg-graphite-950/25">
+          <div className="flex border-b border-graphite-800/40 px-6 bg-graphite-950/25 overflow-x-auto select-none no-scrollbar">
             {[
               { id: 'overrides', name: 'DLL Overrides', icon: Sliders },
               { id: 'env', name: 'Environment', icon: Variable },
               { id: 'registry', name: 'Registry Keys', icon: Database },
               { id: 'graphics', name: 'GPU Config', icon: Cpu },
+              { id: 'dependencies', name: 'Winetricks', icon: Wrench },
+              { id: 'scanner', name: 'App Scanner', icon: Search },
+              { id: 'backups', name: 'Backups', icon: Download },
             ].map((sub) => {
               const Icon = sub.icon;
               const isSubActive = activeSubTab === sub.id;
@@ -299,7 +363,7 @@ export const BottleManager: React.FC = () => {
                 <button
                   key={sub.id}
                   onClick={() => setActiveSubTab(sub.id as any)}
-                  className={`flex items-center gap-2 px-4 py-3.5 text-xs font-semibold font-mono border-b-2 transition-all ${
+                  className={`flex items-center gap-2 px-4 py-3.5 text-xs font-semibold font-mono border-b-2 shrink-0 transition-all ${
                     isSubActive 
                       ? 'border-neon-purple text-white bg-neon-purple/5' 
                       : 'border-transparent text-graphite-400 hover:text-graphite-250 hover:bg-graphite-800/20'
@@ -559,7 +623,7 @@ export const BottleManager: React.FC = () => {
                   </table>
                 </div>
               </div>
-            ) : (
+            ) : activeSubTab === 'graphics' ? (
               /* D. GRAPHICS / GPU CONFIG VIEW */
               <div className="space-y-6 max-w-2xl">
                 <div className="space-y-1">
@@ -621,6 +685,223 @@ export const BottleManager: React.FC = () => {
                     <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-neon-indigo" /> Retina HiDPI Display Driver</span>
                     <span className="font-bold text-white">ACTIVE (2x Mode)</span>
                   </div>
+                  <div className="pt-2 border-t border-graphite-800/40 flex justify-between items-center text-[10px]">
+                    <span className="text-graphite-450">MANUALLY FORCE DXVK TRANSLATION LIBRARY:</span>
+                    <button
+                      onClick={() => installDxvk(selectedBottle.id, "2.3")}
+                      className="p-1 px-3 bg-neon-purple/15 text-neon-purple border border-neon-purple/20 hover:bg-neon-purple hover:text-white rounded transition-all font-bold"
+                    >
+                      FORCE DXVK SETUP
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : activeSubTab === 'dependencies' ? (
+              /* E. WINETRICKS DEPENDENCIES VIEW */
+              <div className="space-y-6">
+                <div className="space-y-1">
+                  <h2 className="text-sm font-bold text-white font-mono uppercase tracking-wide">Winetricks Dependencies Manager</h2>
+                  <p className="text-xs text-graphite-400">Install essential runtimes, SDK compilers, and DirectX frameworks inside the WINEPREFIX sandbox.</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl">
+                  {[
+                    { verb: 'dotnet48', name: '.NET Framework 4.8 Runtime', desc: 'Critical framework for modern productivity tools and game launchers.', icon: '⚡' },
+                    { verb: 'vcrun2022', name: 'Microsoft Visual C++ 2022', desc: 'Pre-requisite MSVC redistributables for C++ software compilation runtimes.', icon: '📦' },
+                    { verb: 'openal', name: 'OpenAL Audio Core', desc: '3D spatial audio compiler wrapper for immersive CoreAudio mapping.', icon: '🔊' },
+                    { verb: 'physx', name: 'NVIDIA PhysX Framework', desc: 'Physics compilation layers for legacy and modern gaming environments.', icon: '💥' },
+                    { verb: 'dxvk', name: 'DXVK Direct3D-to-Vulkan', desc: 'Manually load latest stable Vulkan shader translating wrappers.', icon: '⚙️' },
+                  ].map((dep) => {
+                    const progress = downloadProgress[`dep-${dep.verb}`];
+                    const isInstallingDep = progress !== undefined && progress < 100;
+                    const isCompleted = progress >= 100;
+
+                    return (
+                      <div key={dep.verb} className="glass-panel p-4 rounded-xl border-graphite-800 bg-graphite-950/15 flex flex-col justify-between space-y-3">
+                        <div className="flex gap-3">
+                          <span className="text-2xl mt-0.5">{dep.icon}</span>
+                          <div className="space-y-0.5">
+                            <h3 className="text-xs font-bold text-white">{dep.name}</h3>
+                            <p className="text-[10px] text-graphite-450 leading-relaxed">{dep.desc}</p>
+                          </div>
+                        </div>
+
+                        {progress !== undefined && (
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-[9px] font-mono">
+                              <span className="text-neon-purple">{isCompleted ? 'Completed' : 'Installing...'}</span>
+                              <span className="text-white">{progress}%</span>
+                            </div>
+                            <div className="w-full bg-graphite-850 h-1.5 rounded-full overflow-hidden">
+                              <div className="bg-gradient-to-r from-neon-purple to-neon-indigo h-full" style={{ width: `${progress}%` }} />
+                            </div>
+                          </div>
+                        )}
+
+                        <button
+                          disabled={isInstallingDep || isCompleted}
+                          onClick={() => installDependencies(selectedBottle.id, dep.verb)}
+                          className={`btn-secondary py-1 text-[10px] font-mono font-bold uppercase tracking-wider self-end ${
+                            isCompleted ? 'border-neon-green/45 text-neon-green bg-neon-green/5' : ''
+                          }`}
+                        >
+                          {isCompleted ? '✓ INSTALLED' : isInstallingDep ? 'INSTALLING...' : 'INSTALL'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : activeSubTab === 'scanner' ? (
+              /* F. PREFIX APP SCANNER VIEW */
+              <div className="space-y-6 max-w-3xl">
+                <div className="space-y-1">
+                  <h2 className="text-sm font-bold text-white font-mono uppercase tracking-wide">Prefix App Scanner</h2>
+                  <p className="text-xs text-graphite-400">Scans files recursively inside `drive_c/Program Files` to locate and register unregistered executables instantly.</p>
+                </div>
+
+                <div className="flex gap-3 items-center">
+                  <button
+                    onClick={handleScanApps}
+                    disabled={isScanning}
+                    className="btn-primary py-2 px-5 text-xs font-mono flex items-center gap-1.5 shadow-[0_0_15px_rgba(157,78,221,0.2)]"
+                  >
+                    <Search className={`w-4 h-4 ${isScanning ? 'animate-spin' : ''}`} />
+                    <span>{isScanning ? 'SCANNING SANDBOX...' : 'SCAN FOR EXE APPLICATIONS'}</span>
+                  </button>
+                  {scannedApps.length > 0 && (
+                    <span className="text-[10px] text-graphite-400 font-mono">
+                      Discovered {scannedApps.length} executable directories.
+                    </span>
+                  )}
+                </div>
+
+                {scannedApps.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-3 pt-2">
+                    {scannedApps.map((scannedApp, idx) => {
+                      const isAlreadyRegistered = apps.some(a => a.exe_path === scannedApp.path && a.bottle_id === selectedBottle.id);
+                      return (
+                        <div key={idx} className="glass-panel p-4 rounded-xl border-graphite-800 bg-graphite-950/20 flex items-center justify-between hover:border-graphite-700 transition-all">
+                          <div className="flex items-center gap-3 overflow-hidden">
+                            <div className="w-10 h-10 rounded bg-graphite-900 border border-graphite-800 flex items-center justify-center font-mono font-bold text-neon-indigo shrink-0">
+                              EXE
+                            </div>
+                            <div className="space-y-0.5 overflow-hidden">
+                              <h4 className="text-xs font-bold text-white truncate">{scannedApp.name}</h4>
+                              <p className="text-[10px] text-graphite-455 font-mono truncate" title={scannedApp.path}>{scannedApp.path}</p>
+                            </div>
+                          </div>
+
+                          <button
+                            disabled={isAlreadyRegistered}
+                            onClick={() => handleRegisterScannedApp(scannedApp)}
+                            className={`btn-secondary py-1.5 px-3 text-[10px] font-mono font-bold shrink-0 ${
+                              isAlreadyRegistered ? 'opacity-40 cursor-not-allowed border-neon-indigo/30 text-neon-indigo' : 'hover:bg-neon-indigo hover:text-white'
+                            }`}
+                          >
+                            {isAlreadyRegistered ? '✓ ADDED' : 'ADD TO LIBRARY'}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  !isScanning && (
+                    <div className="glass-panel p-8 rounded-xl border-graphite-800/80 bg-graphite-950/10 text-center text-graphite-450 text-xs font-mono">
+                      Click the scan button above to run recursive analysis on WINEPREFIX folders.
+                    </div>
+                  )
+                )}
+              </div>
+            ) : (
+              /* G. BACKUP & RESTORE VIEW */
+              <div className="space-y-6 max-w-xl">
+                <div className="space-y-1">
+                  <h2 className="text-sm font-bold text-white font-mono uppercase tracking-wide">Prefix Backups & Recovery</h2>
+                  <p className="text-xs text-graphite-400">Package and compress your entire isolated WINEPREFIX sandbox as a `.tar.gz` archive for local preservation.</p>
+                </div>
+
+                <div className="glass-panel p-5 rounded-2xl border-graphite-800 space-y-4 bg-graphite-950/20">
+                  <div className="flex flex-col gap-1.5 font-mono text-xs">
+                    <label className="text-[10px] font-bold text-graphite-400 uppercase">Export Archive Path</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={backupPath}
+                        onChange={(e) => setBackupPath(e.target.value)}
+                        placeholder="e.g. /Users/omkar/Desktop/my_backup.tar.gz"
+                        className="glass-input flex-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const { invoke } = await import('@tauri-apps/api/core');
+                            const defaultName = selectedBottle 
+                              ? `${selectedBottle.name.toLowerCase().replace(/\s+/g, '_')}_backup.tar.gz`
+                              : 'prefix_backup.tar.gz';
+                            const path = await invoke<string>('save_file_picker', {
+                              title: 'Choose Backup Archive Location',
+                              defaultName
+                            });
+                            if (path) {
+                              setBackupPath(path);
+                            }
+                          } catch (e) {
+                            console.error('Error invoking save_file_picker:', e);
+                          }
+                        }}
+                        className="btn-secondary py-1.5 px-3 text-[10px] font-mono font-bold flex items-center gap-1.5 border-graphite-750 hover:border-graphite-600 bg-graphite-900 hover:bg-graphite-850 rounded-lg cursor-pointer"
+                      >
+                        <FolderOpen className="w-3.5 h-3.5" />
+                        <span>Choose...</span>
+                      </button>
+                    </div>
+                    <span className="text-[9px] text-graphite-500 leading-normal">
+                      Must resolve within your primary user directory partition due to macOS container restrictions.
+                    </span>
+                  </div>
+
+                  <div className="flex gap-3 justify-end pt-2">
+                    <button
+                      onClick={handleGenerateBackup}
+                      disabled={isBackingUp || !backupPath.trim()}
+                      className="btn-primary py-2 px-5 text-xs font-mono flex items-center gap-1.5 shadow-[0_0_15px_rgba(157,78,221,0.2)]"
+                    >
+                      <Download className={`w-4 h-4 ${isBackingUp ? 'animate-spin' : ''}`} />
+                      <span>{isBackingUp ? 'COMPRESSING...' : 'EXPORT BACKUP ARCHIVE'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {backupMessage && (
+                  <div className="flex items-center gap-2 bg-neon-green/10 border border-neon-green/20 p-3 rounded-xl">
+                    <CheckCircle2 className="w-4 h-4 text-neon-green shrink-0" />
+                    <div className="text-[10px] font-mono text-graphite-250 leading-relaxed select-text">
+                      {backupMessage}
+                    </div>
+                  </div>
+                )}
+
+                {/* Hard Reset Card */}
+                <div className="glass-panel p-5 rounded-2xl border-red-900/40 bg-red-950/5 space-y-3.5">
+                  <div className="space-y-1">
+                    <span className="text-xs font-bold font-mono uppercase text-red-400 flex items-center gap-1.5">
+                      ⚠️ DANGER ZONE: Hard Reset Sandbox
+                    </span>
+                    <p className="text-[10px] text-graphite-400 leading-relaxed">
+                      Wipe and recreate a completely fresh empty WINEPREFIX sandbox from scratch. This action will permanently delete all installed programs and registry configurations within this bottle prefix.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const confirmed = window.confirm(`Reset the sandbox for "${selectedBottle.name}"? This will wipe all installed programs and registry changes inside this bottle and recreate a fresh environment.`);
+                      if (confirmed) resetSandbox(selectedBottle.id, selectedBottle.path);
+                    }}
+                    className="btn-danger py-2 px-4 text-xs font-mono self-start"
+                  >
+                    RESET PREFIX SANDBOX
+                  </button>
                 </div>
               </div>
             )}
@@ -855,7 +1136,7 @@ export const BottleManager: React.FC = () => {
                         !runExePath.trim() ? 'opacity-40 cursor-not-allowed' : ''
                       }`}
                     >
-                      <Terminal className="w-4 h-4" /> Run Command
+                      <Terminal className="w-4.5 h-4.5" /> Run Command
                     </button>
                   </>
                 ) : runComplete ? (

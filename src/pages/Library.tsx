@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../store';
 import { AppConfig } from '../types';
 import { 
@@ -30,10 +30,16 @@ export const Library: React.FC = () => {
     setShowWizard,
     runCustomExe,
     logs,
-    clearLogs
+    clearLogs,
+    rosettaDiagnostics,
+    fetchRosettaStatus
   } = useApp();
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeCategory, setActiveCategory] = useState<string>('all');
+
+  useEffect(() => {
+    fetchRosettaStatus();
+  }, []);
   
   // Installer Modal State
   const [showInstaller, setShowInstaller] = useState<boolean>(false);
@@ -139,6 +145,63 @@ export const Library: React.FC = () => {
   return (
     <div className="flex-1 overflow-y-auto p-8 space-y-6 h-full bg-graphite-900/40 relative">
       <div className="h-4 select-none pointer-events-none" />
+
+      {/* Warning Banners */}
+      {rosettaDiagnostics.is_apple_silicon && !rosettaDiagnostics.rosetta_installed && (
+        <div className="glass-panel p-4 rounded-2xl border-neon-purple/35 bg-gradient-to-r from-neon-purple/10 to-transparent flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-fade-in shadow-[0_0_15px_rgba(157,78,221,0.08)] font-mono text-xs">
+          <div className="flex gap-3">
+            <div className="p-2 bg-neon-purple/10 border border-neon-purple/20 rounded-xl text-neon-purple shrink-0 mt-0.5 md:mt-0">
+              <Cpu className="w-5 h-5 animate-pulse-subtle" />
+            </div>
+            <div className="space-y-1">
+              <div className="text-xs font-bold text-white uppercase flex items-center gap-1.5">
+                Rosetta 2 Translation Subsystem Missing
+              </div>
+              <p className="text-[10px] text-graphite-400 leading-normal max-w-xl">
+                To run Windows x86_64 binaries on Apple Silicon M-series chips, you must bootstrap Apple's Rosetta 2 environment translator layer.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText("softwareupdate --install-rosetta --agree-to-license");
+              alert("Command copied to clipboard! Paste it inside your macOS Terminal.");
+            }}
+            className="btn-secondary py-1.5 px-4 text-[10px] font-mono font-bold flex items-center gap-1.5 border-neon-purple/35 text-neon-purple hover:bg-neon-purple/5 shrink-0 rounded-lg cursor-pointer"
+          >
+            <Terminal className="w-3.5 h-3.5" />
+            <span>Copy Install Command</span>
+          </button>
+        </div>
+      )}
+
+      {!rosettaDiagnostics.wine_installed && (
+        <div className="glass-panel p-4 rounded-2xl border-neon-indigo/35 bg-gradient-to-r from-neon-indigo/10 to-transparent flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-fade-in shadow-[0_0_15px_rgba(99,102,241,0.08)] font-mono text-xs">
+          <div className="flex gap-3">
+            <div className="p-2 bg-neon-indigo/10 border border-neon-indigo/20 rounded-xl text-neon-indigo shrink-0 mt-0.5 md:mt-0">
+              <Layers className="w-5 h-5" />
+            </div>
+            <div className="space-y-1">
+              <div className="text-xs font-bold text-white uppercase flex items-center gap-1.5">
+                Wine Translation Binary Missing
+              </div>
+              <p className="text-[10px] text-graphite-400 leading-normal max-w-xl">
+                FusionCross runs WINE wrappers underneath to translate Windows API calls natively. We detected that standard WINE staging binaries are missing on this system.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText("brew install --cask --no-quarantine wine-stable");
+              alert("Command copied to clipboard! Paste it inside your macOS Terminal.");
+            }}
+            className="btn-secondary py-1.5 px-4 text-[10px] font-mono font-bold flex items-center gap-1.5 border-neon-indigo/35 text-neon-indigo hover:bg-neon-indigo/5 shrink-0 rounded-lg cursor-pointer"
+          >
+            <Terminal className="w-3.5 h-3.5" />
+            <span>Copy Homebrew Command</span>
+          </button>
+        </div>
+      )}
 
       {/* Header bar controls */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-graphite-800/40 pb-6">
@@ -313,7 +376,7 @@ export const Library: React.FC = () => {
             <div className="flex items-center justify-between p-5 border-b border-graphite-800/40">
               <div className="flex items-center gap-2">
                 <FileCode className="w-5 h-5 text-neon-indigo" />
-                <span className="font-bold text-white font-mono text-sm uppercase">FusionWine Installer Wizard</span>
+                <span className="font-bold text-white font-mono text-sm uppercase">FusionCross Installer Wizard</span>
               </div>
               <button 
                 onClick={() => { setShowInstaller(false); setInstallStep(0); }}

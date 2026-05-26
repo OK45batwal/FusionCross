@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useApp } from '../store';
 import { 
   Settings as SettingsIcon, 
   CheckCircle2, 
@@ -7,16 +8,33 @@ import {
   Cpu, 
   HardDrive,
   Info,
-  ShieldCheck
+  ShieldCheck,
+  RefreshCw,
+  Zap,
+  Download,
+  Upload
 } from 'lucide-react';
 
 export const Settings: React.FC = () => {
+  const { rosettaDiagnostics, fetchRosettaStatus } = useApp();
   const [defaultWine, setDefaultWine] = useState<string>('proton-ge');
   const [hudConfig, setHudConfig] = useState<string>('fps');
   const [rosettaThreadMode, setRosettaThreadMode] = useState<string>('hybrid');
   const [verboseLogs, setVerboseLogs] = useState<boolean>(true);
   const [sandboxFiles, setSandboxFiles] = useState<boolean>(true);
-  const [themeMode, setThemeMode] = useState<string>('graphite-dark');
+  const [isScanning, setIsScanning] = useState<boolean>(false);
+
+  useEffect(() => {
+    fetchRosettaStatus();
+  }, []);
+
+  const handleManualScan = async () => {
+    setIsScanning(true);
+    await fetchRosettaStatus();
+    setTimeout(() => {
+      setIsScanning(false);
+    }, 600);
+  };
 
   return (
     <div className="flex-1 overflow-y-auto p-8 space-y-6 h-full bg-graphite-900/40">
@@ -125,10 +143,132 @@ export const Settings: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {/* Settings Section C: Backup & Import/Export */}
+          <div className="glass-panel p-6 rounded-2xl border-graphite-800 space-y-4">
+            <h2 className="text-sm font-bold text-white font-mono uppercase tracking-wider flex items-center gap-2">
+              <HardDrive className="w-4 h-4 text-neon-blue" /> BACKUP & DATABASE MANAGEMENT
+            </h2>
+            <p className="text-[10px] text-graphite-500 font-mono leading-relaxed">
+              Export and import your entire FusionCross system configuration including bottles catalog, application shortcuts, and custom preferences in a single JSON state archive.
+            </p>
+
+            <div className="flex flex-col md:flex-row gap-3 pt-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const { invoke } = await import('@tauri-apps/api/core');
+                    const defaultName = 'fusioncross_config.json';
+                    const path = await invoke<string>('save_file_picker', {
+                      title: 'Export FusionCross Configurations',
+                      defaultName
+                    });
+                    if (path) {
+                      const res = await invoke<string>('export_app_data', { exportPath: path });
+                      alert(res);
+                    }
+                  } catch (e: any) {
+                    alert(`Export failed: ${e.message || e}`);
+                  }
+                }}
+                className="flex-1 btn-secondary py-2.5 px-4 text-xs font-mono font-bold flex items-center justify-center gap-2 border-graphite-750 hover:border-graphite-600 bg-graphite-900/50 hover:bg-graphite-800 text-white rounded-xl transition-all duration-250 cursor-pointer"
+              >
+                <Download className="w-4 h-4 text-neon-blue animate-pulse-subtle" />
+                <span>Export System Data</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const { invoke } = await import('@tauri-apps/api/core');
+                    const path = await invoke<string>('open_file_picker', {
+                      title: 'Import FusionCross Configurations (.json)',
+                      fileTypes: ['json']
+                    });
+                    if (path) {
+                      const confirmImport = confirm("Are you sure you want to import this configuration? This will overwrite all of your active bottles, registered games, and compatibility presets.");
+                      if (confirmImport) {
+                        const res = await invoke<string>('import_app_data', { importPath: path });
+                        alert(res);
+                        window.location.reload();
+                      }
+                    }
+                  } catch (e: any) {
+                    alert(`Import failed: ${e.message || e}`);
+                  }
+                }}
+                className="flex-1 btn-secondary py-2.5 px-4 text-xs font-mono font-bold flex items-center justify-center gap-2 border-graphite-750 hover:border-graphite-600 bg-graphite-900/50 hover:bg-graphite-800 text-white rounded-xl transition-all duration-250 cursor-pointer"
+              >
+                <Upload className="w-4 h-4 text-neon-green animate-pulse-subtle" />
+                <span>Import System Data</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Column 3: Summary details */}
         <div className="space-y-6">
+          
+          {/* Rosetta Diagnostics Shield Card */}
+          <div className="glass-panel p-6 rounded-2xl border-neon-indigo/30 bg-gradient-to-tr from-neon-indigo/10 to-transparent space-y-4 shadow-[0_0_15px_rgba(99,102,241,0.05)]">
+            <h3 className="text-sm font-bold text-white font-mono uppercase tracking-wider flex items-center gap-2 border-b border-graphite-850 pb-2">
+              <Zap className="w-4 h-4 text-neon-indigo" /> SILICON COMPATIBILITY
+            </h3>
+            
+            <div className="space-y-3.5 text-xs font-mono">
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] text-graphite-450 uppercase">CPU Model detected</span>
+                <span className="font-bold text-white text-xs truncate" title={rosettaDiagnostics.cpu_brand}>
+                  {rosettaDiagnostics.cpu_brand}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center text-graphite-400">
+                <span>Apple M-Series Core:</span>
+                <span className={`font-bold text-[10px] px-2 py-0.2 rounded border ${
+                  rosettaDiagnostics.is_apple_silicon 
+                    ? 'border-neon-indigo/35 text-neon-indigo bg-neon-indigo/5' 
+                    : 'border-graphite-700 text-graphite-400 bg-graphite-800'
+                }`}>
+                  {rosettaDiagnostics.is_apple_silicon ? 'SUPPORTED' : 'INTEL x86_64'}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center text-graphite-400">
+                <span>Rosetta 2 translation:</span>
+                <span className={`font-bold text-[10px] px-2 py-0.2 rounded border ${
+                  rosettaDiagnostics.rosetta_installed 
+                    ? 'border-neon-green/35 text-neon-green bg-neon-green/5' 
+                    : 'border-red-900/35 text-red-400 bg-red-950/5'
+                }`}>
+                  {rosettaDiagnostics.rosetta_installed ? 'OPERATIONAL' : 'NOT INSTALLED'}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center text-graphite-400">
+                <span>Translation active:</span>
+                <span className={`font-bold text-[10px] px-2 py-0.2 rounded border ${
+                  rosettaDiagnostics.is_translated 
+                    ? 'border-neon-purple/35 text-neon-purple bg-neon-purple/5' 
+                    : 'border-graphite-700 text-graphite-400 bg-graphite-800'
+                }`}>
+                  {rosettaDiagnostics.is_translated ? 'ACTIVE (x86_64)' : 'NATIVE'}
+                </span>
+              </div>
+
+              <button
+                onClick={handleManualScan}
+                disabled={isScanning}
+                className="w-full btn-secondary py-1.5 text-[10px] font-mono font-bold flex items-center justify-center gap-1.5 mt-2"
+              >
+                <RefreshCw className={`w-3 h-3 ${isScanning ? 'animate-spin' : ''}`} />
+                <span>{isScanning ? 'CHECKING...' : 'RE-RUN SILICON DIAGNOSTIC'}</span>
+              </button>
+            </div>
+          </div>
+
           {/* Info Card */}
           <div className="glass-panel p-6 rounded-2xl border-graphite-800 space-y-4 bg-graphite-950/15">
             <h3 className="text-sm font-bold text-white font-mono uppercase tracking-wider flex items-center gap-2 border-b border-graphite-850 pb-2">
@@ -138,11 +278,11 @@ export const Settings: React.FC = () => {
             <div className="space-y-3 text-xs font-mono">
               <div className="flex justify-between items-center text-graphite-400">
                 <span>Application Path:</span>
-                <span className="text-white">fusionwine.app</span>
+                <span className="text-white">fusioncross.app</span>
               </div>
               <div className="flex justify-between items-center text-graphite-400">
                 <span>Prefix Folder:</span>
-                <span className="text-white text-right break-all truncate max-w-[120px]" title="/Users/omkar/.gemini/antigravity/scratch/fusionwine/bottles">.../scratch/fusionwine</span>
+                <span className="text-white text-right break-all truncate max-w-[120px]" title="/Users/omkar/.gemini/antigravity/scratch/fusioncross/bottles">.../scratch/fusioncross</span>
               </div>
               <div className="flex justify-between items-center text-graphite-400">
                 <span>Active GPU:</span>
@@ -165,7 +305,7 @@ export const Settings: React.FC = () => {
                 <CheckCircle2 className="w-4 h-4" /> SANDBOX SECURE
               </div>
               <p className="text-[10px] text-graphite-400 leading-normal">
-                FusionWine runs inside a safe, unprivileged desktop wrapper container, utilizing macOS sandboxed file system partitions for WINEPREFIX isolation.
+                FusionCross runs inside a safe, unprivileged desktop wrapper container, utilizing macOS sandboxed file system partitions for WINEPREFIX isolation.
               </p>
             </div>
           </div>
