@@ -86,3 +86,10 @@ export interface DiscoveredApp {
   size_bytes: number;
 }
 
+export interface AppSettings {
+  wine_binary_path: string;
+  runtime_storage_path: string;
+  sandbox_enabled: boolean;
+  verbose_logs: boolean;
+}
+

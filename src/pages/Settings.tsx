@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../store';
+import { AppSettings } from '../types';
 import { 
   Settings as SettingsIcon, 
   CheckCircle2, 
@@ -22,11 +23,49 @@ export const Settings: React.FC = () => {
   const [rosettaThreadMode, setRosettaThreadMode] = useState<string>('hybrid');
   const [verboseLogs, setVerboseLogs] = useState<boolean>(true);
   const [sandboxFiles, setSandboxFiles] = useState<boolean>(true);
+  const [wineBinaryPath, setWineBinaryPath] = useState<string>('');
   const [isScanning, setIsScanning] = useState<boolean>(false);
+  const [settingsLoaded, setSettingsLoaded] = useState<boolean>(false);
+
+  const persistSettings = useCallback(async (patch: Partial<AppSettings>) => {
+    const isTauri = typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined;
+    if (!isTauri) return;
+    const { invoke } = await import('@tauri-apps/api/core');
+    const updated = await invoke<AppSettings>('update_settings', {
+      wineBinaryPath: patch.wine_binary_path ?? null,
+      runtimeStoragePath: patch.runtime_storage_path ?? null,
+      sandboxEnabled: patch.sandbox_enabled ?? null,
+      verboseLogs: patch.verbose_logs ?? null,
+    });
+    setVerboseLogs(updated.verbose_logs);
+    setSandboxFiles(updated.sandbox_enabled);
+    setWineBinaryPath(updated.wine_binary_path);
+  }, []);
 
   useEffect(() => {
     fetchRosettaStatus();
-  }, []);
+
+    const loadSettings = async () => {
+      const isTauri = typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined;
+      if (!isTauri) {
+        setSettingsLoaded(true);
+        return;
+      }
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const settings = await invoke<AppSettings>('get_settings');
+        setVerboseLogs(settings.verbose_logs);
+        setSandboxFiles(settings.sandbox_enabled);
+        setWineBinaryPath(settings.wine_binary_path);
+      } catch (err) {
+        console.error('Failed to load settings:', err);
+      } finally {
+        setSettingsLoaded(true);
+      }
+    };
+
+    loadSettings();
+  }, [fetchRosettaStatus]);
 
   const handleManualScan = async () => {
     setIsScanning(true);
@@ -119,7 +158,12 @@ export const Settings: React.FC = () => {
                   <input 
                     type="checkbox" 
                     checked={verboseLogs}
-                    onChange={(e) => setVerboseLogs(e.target.checked)}
+                    disabled={!settingsLoaded}
+                    onChange={async (e) => {
+                      const next = e.target.checked;
+                      setVerboseLogs(next);
+                      await persistSettings({ verbose_logs: next });
+                    }}
                     className="rounded bg-graphite-900 border-graphite-750 text-neon-purple cursor-pointer focus:ring-0"
                   />
                   <div className="flex flex-col">
@@ -132,7 +176,12 @@ export const Settings: React.FC = () => {
                   <input 
                     type="checkbox" 
                     checked={sandboxFiles}
-                    onChange={(e) => setSandboxFiles(e.target.checked)}
+                    disabled={!settingsLoaded}
+                    onChange={async (e) => {
+                      const next = e.target.checked;
+                      setSandboxFiles(next);
+                      await persistSettings({ sandbox_enabled: next });
+                    }}
                     className="rounded bg-graphite-900 border-graphite-750 text-neon-purple cursor-pointer focus:ring-0"
                   />
                   <div className="flex flex-col">
@@ -281,8 +330,23 @@ export const Settings: React.FC = () => {
                 <span className="text-white">fusioncross.app</span>
               </div>
               <div className="flex justify-between items-center text-graphite-400">
+                <span>Wine binary:</span>
+                <span
+                  className="text-white text-right break-all truncate max-w-[160px]"
+                  title={wineBinaryPath || 'Not configured'}
+                >
+                  {settingsLoaded
+                    ? wineBinaryPath
+                      ? wineBinaryPath.split('/').slice(-2).join('/')
+                      : 'Auto-detect'
+                    : 'Loading...'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-graphite-400">
                 <span>Prefix Folder:</span>
-                <span className="text-white text-right break-all truncate max-w-[120px]" title="/Users/omkar/.gemini/antigravity/scratch/fusioncross/bottles">.../scratch/fusioncross</span>
+                <span className="text-white text-right break-all truncate max-w-[160px]" title="~/Library/Application Support/FusionCross/bottles">
+                  ~/Library/.../FusionCross
+                </span>
               </div>
               <div className="flex justify-between items-center text-graphite-400">
                 <span>Active GPU:</span>

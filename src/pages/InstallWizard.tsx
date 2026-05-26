@@ -117,12 +117,13 @@ export const InstallWizard: React.FC<InstallWizardProps> = ({ isOpen, onClose })
     const finalBottleName = bottleMode === 'new' ? newBottleName : (bottles.find(b => b.id === selectedBottleId)?.name || 'Default Bottle');
     const finalBottleType = bottleMode === 'new' ? newBottleType : (bottles.find(b => b.id === selectedBottleId)?.prefix_type || 'gaming');
     const finalWineVersion = bottleMode === 'new' ? newWineVersion : (bottles.find(b => b.id === selectedBottleId)?.wine_version || 'Wine Stable 9.0');
+    const targetBottleId = bottleMode === 'existing' ? selectedBottleId : undefined;
 
     try {
       if (selectedRecipeId === 'custom') {
-        await installRecipe('custom', finalBottleName, finalBottleType, finalWineVersion, customAppName, customExePath);
+        await installRecipe('custom', finalBottleName, finalBottleType, finalWineVersion, customAppName, customExePath, targetBottleId);
       } else if (selectedRecipeId) {
-        await installRecipe(selectedRecipeId, finalBottleName, finalBottleType, finalWineVersion);
+        await installRecipe(selectedRecipeId, finalBottleName, finalBottleType, finalWineVersion, undefined, undefined, targetBottleId);
       }
       setStep(4);
     } catch (err) {

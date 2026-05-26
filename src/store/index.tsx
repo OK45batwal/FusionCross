@@ -24,7 +24,7 @@ interface AppContextType {
   launchApp: (id: string) => Promise<void>;
   stopApp: () => Promise<void>;
   downloadRuntime: (id: string) => Promise<void>;
-  installRecipe: (recipeId: string, bottleName: string, bottleType: string, wineVersion: string, customAppName?: string, customExePath?: string) => Promise<void>;
+  installRecipe: (recipeId: string, bottleName: string, bottleType: string, wineVersion: string, customAppName?: string, customExePath?: string, targetBottleId?: string) => Promise<void>;
   runCustomExe: (bottleId: string, exePath: string, args: string) => Promise<void>;
   addCustomRecipe: (recipe: Omit<SoftwareRecipe, 'id'>) => void;
   openPrefixInFinder: (prefixPath: string) => Promise<void>;
@@ -388,6 +388,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             );
           }
         });
+
+        listen('app-process-exited', () => {
+          setActiveAppId(null);
+        });
       });
     }
   }, []);
@@ -629,7 +633,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     bottleType: string,
     wineVersion: string,
     customAppName?: string,
-    customExePath?: string
+    customExePath?: string,
+    targetBottleId?: string
   ) => {
     setLogs([]);
     let name = "";
@@ -642,6 +647,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       name = customAppName || "Custom Application";
       category = "Utilities";
       exe = customExePath || "";
+      if (!exe.trim()) {
+        setLogs((prev) => [...prev, `[FusionCross:Error] Custom installer path is required.`]);
+        return;
+      }
     } else {
       const recipe = recipes.find(r => r.id === recipeId);
       if (!recipe) return;
@@ -653,8 +662,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setDownloadProgress((prev) => ({ ...prev, [recipeId]: 0 }));
 
-    // 1. Create target bottle prefix
-    const b = await createBottle(bottleName, bottleType, wineVersion);
+    const existingBottle = targetBottleId ? bottles.find((bottle) => bottle.id === targetBottleId) : undefined;
+    if (targetBottleId && !existingBottle) {
+      setLogs((prev) => [...prev, `[FusionCross:Error] Target bottle '${targetBottleId}' was not found.`]);
+      return;
+    }
+
+    const b = existingBottle || await createBottle(bottleName, bottleType, wineVersion);
     setDownloadProgress((prev) => ({ ...prev, [recipeId]: 30 }));
 
     if (isTauri()) {
@@ -734,7 +748,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       await registerApp(
         name,
-        isCustom ? "C:\\Program Files\\custom_app.exe" : `C:\\Program Files\\${name}\\${name}.exe`,
+        isCustom ? exe : `C:\\Program Files\\${name}\\${name}.exe`,
         "",
         b.id,
         category,
