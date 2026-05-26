@@ -51,7 +51,7 @@ export const Onboarding: React.FC = () => {
     },
     {
       title: "Environment Initialization",
-      desc: "Preparing runtime structures and sandboxing prefixes to isolate applications. Recommended standard library wrappers (DXVK, MoltenVK, Winetricks) will be configured.",
+      desc: "Preparing real Wine bottles for installer-based app deployment. You will install software using actual Windows installer files (.exe/.msi).",
       icon: Terminal,
     }
   ];

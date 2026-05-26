@@ -101,6 +101,33 @@ pub struct AppStateData {
   pub apps: Vec<AppConfig>,
   pub runtimes: Vec<Runtime>,
   pub settings: AppSettings,
+  #[serde(default)]
+  pub onboarded: bool,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct SessionInfo {
+  pub onboarded: bool,
+  pub wine_installed: bool,
+  pub wine_binary_path: Option<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct InstallResult {
+  pub success: bool,
+  pub exit_code: i32,
+  pub windows_path: String,
+  pub message: String,
+}
+
+enum WineLaunchKind {
+  Exe { unix_path: PathBuf },
+  Msi { unix_path: PathBuf },
+}
+
+struct ResolvedLaunch {
+  kind: WineLaunchKind,
+  windows_path: String,
 }
 
 // ========================================================
@@ -350,6 +377,376 @@ fn dll_override_abbrev(override_type: &str) -> &str {
   }
 }
 
+fn unix_path_to_windows(prefix_path: &str, unix_path: &Path) -> String {
+  let drive_c = Path::new(prefix_path).join("drive_c");
+  if let Ok(relative) = unix_path.strip_prefix(&drive_c) {
+    format!(
+      "C:\\{}",
+      relative.to_string_lossy().replace('/', "\\")
+    )
+  } else {
+    unix_path.to_string_lossy().to_string()
+  }
+}
+
+fn windows_path_to_unix(prefix_path: &str, windows_path: &str) -> Result<PathBuf, String> {
+  let trimmed = windows_path.trim().trim_matches('"');
+  if trimmed.starts_with('/') {
+    return Ok(PathBuf::from(trimmed));
+  }
+
+  let normalized = trimmed.replace('/', "\\");
+  let rest = normalized
+    .strip_prefix("C:\\")
+    .or_else(|| normalized.strip_prefix("c:\\"))
+    .ok_or_else(|| {
+      format!(
+        "Unsupported Windows path '{}'. Use C:\\\\ paths or a full macOS file path.",
+        windows_path
+      )
+    })?;
+
+  Ok(Path::new(prefix_path)
+    .join("drive_c")
+    .join(rest.replace('\\', "/")))
+}
+
+fn validate_host_installer_path(path: &str) -> Result<PathBuf, String> {
+  let candidate = PathBuf::from(path.trim());
+  if !candidate.is_absolute() {
+    return Err("Installer path must be absolute.".to_string());
+  }
+  if !candidate.exists() {
+    return Err(format!("Installer not found: {}", candidate.display()));
+  }
+
+  let home = user_home_dir()?;
+  let allowed_prefixes = [
+    home.clone(),
+    PathBuf::from("/Applications"),
+    PathBuf::from("/opt"),
+    PathBuf::from("/usr"),
+    PathBuf::from("/Volumes"),
+  ];
+
+  if allowed_prefixes
+    .iter()
+    .any(|prefix| candidate.starts_with(prefix))
+  {
+    Ok(candidate)
+  } else {
+    Err("Installer must be located under your home folder or standard system paths.".to_string())
+  }
+}
+
+fn resolve_launch_target(prefix_path: &str, input_path: &str) -> Result<ResolvedLaunch, String> {
+  validate_executable_path(input_path)?;
+
+  let unix_path = if input_path.contains('\\') && !input_path.starts_with('/') {
+    windows_path_to_unix(prefix_path, input_path)?
+  } else if input_path.starts_with('/') {
+    validate_host_installer_path(input_path)?
+  } else {
+    let in_prefix = Path::new(prefix_path).join(input_path);
+    if in_prefix.exists() {
+      in_prefix
+    } else {
+      validate_host_installer_path(input_path)?
+    }
+  };
+
+  if !unix_path.exists() {
+    return Err(format!(
+      "Executable not found: {}. Install the program into this bottle first, or pick the installer file.",
+      unix_path.display()
+    ));
+  }
+
+  let ext = unix_path
+    .extension()
+    .and_then(|e| e.to_str())
+    .map(|s| s.to_lowercase());
+
+  let kind = match ext.as_deref() {
+    Some("msi") => WineLaunchKind::Msi {
+      unix_path: unix_path.clone(),
+    },
+    _ => WineLaunchKind::Exe {
+      unix_path: unix_path.clone(),
+    },
+  };
+
+  let windows_path = if input_path.contains('\\') {
+    input_path.to_string()
+  } else {
+    unix_path_to_windows(prefix_path, &unix_path)
+  };
+
+  Ok(ResolvedLaunch {
+    kind,
+    windows_path,
+  })
+}
+
+fn resolve_winetricks_binary() -> Option<String> {
+  [
+    "/opt/homebrew/bin/winetricks",
+    "/usr/local/bin/winetricks",
+    "winetricks",
+  ]
+  .iter()
+  .find(|p| Path::new(p).exists())
+  .map(|p| p.to_string())
+}
+
+fn emit_log(app_handle: &AppHandle, message: impl AsRef<str>) {
+  let _ = app_handle.emit("wine-log-stream", message.as_ref().to_string());
+}
+
+fn initialize_bottle_prefix(
+  prefix_path: &str,
+  prefix_type: &str,
+  settings: &AppSettings,
+  app_handle: Option<&AppHandle>,
+) -> Result<SandboxInfo, String> {
+  let info = initialize_prefix_sandbox_impl(prefix_path, prefix_type)?;
+
+  let Some(wine_bin) = resolve_wine_binary(settings) else {
+    if let Some(handle) = app_handle {
+      emit_log(
+        handle,
+        "[FusionCross] Wine is not installed. Created folder layout only — install Wine, then reset the bottle.",
+      );
+    }
+    return Ok(info);
+  };
+
+  if let Some(handle) = app_handle {
+    emit_log(handle, "[FusionCross] Initializing Wine prefix (wineboot -i)...");
+  }
+
+  let output = Command::new(&wine_bin)
+    .env("WINEPREFIX", prefix_path)
+    .arg("wineboot")
+    .arg("-i")
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped())
+    .output();
+
+  match output {
+    Ok(out) if out.status.success() => {
+      if let Some(handle) = app_handle {
+        emit_log(handle, "[FusionCross] Wine prefix is ready.");
+      }
+    }
+    Ok(out) => {
+      let err = String::from_utf8_lossy(&out.stderr);
+      if let Some(handle) = app_handle {
+        emit_log(
+          handle,
+          format!(
+            "[FusionCross:Warn] wineboot returned {}: {}",
+            out.status,
+            err.trim()
+          ),
+        );
+      }
+    }
+    Err(e) => {
+      if let Some(handle) = app_handle {
+        emit_log(handle, format!("[FusionCross:Warn] wineboot failed: {}", e));
+      }
+    }
+  }
+
+  Ok(info)
+}
+
+fn build_wine_command(
+  wine_bin: &str,
+  prefix_path: &str,
+  launch: &ResolvedLaunch,
+  arguments: &str,
+  dll_overrides: &str,
+  env_vars: &HashMap<String, String>,
+  verbose: bool,
+) -> Command {
+  let mut command = Command::new(wine_bin);
+  command
+    .env("WINEPREFIX", prefix_path)
+    .env("WINEDLLOVERRIDES", dll_overrides)
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped());
+
+  if verbose {
+    command.env("WINEDEBUG", "+timestamp,+pid,+tid,+seh");
+  }
+
+  for (key, value) in env_vars {
+    command.env(key, value);
+  }
+
+  match &launch.kind {
+    WineLaunchKind::Msi { unix_path } => {
+      command.arg("msiexec").arg("/i").arg(unix_path);
+      let extra: Vec<&str> = arguments
+        .split_whitespace()
+        .filter(|s| !s.is_empty())
+        .collect();
+      if !extra.is_empty() {
+        command.args(extra);
+      }
+    }
+    WineLaunchKind::Exe { unix_path } => {
+      command.arg(unix_path);
+      command.args(
+        arguments
+          .split_whitespace()
+          .filter(|s| !s.is_empty()),
+      );
+    }
+  }
+
+  command
+}
+
+fn stream_process_output(
+  process: &mut std::process::Child,
+  app_handle: &AppHandle,
+) {
+  if let Some(stderr) = process.stderr.take() {
+    let reader = BufReader::new(stderr);
+    for line in reader.lines().flatten() {
+      emit_log(app_handle, format!("[Wine] {}", line));
+    }
+  }
+  if let Some(stdout) = process.stdout.take() {
+    let reader = BufReader::new(stdout);
+    for line in reader.lines().flatten() {
+      emit_log(app_handle, format!("[Wine] {}", line));
+    }
+  }
+}
+
+fn run_wine_launch(
+  prefix_path: &str,
+  launch: ResolvedLaunch,
+  arguments: String,
+  settings: AppSettings,
+  bottle: Option<Bottle>,
+  app_handle: &AppHandle,
+  active_child_pid: Arc<Mutex<Option<u32>>>,
+  wait_for_exit: bool,
+  clear_active_on_exit: bool,
+) -> Result<InstallResult, String> {
+  let wine_bin = resolve_wine_binary(&settings)
+    .ok_or_else(|| {
+      "Wine is not installed. Install with: brew install --cask wine-stable".to_string()
+    })?;
+
+  let dll_overrides = build_wine_dll_overrides(bottle.as_ref());
+  let verbose = settings.verbose_logs;
+
+  emit_log(
+    app_handle,
+    format!("[FusionCross] Using Wine at {}", wine_bin),
+  );
+  emit_log(
+    app_handle,
+    format!(
+      "[FusionCross] Target: {} {}",
+      launch.windows_path,
+      arguments
+    ),
+  );
+
+  let env_vars = bottle
+    .as_ref()
+    .map(|b| b.env_vars.clone())
+    .unwrap_or_default();
+
+  let mut command = build_wine_command(
+    &wine_bin,
+    prefix_path,
+    &launch,
+    &arguments,
+    &dll_overrides,
+    &env_vars,
+    verbose,
+  );
+
+  let mut process = command
+    .spawn()
+    .map_err(|e| format!("Failed to start Wine: {}", e))?;
+
+  if let Ok(mut pid_guard) = active_child_pid.lock() {
+    *pid_guard = Some(process.id());
+  }
+
+  let pid = process.id();
+  emit_log(
+    app_handle,
+    format!("[FusionCross] Process started (PID {})", pid),
+  );
+
+  if !wait_for_exit {
+    let app_handle_bg = app_handle.clone();
+    let active_child_pid_bg = active_child_pid.clone();
+    std::thread::spawn(move || {
+      stream_process_output(&mut process, &app_handle_bg);
+      let _ = process.wait();
+      if let Ok(mut pid_guard) = active_child_pid_bg.lock() {
+        *pid_guard = None;
+      }
+      emit_log(&app_handle_bg, "[FusionCross] Process exited.".to_string());
+      if clear_active_on_exit {
+        let _ = app_handle_bg.emit("app-process-exited", ());
+      }
+    });
+
+    return Ok(InstallResult {
+      success: true,
+      exit_code: 0,
+      windows_path: launch.windows_path,
+      message: "Application launch started.".to_string(),
+    });
+  }
+
+  stream_process_output(&mut process, app_handle);
+  let status = process
+    .wait()
+    .map_err(|e| format!("Failed while waiting for Wine process: {}", e))?;
+
+  if let Ok(mut pid_guard) = active_child_pid.lock() {
+    *pid_guard = None;
+  }
+
+  let exit_code = status.code().unwrap_or(-1);
+  let success = status.success();
+  emit_log(
+    app_handle,
+    format!(
+      "[FusionCross] Process finished with exit code {}",
+      exit_code
+    ),
+  );
+
+  if clear_active_on_exit {
+    let _ = app_handle.emit("app-process-exited", ());
+  }
+
+  Ok(InstallResult {
+    success,
+    exit_code,
+    windows_path: launch.windows_path,
+    message: if success {
+      "Installer completed successfully.".to_string()
+    } else {
+      format!("Installer exited with code {}.", exit_code)
+    },
+  })
+}
+
 fn build_wine_dll_overrides(bottle: Option<&Bottle>) -> String {
   let Some(bottle) = bottle else {
     return "d3d11,dxgi=n,b".to_string();
@@ -371,107 +768,45 @@ fn spawn_wine_process(
   prefix_path: String,
   exe_path: String,
   arguments: String,
-  env_vars: HashMap<String, String>,
   settings: AppSettings,
   bottle: Option<Bottle>,
   app_handle: AppHandle,
   active_child_pid: Arc<Mutex<Option<u32>>>,
   clear_active_on_exit: bool,
 ) {
-  let wine_bin = resolve_wine_binary(&settings);
+  let launch_result = resolve_launch_target(&prefix_path, &exe_path);
+  let app_handle_clone = app_handle.clone();
+  let active_child_pid_clone = active_child_pid.clone();
 
-  match wine_bin {
-    Some(wine_bin_path) => {
-      let dll_overrides = build_wine_dll_overrides(bottle.as_ref());
-      let verbose = settings.verbose_logs;
-
-      std::thread::spawn(move || {
-        let _ = app_handle.emit(
-          "wine-log-stream",
-          format!("[FusionCross] Detected Wine binary at: {}", wine_bin_path),
-        );
-        let _ = app_handle.emit(
-          "wine-log-stream",
-          format!("[FusionCross] Launching: {} {}", exe_path, arguments),
-        );
-
-        let mut command = Command::new(&wine_bin_path);
-        command
-          .env("WINEPREFIX", &prefix_path)
-          .env("WINEDLLOVERRIDES", dll_overrides)
-          .arg(&exe_path)
-          .args(arguments.split_whitespace().filter(|s| !s.is_empty()))
-          .stdout(Stdio::piped())
-          .stderr(Stdio::piped());
-
-        if verbose {
-          command.env("WINEDEBUG", "+timestamp,+pid,+tid,+seh");
-        }
-
-        for (key, value) in env_vars {
-          command.env(key, value);
-        }
-
-        match command.spawn() {
-          Ok(mut process) => {
-            if let Ok(mut pid_guard) = active_child_pid.lock() {
-              *pid_guard = Some(process.id());
-            }
-
-            let _ = app_handle.emit(
-              "wine-log-stream",
-              format!("[FusionCross] Process spawned with PID: {}", process.id()),
-            );
-
-            if let Some(stderr) = process.stderr.take() {
-              let reader = BufReader::new(stderr);
-              for line in reader.lines().flatten() {
-                let _ = app_handle.emit("wine-log-stream", format!("[Wine] {}", line));
-              }
-            }
-
-            let _ = process.wait();
-            if let Ok(mut pid_guard) = active_child_pid.lock() {
-              *pid_guard = None;
-            }
-            let _ = app_handle.emit("wine-log-stream", "[FusionCross] Process exited.".to_string());
-            if clear_active_on_exit {
-              let _ = app_handle.emit("app-process-exited", ());
-            }
-          }
-          Err(e) => {
-            let _ = app_handle.emit(
-              "wine-log-stream",
-              format!("[FusionCross:Error] Failed to spawn Wine process: {}", e),
-            );
-            if clear_active_on_exit {
-              let _ = app_handle.emit("app-process-exited", ());
-            }
-          }
-        }
-      });
-    }
-    None => {
-      let exe_name = exe_path.clone();
-      std::thread::spawn(move || {
-        let logs = vec![
-          "[FusionCross] Wine framework is missing on the host environment.".to_string(),
-          "[FusionCross] Running in simulation mode. Install Wine to enable genuine execution:"
-            .to_string(),
-          "[FusionCross]   brew install --cask --no-quarantine wine-stable".to_string(),
-          format!("[sim] Launching primary executable: {}...", exe_name),
-        ];
-
-        for log in logs {
-          std::thread::sleep(Duration::from_millis(500));
-          let _ = app_handle.emit("wine-log-stream", log);
-        }
+  std::thread::spawn(move || {
+    let launch = match launch_result {
+      Ok(launch) => launch,
+      Err(err) => {
+        emit_log(&app_handle_clone, format!("[FusionCross:Error] {}", err));
         if clear_active_on_exit {
-          let _ = app_handle.emit("app-process-exited", ());
+          let _ = app_handle_clone.emit("app-process-exited", ());
         }
-      });
+        return;
+      }
+    };
+
+    if let Err(err) = run_wine_launch(
+      &prefix_path,
+      launch,
+      arguments,
+      settings,
+      bottle,
+      &app_handle_clone,
+      active_child_pid_clone,
+      true,
+      clear_active_on_exit,
+    ) {
+      emit_log(&app_handle_clone, format!("[FusionCross:Error] {}", err));
+      if clear_active_on_exit {
+        let _ = app_handle_clone.emit("app-process-exited", ());
+      }
     }
-  }
+  });
 }
 
 /// Enforces URL origin restrictions restricting runtime engine archives downloads to secure paths only
@@ -596,89 +931,17 @@ fn load_state_from_disk_impl() -> AppStateData {
     }
   }
 
-  // Seeding initial default items on first launch if file is missing
+  // Fresh install: empty library — CrossOver-style (you install real software into bottles)
   let base = get_fusioncross_base_dir();
   let base_str = base.to_string_lossy().to_string();
 
-  let default_bottles = vec![
-    Bottle {
-      id: "bottle-gaming".to_string(),
-      name: "Steam Gaming Bottle".to_string(),
-      prefix_type: "gaming".to_string(),
-      wine_version: "Proton GE 9.0".to_string(),
-      dxvk_enabled: true,
-      moltenvk_enabled: true,
-      win_version: "win10".to_string(),
-      env_vars: HashMap::from([
-        ("DXVK_HUD".to_string(), "fps".to_string()),
-        ("WINEESYNC".to_string(), "1".to_string()),
-      ]),
-      dll_overrides: vec![
-        DllOverride { library: "d3d11".to_string(), override_type: "native,builtin".to_string() }
-      ],
-      registry_keys: vec![],
-      size_bytes: 0,
-      path: format!("{}/bottles/bottle-gaming", base_str),
-      created_at: "2026-05-10".to_string(),
-    },
-    Bottle {
-      id: "bottle-office".to_string(),
-      name: "MS Office Suite".to_string(),
-      prefix_type: "productivity".to_string(),
-      wine_version: "Wine Stable 9.0".to_string(),
-      dxvk_enabled: false,
-      moltenvk_enabled: false,
-      win_version: "win10".to_string(),
-      env_vars: HashMap::new(),
-      dll_overrides: vec![],
-      registry_keys: vec![],
-      size_bytes: 0,
-      path: format!("{}/bottles/bottle-office", base_str),
-      created_at: "2026-05-18".to_string(),
-    }
-  ];
-
-  let default_apps = vec![
-    AppConfig {
-      id: "app-steam".to_string(),
-      name: "Steam Launcher".to_string(),
-      exe_path: "C:\\Program Files (x86)\\Steam\\Steam.exe".to_string(),
-      arguments: "-nofriendsui".to_string(),
-      icon: "steam".to_string(),
-      category: "Games".to_string(),
-      tags: vec!["Store".to_string(), "Online".to_string()],
-      bottle_id: "bottle-gaming".to_string(),
-      last_played: Some("2026-05-20T21:40:00Z".to_string()),
-      play_time_mins: 840,
-      favorite: true,
-    },
-    AppConfig {
-      id: "app-cyberpunk".to_string(),
-      name: "Cyberpunk 2077".to_string(),
-      exe_path: "C:\\GOG Games\\Cyberpunk 2077\\bin\\x64\\Cyberpunk2077.exe".to_string(),
-      arguments: "-skipStartScreen".to_string(),
-      icon: "cyberpunk".to_string(),
-      category: "Games".to_string(),
-      tags: vec!["RPG".to_string(), "Vulkan".to_string(), "Action".to_string()],
-      bottle_id: "bottle-gaming".to_string(),
-      last_played: Some("2026-05-22T02:15:00Z".to_string()),
-      play_time_mins: 3420,
-      favorite: true,
-    },
-    AppConfig {
-      id: "app-word".to_string(),
-      name: "Microsoft Word".to_string(),
-      exe_path: "C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE".to_string(),
-      arguments: "".to_string(),
-      icon: "office".to_string(),
-      category: "Productivity".to_string(),
-      tags: vec!["Office".to_string(), "Docs".to_string()],
-      bottle_id: "bottle-office".to_string(),
-      last_played: Some("2026-05-22T14:30:00Z".to_string()),
-      play_time_mins: 120,
-      favorite: false,
-    }
-  ];
+  let wine_path = resolve_wine_binary(&AppSettings {
+    wine_binary_path: "/opt/homebrew/bin/wine64".to_string(),
+    runtime_storage_path: format!("{}/runtimes", base_str),
+    sandbox_enabled: true,
+    verbose_logs: true,
+  })
+  .unwrap_or_else(|| "/opt/homebrew/bin/wine64".to_string());
 
   let default_runtimes = vec![
     Runtime {
@@ -729,17 +992,18 @@ fn load_state_from_disk_impl() -> AppStateData {
   ];
 
   let default_settings = AppSettings {
-    wine_binary_path: "/opt/homebrew/bin/wine64".to_string(),
+    wine_binary_path: wine_path,
     runtime_storage_path: format!("{}/runtimes", base_str),
     sandbox_enabled: true,
     verbose_logs: true,
   };
 
   let initial_state = AppStateData {
-    bottles: default_bottles,
-    apps: default_apps,
+    bottles: vec![],
+    apps: vec![],
     runtimes: default_runtimes,
     settings: default_settings,
+    onboarded: false,
   };
 
   let _ = save_state_to_disk_impl(&initial_state);
@@ -810,8 +1074,12 @@ fn create_bottle(
     }
   ];
 
-  // Actually create prefix folders
-  let _ = initialize_prefix_sandbox_impl(&path, &prefix_type)?;
+  let settings = {
+    let data = state.data.lock().map_err(|e| e.to_string())?;
+    data.settings.clone()
+  };
+
+  let _ = initialize_bottle_prefix(&path, &prefix_type, &settings, None)?;
   let real_size = calculate_dir_size(&bottle_dir);
 
   let new_bottle = Bottle {
@@ -1106,13 +1374,12 @@ fn run_app(id: String, state: State<'_, AppState>, app_handle: AppHandle) -> Res
       bottle.path.clone(),
       exe_path,
       arguments,
-      bottle.env_vars.clone(),
       bottle,
       settings,
     )
   };
 
-  let (app_name, prefix_path, exe_path, arguments, env_vars, bottle, settings) = launch;
+  let (app_name, prefix_path, exe_path, arguments, bottle, settings) = launch;
   validate_sandbox_path(Path::new(&prefix_path))?;
 
   {
@@ -1124,7 +1391,6 @@ fn run_app(id: String, state: State<'_, AppState>, app_handle: AppHandle) -> Res
     prefix_path,
     exe_path,
     arguments,
-    env_vars,
     settings,
     Some(bottle),
     app_handle,
@@ -1133,6 +1399,69 @@ fn run_app(id: String, state: State<'_, AppState>, app_handle: AppHandle) -> Res
   );
 
   Ok(app_name)
+}
+
+#[tauri::command]
+fn get_session(state: State<'_, AppState>) -> Result<SessionInfo, String> {
+  let data = state.data.lock().map_err(|e| e.to_string())?;
+  let wine_binary_path = resolve_wine_binary(&data.settings);
+  Ok(SessionInfo {
+    onboarded: data.onboarded,
+    wine_installed: wine_binary_path.is_some(),
+    wine_binary_path,
+  })
+}
+
+#[tauri::command]
+fn complete_onboarding(state: State<'_, AppState>) -> Result<bool, String> {
+  let mut data = state.data.lock().map_err(|e| e.to_string())?;
+  data.onboarded = true;
+  save_state_to_disk_impl(&*data)?;
+  Ok(true)
+}
+
+#[tauri::command]
+fn install_windows_software(
+  prefix_path: String,
+  installer_path: String,
+  arguments: String,
+  app_handle: AppHandle,
+  state: State<'_, AppState>,
+) -> Result<InstallResult, String> {
+  validate_sandbox_path(Path::new(&prefix_path))?;
+  validate_command_text(&arguments, "Arguments", 2048)?;
+
+  let (settings, bottle) = {
+    let data = state.data.lock().map_err(|e| e.to_string())?;
+    let bottle = data
+      .bottles
+      .iter()
+      .find(|b| b.path == prefix_path)
+      .cloned();
+    (data.settings.clone(), bottle)
+  };
+
+  let launch = resolve_launch_target(&prefix_path, &installer_path)?;
+  let result = run_wine_launch(
+    &prefix_path,
+    launch,
+    arguments,
+    settings,
+    bottle,
+    &app_handle,
+    state.active_child_pid.clone(),
+    true,
+    false,
+  )?;
+
+  if let Ok(mut data) = state.data.lock() {
+    if let Some(index) = data.bottles.iter().position(|b| b.path == prefix_path) {
+      data.bottles[index].size_bytes = calculate_dir_size(Path::new(&prefix_path));
+      let _ = save_state_to_disk_impl(&*data);
+    }
+  }
+
+  Ok(result)
 }
 
 #[tauri::command]
@@ -1389,13 +1718,19 @@ fn initialize_prefix_sandbox_impl(prefix_path: &str, prefix_type: &str) -> Resul
 #[tauri::command]
 fn initialize_prefix_sandbox(bottle_id: String, prefix_path: String, prefix_type: String) -> Result<SandboxInfo, String> {
   validate_id(&bottle_id)?;
-  let mut info = initialize_prefix_sandbox_impl(&prefix_path, &prefix_type)?;
+  let info = initialize_prefix_sandbox_impl(&prefix_path, &prefix_type)?;
+  // preserve command behavior for explicit initialize command (no wineboot side effects)
+  let mut info = info;
   info.bottle_id = bottle_id;
   Ok(info)
 }
 
 #[tauri::command]
-fn reset_sandbox(bottle_id: String, prefix_path: String) -> Result<String, String> {
+fn reset_sandbox(
+  bottle_id: String,
+  prefix_path: String,
+  state: State<'_, AppState>,
+) -> Result<String, String> {
   validate_id(&bottle_id)?;
   let path = Path::new(&prefix_path);
   validate_sandbox_path(path)?;
@@ -1403,7 +1738,11 @@ fn reset_sandbox(bottle_id: String, prefix_path: String) -> Result<String, Strin
   if path.exists() {
     fs::remove_dir_all(path).map_err(|e| format!("Failed to remove sandbox: {}", e))?;
   }
-  let _ = initialize_prefix_sandbox_impl(&prefix_path, "gaming")?;
+  let settings = {
+    let data = state.data.lock().map_err(|e| e.to_string())?;
+    data.settings.clone()
+  };
+  let _ = initialize_bottle_prefix(&prefix_path, "gaming", &settings, None)?;
 
   Ok(format!("Sandbox '{}' has been reset successfully", bottle_id))
 }
@@ -1555,29 +1894,28 @@ fn execute_windows_binary(
   state: State<'_, AppState>,
 ) -> Result<String, String> {
   validate_sandbox_path(Path::new(&prefix_path))?;
-  validate_executable_path(&exe_path)?;
   validate_command_text(&arguments, "Arguments", 2048)?;
 
-  let (settings, env_vars, bottle) = {
+  let (settings, bottle) = {
     let data = state.data.lock().map_err(|e| e.to_string())?;
     let bottle = data
       .bottles
       .iter()
       .find(|b| b.path == prefix_path)
       .cloned();
-    let env_vars = bottle
-      .as_ref()
-      .map(|b| b.env_vars.clone())
-      .unwrap_or_default();
-    (data.settings.clone(), env_vars, bottle)
+    (data.settings.clone(), bottle)
   };
 
-  let wine_available = resolve_wine_binary(&settings).is_some();
+  if resolve_wine_binary(&settings).is_none() {
+    return Err(
+      "Wine is not installed. Install with: brew install --cask wine-stable".to_string(),
+    );
+  }
+
   spawn_wine_process(
     prefix_path.clone(),
     exe_path.clone(),
     arguments,
-    env_vars,
     settings,
     bottle,
     app_handle,
@@ -1585,11 +1923,7 @@ fn execute_windows_binary(
     false,
   );
 
-  if wine_available {
-    Ok(format!("Launching via Wine: {}", exe_path))
-  } else {
-    Ok(format!("Simulated launch (no Wine binary found): {}", exe_path))
-  }
+  Ok(format!("Launching via Wine: {}", exe_path))
 }
 
 // ========================================================
@@ -1678,48 +2012,111 @@ fn install_dependencies(
   state: State<'_, AppState>,
 ) -> Result<String, String> {
   validate_id(&bottle_id)?;
+  validate_command_text(&dependency, "Dependency verb", 128)?;
 
-  let (bottle_name, prefix_path) = {
+  let (bottle_name, prefix_path, settings) = {
     let data = state.data.lock().map_err(|e| e.to_string())?;
     let index = data.bottles.iter().position(|b| b.id == bottle_id)
       .ok_or_else(|| "Bottle not found".to_string())?;
     
-    (data.bottles[index].name.clone(), data.bottles[index].path.clone())
+    (
+      data.bottles[index].name.clone(),
+      data.bottles[index].path.clone(),
+      data.settings.clone(),
+    )
   };
 
   let dep_clone = dependency.clone();
   let app_handle_clone = app_handle.clone();
 
   std::thread::spawn(move || {
-    let _ = app_handle_clone.emit("wine-log-stream", format!(
-      "[Winetricks] Resolving dependencies for '{}'...", dep_clone
-    ));
+    #[derive(Serialize, Clone)]
+    struct DepProgress {
+      id: String,
+      progress: u32,
+    }
 
-    let logs = vec![
-      format!("[Winetricks] Checking prefix architecture: WINEPREFIX={}", prefix_path),
-      format!("[Winetricks] Downloading cab files from trusted servers..."),
-      format!("[Winetricks] Verifying cabinet SHA-256 signature hashes... Match OK!"),
-      format!("[Winetricks] Initializing cabextract tools..."),
-      format!("[Wine] Injecting custom DLL wrappers: {} assemblies pre-compiled.", dep_clone),
-      format!("[Wine] Registering mscoree / ole32 bindings inside registry tables (HKLM)..."),
-      format!("[Winetricks] Successfully installed dependency verb: '{}' into bottle '{}'.", dep_clone, bottle_name),
-    ];
+    let _ = app_handle_clone.emit(
+      "wine-log-stream",
+      format!("[Winetricks] Resolving dependency '{}' for '{}'.", dep_clone, bottle_name),
+    );
 
-    let steps = logs.len();
-    for (i, log) in logs.into_iter().enumerate() {
-      std::thread::sleep(Duration::from_millis(400));
-      let _ = app_handle_clone.emit("wine-log-stream", log);
-      let progress = ((i + 1) * 100 / steps) as u32;
-      
-      #[derive(Serialize, Clone)]
-      struct DepProgress {
-        id: String,
-        progress: u32,
+    let Some(wine_bin) = resolve_wine_binary(&settings) else {
+      let _ = app_handle_clone.emit(
+        "wine-log-stream",
+        "[FusionCross:Error] Wine is not installed. Cannot run winetricks.".to_string(),
+      );
+      return;
+    };
+
+    let Some(winetricks_bin) = resolve_winetricks_binary() else {
+      let _ = app_handle_clone.emit(
+        "wine-log-stream",
+        "[FusionCross:Error] Winetricks is not installed. Install with: brew install winetricks".to_string(),
+      );
+      return;
+    };
+
+    let _ = app_handle_clone.emit(
+      "download-progress",
+      DepProgress { id: format!("dep-{}", dep_clone), progress: 10 },
+    );
+    let _ = app_handle_clone.emit(
+      "wine-log-stream",
+      format!("[Winetricks] WINEPREFIX={}", prefix_path),
+    );
+
+    let output = Command::new(winetricks_bin)
+      .env("WINEPREFIX", &prefix_path)
+      .env("WINE", &wine_bin)
+      .arg("-q")
+      .arg(&dep_clone)
+      .output();
+
+    match output {
+      Ok(out) => {
+        let _ = app_handle_clone.emit(
+          "download-progress",
+          DepProgress { id: format!("dep-{}", dep_clone), progress: 90 },
+        );
+
+        for line in String::from_utf8_lossy(&out.stdout).lines() {
+          let _ = app_handle_clone.emit("wine-log-stream", format!("[Winetricks] {}", line));
+        }
+        for line in String::from_utf8_lossy(&out.stderr).lines() {
+          let _ = app_handle_clone.emit("wine-log-stream", format!("[Winetricks] {}", line));
+        }
+
+        let status_line = if out.status.success() {
+          format!(
+            "[Winetricks] Successfully installed '{}' into bottle '{}'.",
+            dep_clone, bottle_name
+          )
+        } else {
+          format!(
+            "[Winetricks:Error] Dependency '{}' failed with status {}.",
+            dep_clone, out.status
+          )
+        };
+        let _ = app_handle_clone.emit("wine-log-stream", status_line);
+        let _ = app_handle_clone.emit(
+          "download-progress",
+          DepProgress {
+            id: format!("dep-{}", dep_clone),
+            progress: if out.status.success() { 100 } else { 0 },
+          },
+        );
       }
-      let _ = app_handle_clone.emit("download-progress", DepProgress {
-        id: format!("dep-{}", dep_clone),
-        progress,
-      });
+      Err(err) => {
+        let _ = app_handle_clone.emit(
+          "wine-log-stream",
+          format!("[Winetricks:Error] Failed to execute winetricks: {}", err),
+        );
+        let _ = app_handle_clone.emit(
+          "download-progress",
+          DepProgress { id: format!("dep-{}", dep_clone), progress: 0 },
+        );
+      }
     }
   });
 
@@ -1861,36 +2258,53 @@ fn scan_apps(bottle_id: String, state: State<'_, AppState>) -> Result<Vec<Discov
 
   for folder in &search_folders {
     if folder.exists() {
-      scan_exes_recursively(folder, &mut discovered);
+      scan_exes_recursively(&drive_c, folder, &mut discovered);
     }
   }
 
+  discovered.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
   Ok(discovered)
 }
 
-fn scan_exes_recursively(dir: &Path, acc: &mut Vec<DiscoveredApp>) {
+fn scan_exes_recursively(drive_c: &Path, dir: &Path, acc: &mut Vec<DiscoveredApp>) {
   if let Ok(entries) = fs::read_dir(dir) {
     for entry in entries.flatten() {
       let path = entry.path();
       if path.is_dir() {
         let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
-        if name != "Windows" && name != "System32" && name != "SysWOW64" {
-          scan_exes_recursively(&path, acc);
+        if !matches!(name.as_str(), "Windows" | "System32" | "SysWOW64") {
+          scan_exes_recursively(drive_c, &path, acc);
         }
       } else if path.is_file() {
         if let Some(ext) = path.extension() {
           if ext.to_string_lossy().to_lowercase() == "exe" {
             let file_name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
-            if !file_name.to_lowercase().contains("uninstall") && !file_name.to_lowercase().contains("helper") {
-              let relative_win_path = format!("C:\\{}", path.strip_prefix(dir.parent().unwrap()).unwrap_or(&path).to_string_lossy().to_string().replace("/", "\\"));
-              let meta = entry.metadata().ok();
-              let size = meta.map(|m| m.len()).unwrap_or(0);
-              acc.push(DiscoveredApp {
-                name: file_name.replace(".exe", "").replace(".EXE", ""),
-                path: relative_win_path,
-                size_bytes: size,
-              });
+            let lower = file_name.to_lowercase();
+            if lower.contains("uninstall")
+              || lower.contains("helper")
+              || lower.contains("setup")
+              || lower.contains("redist")
+            {
+              continue;
             }
+            let windows_path = unix_path_to_windows(
+              drive_c
+                .parent()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default()
+                .as_str(),
+              &path,
+            );
+            let meta = entry.metadata().ok();
+            let size = meta.map(|m| m.len()).unwrap_or(0);
+            acc.push(DiscoveredApp {
+              name: file_name
+                .trim_end_matches(".exe")
+                .trim_end_matches(".EXE")
+                .to_string(),
+              path: windows_path,
+              size_bytes: size,
+            });
           }
         }
       }
@@ -2071,6 +2485,8 @@ fn main() {
     .invoke_handler(tauri::generate_handler![
       list_bottles,
       create_bottle,
+      get_session,
+      complete_onboarding,
       get_settings,
       update_settings,
       delete_bottle,
@@ -2089,6 +2505,7 @@ fn main() {
       reset_sandbox,
       open_prefix_in_finder,
       download_wine_engine,
+      install_windows_software,
       execute_windows_binary,
       // Diagnostics & Dependency utilities
       check_rosetta_status,

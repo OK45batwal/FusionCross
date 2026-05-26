@@ -1,5 +1,15 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Bottle, AppConfig, Runtime, SysMetrics, SoftwareRecipe, RosettaStatus, DiscoveredApp } from '../types';
+import {
+  Bottle,
+  AppConfig,
+  Runtime,
+  SysMetrics,
+  SoftwareRecipe,
+  RosettaStatus,
+  DiscoveredApp,
+  SessionInfo,
+  InstallResult,
+} from '../types';
 
 interface AppContextType {
   bottles: Bottle[];
@@ -14,7 +24,7 @@ interface AppContextType {
   clearLogs: () => void;
   downloadProgress: Record<string, number>;
   onboarded: boolean;
-  setOnboarded: (val: boolean) => void;
+  setOnboarded: (val: boolean) => Promise<void> | void;
   createBottle: (name: string, type: string, wineVersion: string) => Promise<Bottle>;
   removeBottle: (id: string) => Promise<void>;
   duplicateBottle: (id: string, name: string) => Promise<void>;
@@ -191,7 +201,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeAppId, setActiveAppId] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [downloadProgress, setDownloadProgress] = useState<Record<string, number>>({});
-  const [onboarded, setOnboarded] = useState<boolean>(false);
+  const [onboarded, setOnboardedState] = useState<boolean>(false);
   const [showWizard, setShowWizard] = useState<boolean>(false);
   const [wizardRecipeId, setWizardRecipeId] = useState<string | 'custom' | null>(null);
   const [rosettaDiagnostics, setRosettaDiagnostics] = useState<RosettaStatus>({
@@ -212,6 +222,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     shader_compilation_percent: 0,
   });
 
+  const setOnboarded = async (val: boolean) => {
+    setOnboardedState(val);
+    if (isTauri() && val) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        await invoke('complete_onboarding');
+      } catch (err) {
+        console.error('Failed to persist onboarding state:', err);
+      }
+    }
+  };
+
   const fetchRosettaStatus = async () => {
     if (isTauri()) {
       const { invoke } = await import('@tauri-apps/api/core');
@@ -229,9 +251,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (isTauri()) {
       const { invoke } = await import('@tauri-apps/api/core');
       try {
+        const session = await invoke<SessionInfo>('get_session');
         const b = await invoke<Bottle[]>('list_bottles');
         const a = await invoke<AppConfig[]>('list_apps');
         const r = await invoke<Runtime[]>('list_runtimes');
+        setOnboardedState(session.onboarded);
         setBottles(b);
         setApps(a);
         setRuntimes(r);
@@ -240,81 +264,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         console.error("Failed loading data from Tauri backend:", err);
       }
     } else {
-      // Mock Fallback
-      setBottles([
-        {
-          id: "bottle-gaming",
-          name: "Steam Gaming Bottle",
-          prefix_type: "gaming",
-          wine_version: "Proton GE 9.0",
-          dxvk_enabled: true,
-          moltenvk_enabled: true,
-          win_version: "win10",
-          env_vars: { "DXVK_HUD": "fps", "WINEESYNC": "1" },
-          dll_overrides: [{ library: "d3d11", override_type: "native,builtin" }],
-          registry_keys: [],
-          size_bytes: 3240000000,
-          path: "/Users/omkar/.gemini/antigravity/scratch/fusioncross/bottles/bottle-gaming",
-          created_at: "2026-05-10",
-        },
-        {
-          id: "bottle-office",
-          name: "MS Office Suite",
-          prefix_type: "productivity",
-          wine_version: "Wine Stable 9.0",
-          dxvk_enabled: false,
-          moltenvk_enabled: false,
-          win_version: "win10",
-          env_vars: {},
-          dll_overrides: [],
-          registry_keys: [],
-          size_bytes: 1120000000,
-          path: "/Users/omkar/.gemini/antigravity/scratch/fusioncross/bottles/bottle-office",
-          created_at: "2026-05-18",
-        }
-      ]);
-
-      setApps([
-        {
-          id: "app-steam",
-          name: "Steam Launcher",
-          exe_path: "C:\\Program Files (x86)\\Steam\\Steam.exe",
-          arguments: "-nofriendsui",
-          icon: "steam",
-          category: "Games",
-          tags: ["Store", "Online"],
-          bottle_id: "bottle-gaming",
-          last_played: "2026-05-20T21:40:00Z",
-          play_time_mins: 840,
-          favorite: true,
-        },
-        {
-          id: "app-cyberpunk",
-          name: "Cyberpunk 2077",
-          exe_path: "C:\\GOG Games\\Cyberpunk 2077\\bin\\x64\\Cyberpunk2077.exe",
-          arguments: "-skipStartScreen",
-          icon: "cyberpunk",
-          category: "Games",
-          tags: ["RPG", "Vulkan", "Action"],
-          bottle_id: "bottle-gaming",
-          last_played: "2026-05-22T02:15:00Z",
-          play_time_mins: 3420,
-          favorite: true,
-        },
-        {
-          id: "app-word",
-          name: "Microsoft Word",
-          exe_path: "C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE",
-          arguments: "",
-          icon: "office",
-          category: "Productivity",
-          tags: ["Office", "Docs"],
-          bottle_id: "bottle-office",
-          last_played: "2026-05-22T14:30:00Z",
-          play_time_mins: 120,
-          favorite: false,
-        }
-      ]);
+      // Browser fallback: empty library (real install flow requires Tauri)
+      setOnboardedState(false);
+      setBottles([]);
+      setApps([]);
 
       setRuntimes([
         {
@@ -640,7 +593,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let name = "";
     let category = "Utilities";
     let exe = "";
-    let args = "";
     let isCustom = recipeId === 'custom';
 
     if (isCustom) {
@@ -656,8 +608,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!recipe) return;
       name = recipe.name;
       category = recipe.category;
-      exe = `C:\\Program Files\\${recipe.name}\\${recipe.name}.exe`;
-      args = recipe.recommended_prefix === 'gaming' ? '-fullscreen' : '';
+      setLogs((prev) => [
+        ...prev,
+        `[FusionCross] '${recipe.name}' is a preset only. Pick your real installer (.exe/.msi) via Custom Install to continue.`,
+      ]);
+      throw new Error("Preset recipes require a real installer file path.");
     }
 
     setDownloadProgress((prev) => ({ ...prev, [recipeId]: 0 }));
@@ -680,11 +635,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setLogs((prev) => [...prev, `[FusionCross] Executing target installer: ${exe}`]);
           setDownloadProgress((prev) => ({ ...prev, [recipeId]: 50 }));
 
-          await invoke('execute_windows_binary', {
+          const install = await invoke<InstallResult>('install_windows_software', {
             prefixPath: b.path,
-            exePath: exe,
+            installerPath: exe,
             arguments: ""
           });
+          setLogs((prev) => [...prev, `[FusionCross] ${install.message}`]);
+          if (!install.success) {
+            throw new Error(`Installer exited with code ${install.exit_code}`);
+          }
 
           setDownloadProgress((prev) => ({ ...prev, [recipeId]: 80 }));
           
@@ -741,19 +700,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setDownloadProgress((prev) => ({ ...prev, [recipeId]: 0 }));
       }
     } else {
-      setDownloadProgress((prev) => ({ ...prev, [recipeId]: 60 }));
-      await new Promise(r => setTimeout(r, 600));
-      setLogs((prev) => [...prev, `[sim] Installer executed successfully.`]);
-      setDownloadProgress((prev) => ({ ...prev, [recipeId]: 100 }));
-
-      await registerApp(
-        name,
-        isCustom ? exe : `C:\\Program Files\\${name}\\${name}.exe`,
-        "",
-        b.id,
-        category,
-        ['Installed', isCustom ? 'Custom' : 'Recipe']
-      );
+      setLogs((prev) => [...prev, `[FusionCross] Real install workflow is available only in the desktop app (Tauri mode).`]);
+      setDownloadProgress((prev) => ({ ...prev, [recipeId]: 0 }));
     }
   };
 

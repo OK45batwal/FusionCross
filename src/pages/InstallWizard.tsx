@@ -183,7 +183,7 @@ export const InstallWizard: React.FC<InstallWizardProps> = ({ isOpen, onClose })
             <div className="space-y-5 h-full flex flex-col">
               <div className="space-y-1">
                 <span className="text-xs font-bold font-mono uppercase text-white tracking-wide">Choose Application to Deploy</span>
-                <p className="text-[11px] text-graphite-400">Select a pre-seeded installer preset from our active catalog recipes or select a custom local windows .exe program from your system.</p>
+                <p className="text-[11px] text-graphite-400">For real installs, choose Custom and provide a local Windows installer (.exe/.msi). Presets only configure bottle defaults.</p>
               </div>
 
               {/* Search filter */}

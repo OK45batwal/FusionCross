@@ -93,3 +93,16 @@ export interface AppSettings {
   verbose_logs: boolean;
 }
 
+export interface SessionInfo {
+  onboarded: boolean;
+  wine_installed: boolean;
+  wine_binary_path: string | null;
+}
+
+export interface InstallResult {
+  success: boolean;
+  exit_code: number;
+  windows_path: string;
+  message: string;
+}
+
