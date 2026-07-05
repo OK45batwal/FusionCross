@@ -31,6 +31,7 @@ export const InstallWizard: React.FC<InstallWizardProps> = ({ isOpen, onClose })
     downloadProgress, 
     logs,
     clearLogs,
+    setLogs,
     wizardRecipeId,
     setWizardRecipeId
   } = useApp();
@@ -126,8 +127,9 @@ export const InstallWizard: React.FC<InstallWizardProps> = ({ isOpen, onClose })
         await installRecipe(selectedRecipeId, finalBottleName, finalBottleType, finalWineVersion, undefined, undefined, targetBottleId);
       }
       setStep(4);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      clearLogs();
+      setLogs((prev) => [...prev, `[FusionCross:Error] ${err?.message || err}`]);
     } finally {
       setIsInstalling(false);
     }
@@ -273,7 +275,7 @@ export const InstallWizard: React.FC<InstallWizardProps> = ({ isOpen, onClose })
                       <div className="flex gap-1.5">
                         <input 
                           type="text" 
-                          placeholder="e.g. /Users/omkar/Downloads/setup.exe"
+                          placeholder="e.g. ~/Downloads/setup.exe"
                           value={customExePath}
                           onChange={(e) => setCustomExePath(e.target.value)}
                           className="glass-input py-1.5 font-mono text-xs flex-1"
@@ -394,7 +396,7 @@ export const InstallWizard: React.FC<InstallWizardProps> = ({ isOpen, onClose })
 
                   {selectedRecipe && (
                     <div className="col-span-2 text-[10px] text-neon-purple bg-neon-purple/5 border border-neon-purple/10 p-2.5 rounded-lg leading-relaxed mt-2.5">
-                      💡 <strong>Recipe Recommendation:</strong> '{selectedRecipe.name}' is highly recommended to run inside a **{selectedRecipe.recommended_prefix.toUpperCase()}** optimized prefix bottle environment for high compatibility rate.
+                      &#128161; <strong>Recipe Recommendation:</strong> &apos;{selectedRecipe.name}&apos; is highly recommended to run inside a <strong>{selectedRecipe.recommended_prefix.toUpperCase()}</strong> optimized prefix bottle environment for high compatibility rate.
                     </div>
                   )}
                 </div>
@@ -472,7 +474,7 @@ export const InstallWizard: React.FC<InstallWizardProps> = ({ isOpen, onClose })
               <div className="space-y-2 max-w-md">
                 <h3 className="text-lg font-bold text-white font-mono uppercase tracking-wide">Application Deployed Successfully!</h3>
                 <p className="text-xs text-graphite-400 leading-relaxed font-mono">
-                  '{selectedRecipeId === 'custom' ? customAppName : selectedRecipe?.name}' is now fully installed and registered within your <strong>{bottleMode === 'new' ? newBottleName : 'Existing prefix'}</strong> sandbox environment. All translation presets are bound.
+                  &apos;{selectedRecipeId === 'custom' ? customAppName : selectedRecipe?.name}&apos; is now fully installed and registered within your <strong>{bottleMode === 'new' ? newBottleName : 'Existing prefix'}</strong> sandbox environment. All translation presets are bound.
                 </p>
               </div>
 

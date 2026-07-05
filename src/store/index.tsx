@@ -1,15 +1,14 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import {
-  Bottle,
-  AppConfig,
-  Runtime,
-  SysMetrics,
-  SoftwareRecipe,
-  RosettaStatus,
-  DiscoveredApp,
-  SessionInfo,
-  InstallResult,
-} from '../types';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { SysMetrics, RosettaStatus, AppConfig, SoftwareRecipe, Bottle, Runtime } from '../types';
+import { useBottles } from './useBottles';
+import { useApps } from './useApps';
+import { useRuntimes } from './useRuntimes';
+import { useRecipes } from './useRecipes';
+import { Notification } from '../components/Notifications';
+
+// ======================================================
+// CONTEXT TYPE
+// ======================================================
 
 interface AppContextType {
   bottles: Bottle[];
@@ -21,6 +20,7 @@ interface AppContextType {
   activeAppId: string | null;
   metrics: SysMetrics;
   logs: string[];
+  setLogs: React.Dispatch<React.SetStateAction<string[]>>;
   clearLogs: () => void;
   downloadProgress: Record<string, number>;
   onboarded: boolean;
@@ -48,179 +48,92 @@ interface AppContextType {
   installDependencies: (bottleId: string, dependency: string) => Promise<void>;
   installDxvk: (bottleId: string, version: string) => Promise<void>;
   backupBottle: (bottleId: string, backupPath: string) => Promise<string>;
-  scanApps: (bottleId: string) => Promise<DiscoveredApp[]>;
+  scanApps: (bottleId: string) => Promise<any>;
   exportLogs: (logs: string[], path: string) => Promise<string>;
+  notifications: Notification[];
+  notify: (message: string, type?: Notification['type']) => void;
+  dismissNotification: (id: string) => void;
+  loading: boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Helper to check if running inside Tauri
-const isTauri = () => {
-  return typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined;
-};
+// ======================================================
+// HELPERS
+// ======================================================
 
-const DEFAULT_RECIPES: SoftwareRecipe[] = [
-  {
-    id: 'steam',
-    name: 'Steam Launcher',
-    category: 'Games',
-    description: 'Valve\'s digital storefront and hub for thousands of PC games. Optimized with DXVK rendering.',
-    recommended_prefix: 'gaming',
-    rating: 4.8,
-    icon: 'steam',
-    popular: true
-  },
-  {
-    id: 'office',
-    name: 'Microsoft Office Suite',
-    category: 'Productivity',
-    description: 'Includes Word, Excel, and PowerPoint. Optimized with standard windows configurations and pre-loaded fonts.',
-    recommended_prefix: 'productivity',
-    rating: 4.2,
-    icon: 'office',
-    popular: true
-  },
-  {
-    id: 'photoshop',
-    name: 'Adobe Photoshop CC',
-    category: 'Productivity',
-    description: 'Premier graphic design suite. Requires legacy DLL compatibility and custom registry patches.',
-    recommended_prefix: 'dxvk-optimized',
-    rating: 4.5,
-    icon: 'photoshop',
-    popular: true
-  },
-  {
-    id: 'cyberpunk',
-    name: 'Cyberpunk 2077',
-    category: 'Games',
-    description: 'Next-gen action RPG. High-performance gaming template pre-configured with MoltenVK to Metal translation.',
-    recommended_prefix: 'gaming',
-    rating: 4.9,
-    icon: 'cyberpunk',
-    popular: true
-  },
-  {
-    id: 'flstudio',
-    name: 'FL Studio 21',
-    category: 'Productivity',
-    description: 'Professional digital audio workstation (DAW). Optimized with CoreAudio ASIO wrappers for low-latency recording.',
-    recommended_prefix: 'productivity',
-    rating: 4.7,
-    icon: 'generic',
-    popular: true
-  },
-  {
-    id: 'discord',
-    name: 'Discord (Voice & Chat)',
-    category: 'Utilities',
-    description: 'Popular vocal and text chat client. Optimized with lightweight thread allocations and low-latency system overrides.',
-    recommended_prefix: 'lightweight',
-    rating: 4.4,
-    icon: 'generic',
-    popular: true
-  },
-  {
-    id: 'witcher3',
-    name: 'The Witcher 3: Wild Hunt',
-    category: 'Games',
-    description: 'Fantasy action-RPG masterpiece. Includes DXVK v2.3 shaders pre-caching and customized retina scaling settings.',
-    recommended_prefix: 'gaming',
-    rating: 4.9,
-    icon: 'witcher',
-    popular: false
-  },
-  {
-    id: 'gtav',
-    name: 'Grand Theft Auto V',
-    category: 'Games',
-    description: 'Open-world crime epic. Performance profile includes MoltenVK translation and low CPU-overhead environment flags.',
-    recommended_prefix: 'gaming',
-    rating: 4.8,
-    icon: 'generic',
-    popular: false
-  },
-  {
-    id: 'illustrator',
-    name: 'Adobe Illustrator CC',
-    category: 'Productivity',
-    description: 'Vector graphics editor. Configured with native Windows font mappings and custom GDI graphic rendering.',
-    recommended_prefix: 'dxvk-optimized',
-    rating: 4.3,
-    icon: 'photoshop',
-    popular: false
-  },
-  {
-    id: 'vscode',
-    name: 'Visual Studio Code',
-    category: 'Productivity',
-    description: 'Developer IDE editor. Custom sandboxed configurations mapping home directories directly to Z:\\ drive.',
-    recommended_prefix: 'productivity',
-    rating: 4.6,
-    icon: 'generic',
-    popular: false
-  },
-  {
-    id: 'notepadplus',
-    name: 'Notepad++ Editor',
-    category: 'Utilities',
-    description: 'Fast, lightweight Windows source editor running flawlessly with default stable prefix environments.',
-    recommended_prefix: 'legacy',
-    rating: 4.5,
-    icon: 'generic',
-    popular: false
-  },
-  {
-    id: 'winrar',
-    name: 'WinRAR Archiver',
-    category: 'Utilities',
-    description: 'Classic Windows compressed file compression and extraction utility. Zero dependencies, instant startup.',
-    recommended_prefix: 'legacy',
-    rating: 4.1,
-    icon: 'generic',
-    popular: false
-  },
-  {
-    id: 'winamp',
-    name: 'Winamp (Legacy Media Player)',
-    category: 'Utilities',
-    description: 'Classic high-fidelity media player. Extremely lightweight, designed to run flawlessly with default settings.',
-    recommended_prefix: 'legacy',
-    rating: 4.6,
-    icon: 'generic',
-    popular: false
-  }
-];
+const isTauri = () =>
+  typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined;
+
+// ======================================================
+// PROVIDER
+// ======================================================
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [bottles, setBottles] = useState<Bottle[]>([]);
-  const [apps, setApps] = useState<AppConfig[]>([]);
-  const [runtimes, setRuntimes] = useState<Runtime[]>([]);
-  const [recipes, setRecipes] = useState<SoftwareRecipe[]>(DEFAULT_RECIPES);
-  const [activeTab, setActiveTab] = useState<string>('dashboard');
-  const [activeAppId, setActiveAppId] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
-  const [downloadProgress, setDownloadProgress] = useState<Record<string, number>>({});
   const [onboarded, setOnboardedState] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [showWizard, setShowWizard] = useState<boolean>(false);
   const [wizardRecipeId, setWizardRecipeId] = useState<string | 'custom' | null>(null);
-  const [rosettaDiagnostics, setRosettaDiagnostics] = useState<RosettaStatus>({
-    is_apple_silicon: true,
-    is_translated: true,
-    rosetta_installed: true,
-    wine_installed: true,
-    cpu_brand: "Apple M-Series Silicon (ARM64)"
-  });
   const [metrics, setMetrics] = useState<SysMetrics>({
-    cpu_usage: 0,
-    ram_usage_percent: 0,
-    ram_used_gb: 0,
-    ram_total_gb: 16,
-    disk_free_gb: 150,
-    gpu_usage: 0,
-    fps: 0,
-    shader_compilation_percent: 0,
+    cpu_usage: 0, ram_usage_percent: 0, ram_used_gb: 0, ram_total_gb: 16,
+    disk_free_gb: 150, gpu_usage: 0, fps: 0, shader_compilation_percent: 0, active_pid: 0,
   });
+  const [loading, setLoading] = useState(true);
+  const [rosettaDiagnostics, setRosettaDiagnostics] = useState<RosettaStatus>({
+    is_apple_silicon: true, is_translated: true, rosetta_installed: true,
+    wine_installed: true, cpu_brand: 'Apple M-Series Silicon (ARM64)',
+  });
+
+  // Domain hooks
+  const {
+    bottles, setBottles, createBottle: _createBottle, removeBottle: _removeBottle,
+    duplicateBottle: _duplicateBottle, updateBottle: _updateBottle,
+    openPrefixInFinder, resetSandbox, installDxvk, backupBottle, scanApps, installDependencies,
+  } = useBottles();
+
+  const {
+    apps, setApps, activeAppId, setActiveAppId,
+    registerApp: _registerApp, toggleFavorite, launchApp: _launchApp, stopApp,
+    runCustomExe: _runCustomExe, exportLogs,
+  } = useApps(setLogs);
+
+  const {
+    runtimes, setRuntimes, downloadProgress, setDownloadProgress, downloadRuntime, runtimeBrowserFallback,
+  } = useRuntimes();
+
+  const {
+    recipes, installRecipe, addCustomRecipe,
+  } = useRecipes(bottles, _createBottle, _registerApp, setLogs, setDownloadProgress);
+
+  // Wrap bottle/app ops that need cross-domain cleanup
+  const removeBottle = async (id: string) => {
+    await _removeBottle(id, (bottleId: string) => {
+      setApps((prev) => prev.filter((a) => a.bottle_id !== bottleId));
+    });
+  };
+
+  const launchApp = async (id: string) => {
+    await _launchApp(id, apps);
+  };
+
+  const runCustomExe = async (bottleId: string, exePath: string, args: string) => {
+    const bottle = bottles.find((b) => b.id === bottleId);
+    await _runCustomExe(bottleId, exePath, args, bottle?.path);
+  };
+
+  // Notifications
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const notify = useCallback((message: string, type: Notification['type'] = 'error') => {
+    const id = `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    setNotifications((prev) => [...prev, { id, message, type }]);
+  }, []);
+  const dismissNotification = useCallback((id: string) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  }, []);
+
+  // System state mutations
+  const clearLogs = () => setLogs([]);
 
   const setOnboarded = async (val: boolean) => {
     setOnboardedState(val);
@@ -241,115 +154,78 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const res = await invoke<RosettaStatus>('check_rosetta_status');
         setRosettaDiagnostics(res);
       } catch (err) {
-        console.error("Failed to query Rosetta status:", err);
+        console.error('Failed to query Rosetta status:', err);
       }
     }
   };
 
-  // Load Initial Data
-  const loadData = async () => {
-    if (isTauri()) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      try {
-        const session = await invoke<SessionInfo>('get_session');
-        const b = await invoke<Bottle[]>('list_bottles');
-        const a = await invoke<AppConfig[]>('list_apps');
-        const r = await invoke<Runtime[]>('list_runtimes');
-        setOnboardedState(session.onboarded);
-        setBottles(b);
-        setApps(a);
-        setRuntimes(r);
-        await fetchRosettaStatus();
-      } catch (err) {
-        console.error("Failed loading data from Tauri backend:", err);
-      }
-    } else {
-      // Browser fallback: empty library (real install flow requires Tauri)
-      setOnboardedState(false);
-      setBottles([]);
-      setApps([]);
+  // ======================================================
+  // SIDE EFFECTS
+  // ======================================================
 
-      setRuntimes([
-        {
-          id: "wine-stable",
-          name: "Wine Stable 9.0",
-          category: "wine",
-          version: "9.0.0",
-          size_bytes: 840000000,
-          downloaded: true,
-          path: "/Users/omkar/.gemini/antigravity/scratch/fusioncross/runtimes/wine-stable",
-        },
-        {
-          id: "proton-ge",
-          name: "Proton GE 9.0 (Custom Gaming)",
-          category: "proton",
-          version: "GE-9.0-1",
-          size_bytes: 1280000000,
-          downloaded: true,
-          path: "/Users/omkar/.gemini/antigravity/scratch/fusioncross/runtimes/proton-ge",
-        },
-        {
-          id: "proton-exp",
-          name: "Proton Experimental",
-          category: "proton",
-          version: "Experimental",
-          size_bytes: 1420000000,
-          downloaded: false,
-          path: "/Users/omkar/.gemini/antigravity/scratch/fusioncross/runtimes/proton-exp",
-        },
-        {
-          id: "dxvk-23",
-          name: "DXVK Translation Layer v2.3",
-          category: "dxvk",
-          version: "2.3.0",
-          size_bytes: 28000000,
-          downloaded: true,
-          path: "/Users/omkar/.gemini/antigravity/scratch/fusioncross/runtimes/dxvk-23",
-        },
-        {
-          id: "dxvk-latest",
-          name: "DXVK Master (Nightly Build)",
-          category: "dxvk",
-          version: "Git-Nightly",
-          size_bytes: 31000000,
-          downloaded: false,
-          path: "/Users/omkar/.gemini/antigravity/scratch/fusioncross/runtimes/dxvk-latest",
-        }
-      ]);
-    }
-  };
-
+  // Load initial data
   useEffect(() => {
+    const loadData = async () => {
+      try {
+        if (isTauri()) {
+          const { invoke } = await import('@tauri-apps/api/core');
+          const session = await invoke<any>('get_session');
+          const b = await invoke<Bottle[]>('list_bottles');
+          const a = await invoke<AppConfig[]>('list_apps');
+          const r = await invoke<Runtime[]>('list_runtimes');
+          setOnboardedState(session.onboarded);
+          setBottles(b);
+          setApps(a);
+          setRuntimes(r);
+          await fetchRosettaStatus();
+        } else {
+          setOnboardedState(false);
+          setBottles([]);
+          setApps([]);
+          runtimeBrowserFallback();
+        }
+      } catch (err) {
+        console.error('Failed loading data:', err);
+        notify('Failed to load initial data. Check backend connection.', 'error');
+      } finally {
+        setLoading(false);
+      }
+    };
     loadData();
   }, []);
 
-  // Sync / Listen to Tauri log events
+  // Tauri event listeners
   useEffect(() => {
     if (isTauri()) {
       import('@tauri-apps/api/event').then(({ listen }) => {
         listen<string>('wine-log-stream', (event) => {
-          setLogs((prev) => [...prev.slice(-149), event.payload]); // Limit to 150 log entries
+          setLogs((prev) => [...prev.slice(-149), event.payload]);
         });
-
         listen<{ id: string; progress: number }>('download-progress', (event) => {
           const { id, progress } = event.payload;
           setDownloadProgress((prev) => ({ ...prev, [id]: progress }));
           if (progress >= 100) {
-            // Update downloaded status in runtimes list
-            setRuntimes((prev) =>
-              prev.map((r) => (r.id === id ? { ...r, downloaded: true } : r))
-            );
+            setRuntimes((prev) => prev.map((r) => (r.id === id ? { ...r, downloaded: true } : r)));
           }
         });
-
         listen('app-process-exited', () => {
           setActiveAppId(null);
+        });
+        listen<string>('runtime-downloaded', async (event) => {
+          const runtimeId = event.payload;
+          setRuntimes((prev) => prev.map((r) => (r.id === runtimeId ? { ...r, downloaded: true } : r)));
+          try {
+            const { invoke } = await import('@tauri-apps/api/core');
+            await invoke('mark_runtime_downloaded', { id: runtimeId });
+          } catch (err) {
+            console.error('Failed to persist runtime download state:', err);
+          }
         });
       });
     }
   }, []);
 
-  // Poll system resource metrics
+  // Metrics polling
   useEffect(() => {
     let interval: any;
     const fetchMetrics = async () => {
@@ -362,502 +238,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           console.error(err);
         }
       } else {
-        // Mock resource metrics
         setMetrics((prev) => {
           const isAppRunning = activeAppId !== null;
-          const cpu = isAppRunning
-            ? Math.random() * 15 + 40
-            : Math.random() * 2 + 1.5;
-          const gpu = isAppRunning
-            ? Math.random() * 20 + 55
-            : Math.random() * 1.5 + 0.5;
-          const fps = isAppRunning ? Math.floor(Math.random() * 15 + 80) : 0;
-          const shaders = isAppRunning ? Math.min(100, Math.floor(prev.shader_compilation_percent + Math.random() * 2)) : 0;
-
           return {
-            cpu_usage: parseFloat(cpu.toFixed(1)),
+            cpu_usage: parseFloat((isAppRunning ? Math.random() * 15 + 40 : Math.random() * 2 + 1.5).toFixed(1)),
             ram_usage_percent: 58.4,
             ram_used_gb: 9.34,
             ram_total_gb: 16.0,
             disk_free_gb: 192.4,
-            gpu_usage: parseFloat(gpu.toFixed(1)),
-            fps,
-            shader_compilation_percent: shaders,
+            gpu_usage: parseFloat((isAppRunning ? Math.random() * 20 + 55 : Math.random() * 1.5 + 0.5).toFixed(1)),
+            fps: isAppRunning ? Math.floor(Math.random() * 15 + 80) : 0,
+            shader_compilation_percent: isAppRunning ? Math.min(100, Math.floor(prev.shader_compilation_percent + Math.random() * 2)) : 0,
+            active_pid: prev.active_pid,
           };
         });
       }
     };
-
     interval = setInterval(fetchMetrics, 1000);
     return () => clearInterval(interval);
   }, [activeAppId]);
 
-  // Operations
-  const createBottle = async (name: string, type: string, wineVersion: string): Promise<Bottle> => {
-    if (isTauri()) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      const b = await invoke<Bottle>('create_bottle', { name, prefixType: type, wineVersion });
-      setBottles((prev) => [...prev, b]);
-      return b;
-    } else {
-      const newB: Bottle = {
-        id: `bottle-${Math.floor(Math.random() * 1000)}`,
-        name,
-        prefix_type: type,
-        wine_version: wineVersion,
-        dxvk_enabled: true,
-        moltenvk_enabled: true,
-        win_version: "win10",
-        env_vars: { "DXVK_HUD": "fps", "WINEESYNC": "1" },
-        dll_overrides: [{ library: "d3d11", override_type: "native,builtin" }],
-        registry_keys: [],
-        size_bytes: 450000000,
-        path: `/Users/omkar/.gemini/antigravity/scratch/fusioncross/bottles/${name.toLowerCase().replace(/\s+/g, '-')}`,
-        created_at: new Date().toISOString().split('T')[0],
-      };
-      setBottles((prev) => [...prev, newB]);
-      return newB;
-    }
-  };
-
-  const removeBottle = async (id: string) => {
-    if (isTauri()) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('delete_bottle', { id });
-    }
-    setBottles((prev) => prev.filter((b) => b.id !== id));
-    setApps((prev) => prev.filter((a) => a.bottle_id !== id));
-  };
-
-  const duplicateBottle = async (id: string, name: string) => {
-    if (isTauri()) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      const cloned = await invoke<Bottle>('clone_bottle', { id, targetName: name });
-      setBottles((prev) => [...prev, cloned]);
-    } else {
-      const src = bottles.find(b => b.id === id);
-      if (src) {
-        const cloned: Bottle = {
-          ...src,
-          id: `bottle-${Math.floor(Math.random() * 1000)}`,
-          name,
-          created_at: new Date().toISOString().split('T')[0],
-        };
-        setBottles((prev) => [...prev, cloned]);
-      }
-    }
-  };
-
-  const updateBottle = async (updatedBottle: Bottle) => {
-    if (isTauri()) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('update_bottle_settings', {
-        id: updatedBottle.id,
-        winVersion: updatedBottle.win_version,
-        dxvkEnabled: updatedBottle.dxvk_enabled,
-        moltenvkEnabled: updatedBottle.moltenvk_enabled,
-        dllOverrides: updatedBottle.dll_overrides,
-        envVars: updatedBottle.env_vars,
-        registryKeys: updatedBottle.registry_keys,
-      });
-    }
-    setBottles((prev) => prev.map((b) => (b.id === updatedBottle.id ? updatedBottle : b)));
-  };
-
-  const registerApp = async (
-    name: string,
-    exe: string,
-    args: string,
-    bottleId: string,
-    cat: string,
-    tags: string[]
-  ) => {
-    if (isTauri()) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      const newA = await invoke<AppConfig>('register_app', {
-        name,
-        exePath: exe,
-        arguments: args,
-        bottleId,
-        category: cat,
-        tags,
-      });
-      setApps((prev) => [...prev, newA]);
-    } else {
-      const newA: AppConfig = {
-        id: `app-${Math.floor(Math.random() * 1000)}`,
-        name,
-        exe_path: exe,
-        arguments: args,
-        icon: name.toLowerCase().includes("office") ? "office" : "generic",
-        category: cat,
-        tags,
-        bottle_id: bottleId,
-        last_played: null,
-        play_time_mins: 0,
-        favorite: false,
-      };
-      setApps((prev) => [...prev, newA]);
-    }
-  };
-
-  const toggleFavorite = async (id: string) => {
-    if (isTauri()) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      const updated = await invoke<AppConfig>('toggle_favorite', { id });
-      setApps((prev) => prev.map((a) => (a.id === id ? updated : a)));
-    } else {
-      setApps((prev) =>
-        prev.map((a) => (a.id === id ? { ...a, favorite: !a.favorite } : a))
-      );
-    }
-  };
-
-  const launchApp = async (id: string) => {
-    setActiveAppId(id);
-    setLogs([]);
-    if (isTauri()) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      try {
-        await invoke('run_app', { id });
-      } catch (err) {
-        console.error(err);
-      }
-    } else {
-      // Stream mock logs
-      const selected = apps.find(a => a.id === id);
-      const name = selected ? selected.name : "App";
-      
-      const mockLogs = [
-        `[Wine] Starting bottle execution for prefix 'bottle-gaming'`,
-        `[Wine] Pre-initializing directx components using DXVK translation...`,
-        `[Wine] Setting WINEPREFIX environment variables to sandbox prefix.`,
-        `[Wine] CPU Core mapping confirmed. Rosetta 2 x86 thread translator active.`,
-        `[Wine] MoltenVK: Vulkan instance extensions configured. Vulkan-to-Metal translation active.`,
-        `[Wine] [${name}] Main game executable initialized. Streaming application logs...`,
-        `[Wine] [${name}] Thread allocation complete. Game audio hooked into CoreAudio device.`,
-      ];
-      
-      let index = 0;
-      const logInterval = setInterval(() => {
-        if (index < mockLogs.length) {
-          setLogs(prev => [...prev, mockLogs[index]]);
-          index++;
-        } else {
-          clearInterval(logInterval);
-        }
-      }, 500);
-    }
-  };
-
-  const stopApp = async () => {
-    setActiveAppId(null);
-    if (isTauri()) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('stop_active_app');
-    }
-  };
-
-  const downloadRuntime = async (id: string) => {
-    setDownloadProgress((prev) => ({ ...prev, [id]: 0 }));
-    if (isTauri()) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('trigger_runtime_download', { id });
-    } else {
-      // Mock download speed
-      let prog = 0;
-      const interval = setInterval(() => {
-        prog += Math.floor(Math.random() * 15) + 5;
-        if (prog >= 100) {
-          prog = 100;
-          clearInterval(interval);
-          setRuntimes((prev) =>
-            prev.map((r) => (r.id === id ? { ...r, downloaded: true } : r))
-          );
-        }
-        setDownloadProgress((prev) => ({ ...prev, [id]: prog }));
-      }, 200);
-    }
-  };
-
-  const installRecipe = async (
-    recipeId: string,
-    bottleName: string,
-    bottleType: string,
-    wineVersion: string,
-    customAppName?: string,
-    customExePath?: string,
-    targetBottleId?: string
-  ) => {
-    setLogs([]);
-    let name = "";
-    let category = "Utilities";
-    let exe = "";
-    let isCustom = recipeId === 'custom';
-
-    if (isCustom) {
-      name = customAppName || "Custom Application";
-      category = "Utilities";
-      exe = customExePath || "";
-      if (!exe.trim()) {
-        setLogs((prev) => [...prev, `[FusionCross:Error] Custom installer path is required.`]);
-        return;
-      }
-    } else {
-      const recipe = recipes.find(r => r.id === recipeId);
-      if (!recipe) return;
-      name = recipe.name;
-      category = recipe.category;
-      setLogs((prev) => [
-        ...prev,
-        `[FusionCross] '${recipe.name}' is a preset only. Pick your real installer (.exe/.msi) via Custom Install to continue.`,
-      ]);
-      throw new Error("Preset recipes require a real installer file path.");
-    }
-
-    setDownloadProgress((prev) => ({ ...prev, [recipeId]: 0 }));
-
-    const existingBottle = targetBottleId ? bottles.find((bottle) => bottle.id === targetBottleId) : undefined;
-    if (targetBottleId && !existingBottle) {
-      setLogs((prev) => [...prev, `[FusionCross:Error] Target bottle '${targetBottleId}' was not found.`]);
-      return;
-    }
-
-    const b = existingBottle || await createBottle(bottleName, bottleType, wineVersion);
-    setDownloadProgress((prev) => ({ ...prev, [recipeId]: 30 }));
-
-    if (isTauri()) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      try {
-        if (isCustom && exe) {
-          setLogs((prev) => [...prev, `[FusionCross] Preparing custom binary execution...`]);
-          setLogs((prev) => [...prev, `[FusionCross] WINEPREFIX: ${b.path}`]);
-          setLogs((prev) => [...prev, `[FusionCross] Executing target installer: ${exe}`]);
-          setDownloadProgress((prev) => ({ ...prev, [recipeId]: 50 }));
-
-          const install = await invoke<InstallResult>('install_windows_software', {
-            prefixPath: b.path,
-            installerPath: exe,
-            arguments: ""
-          });
-          setLogs((prev) => [...prev, `[FusionCross] ${install.message}`]);
-          if (!install.success) {
-            throw new Error(`Installer exited with code ${install.exit_code}`);
-          }
-
-          setDownloadProgress((prev) => ({ ...prev, [recipeId]: 80 }));
-          
-          let registeredPath = exe;
-          setLogs((prev) => [...prev, `[FusionCross] Scanning prefix folders for newly deployed executables...`]);
-          const scanned: DiscoveredApp[] = await invoke('scan_apps', { bottleId: b.id });
-          if (scanned && scanned.length > 0) {
-            registeredPath = scanned[0].path;
-            name = scanned[0].name;
-            setLogs((prev) => [...prev, `[FusionCross] Discovered executable: ${registeredPath}`]);
-          }
-
-          setLogs((prev) => [...prev, `[FusionCross] Registering '${name}' shortcut inside library catalog...`]);
-          await registerApp(
-            name,
-            registeredPath,
-            "",
-            b.id,
-            category,
-            ['Installed', 'Custom']
-          );
-        } else {
-          // Standard catalog preset install
-          setLogs((prev) => [...prev, `[FusionCross] Loading catalog recipe: ${name}...`]);
-          setDownloadProgress((prev) => ({ ...prev, [recipeId]: 50 }));
-          
-          const recipe = recipes.find(r => r.id === recipeId);
-          if (recipe) {
-            const installLogs = [
-              `[FusionCross] Resolving recipe dependencies...`,
-              `[Wine] Preloading Direct3D translation layers: DXVK & MoltenVK active.`,
-              `[Wine] Setup installer finished with exit code 0.`,
-              `[FusionCross] Successfully registered '${recipe.name}' into library database!`
-            ];
-            for (let i = 0; i < installLogs.length; i++) {
-              await new Promise(r => setTimeout(r, 400));
-              setLogs((prev) => [...prev, installLogs[i]]);
-              setDownloadProgress((prev) => ({ ...prev, [recipeId]: 50 + (i + 1) * 12 }));
-            }
-
-            await registerApp(
-              recipe.name,
-              `C:\\Program Files\\${recipe.name}\\${recipe.name}.exe`,
-              recipe.recommended_prefix === 'gaming' ? '-fullscreen' : '',
-              b.id,
-              recipe.category,
-              ['Installed', 'Recipe']
-            );
-          }
-        }
-        setDownloadProgress((prev) => ({ ...prev, [recipeId]: 100 }));
-      } catch (err: any) {
-        setLogs((prev) => [...prev, `[FusionCross:Error] Installation failed: ${err}`]);
-        setDownloadProgress((prev) => ({ ...prev, [recipeId]: 0 }));
-      }
-    } else {
-      setLogs((prev) => [...prev, `[FusionCross] Real install workflow is available only in the desktop app (Tauri mode).`]);
-      setDownloadProgress((prev) => ({ ...prev, [recipeId]: 0 }));
-    }
-  };
-
-  const runCustomExe = async (bottleId: string, exePath: string, args: string) => {
-    setLogs([]);
-    const bottle = bottles.find(b => b.id === bottleId);
-    if (!bottle) {
-      setLogs((prev) => [...prev, `[FusionCross:Error] Bottle ID '${bottleId}' not found.`]);
-      return;
-    }
-
-    if (isTauri()) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      try {
-        setLogs((prev) => [...prev, `[FusionCross] Preparing executable wrapper...`]);
-        setLogs((prev) => [...prev, `[FusionCross] WINEPREFIX: ${bottle.path}`]);
-        setLogs((prev) => [...prev, `[FusionCross] Executing: ${exePath} ${args}`]);
-        
-        await invoke('execute_windows_binary', {
-          prefixPath: bottle.path,
-          exePath,
-          arguments: args
-        });
-      } catch (err: any) {
-        setLogs((prev) => [...prev, `[FusionCross:Error] Execution failed: ${err}`]);
-      }
-    } else {
-      setLogs((prev) => [...prev, `[Wine] Initializing Custom Executable Execution...`]);
-      setLogs((prev) => [...prev, `[Wine] Executable Path: ${exePath}`]);
-      setLogs((prev) => [...prev, `[Wine] Environment: WINEPREFIX=${bottle.path}`]);
-      setLogs((prev) => [...prev, `[Wine] Output: Audio output initialized.`]);
-      setLogs((prev) => [...prev, `[Wine] Output: Execution completed successfully.`]);
-    }
-  };
-
-  const clearLogs = () => setLogs([]);
-
-  const addCustomRecipe = (recipe: Omit<SoftwareRecipe, 'id'>) => {
-    const newRecipe: SoftwareRecipe = {
-      ...recipe,
-      id: `custom-${Math.floor(Math.random() * 10000)}`
-    };
-    setRecipes((prev) => [...prev, newRecipe]);
-  };
-
-  const openPrefixInFinder = async (prefixPath: string) => {
-    if (isTauri()) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      try {
-        await invoke('open_prefix_in_finder', { prefixPath });
-      } catch (err) {
-        console.error('Failed to open prefix in Finder:', err);
-      }
-    } else {
-      console.log('Open in Finder (browser mode):', prefixPath);
-    }
-  };
-
-  const resetSandbox = async (bottleId: string, prefixPath: string) => {
-    if (isTauri()) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      try {
-        await invoke('reset_sandbox', { bottleId, prefixPath });
-      } catch (err) {
-        console.error('Failed to reset sandbox:', err);
-      }
-    } else {
-      console.log('Reset sandbox (browser mode):', bottleId);
-    }
-  };
-
-  const installDependencies = async (bottleId: string, dependency: string) => {
-    if (isTauri()) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      try {
-        await invoke('install_dependencies', { bottleId, dependency });
-      } catch (err) {
-        console.error("Failed to install dependency via winetricks:", err);
-      }
-    } else {
-      // Mock progress
-      let prog = 0;
-      setDownloadProgress((prev) => ({ ...prev, [`dep-${dependency}`]: 0 }));
-      const interval = setInterval(() => {
-        prog += 20;
-        setDownloadProgress((prev) => ({ ...prev, [`dep-${dependency}`]: prog }));
-        setLogs((prev) => [...prev, `[Mock Winetricks] Installing ${dependency}: ${prog}%`]);
-        if (prog >= 100) {
-          clearInterval(interval);
-          setLogs((prev) => [...prev, `[Mock Winetricks] Successfully installed ${dependency} into bottle prefix.`]);
-        }
-      }, 300);
-    }
-  };
-
-  const installDxvk = async (bottleId: string, version: string) => {
-    if (isTauri()) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      try {
-        await invoke('install_dxvk', { bottleId, version });
-        // Refresh bottles list
-        const b = await invoke<Bottle[]>('list_bottles');
-        setBottles(b);
-      } catch (err) {
-        console.error("Failed to install DXVK graphics engine:", err);
-      }
-    } else {
-      setBottles((prev) =>
-        prev.map((b) => (b.id === bottleId ? { ...b, dxvk_enabled: true } : b))
-      );
-      setLogs((prev) => [...prev, `[Mock DXVK] Installed DXVK v${version} successfully.`]);
-    }
-  };
-
-  const backupBottle = async (bottleId: string, backupPath: string): Promise<string> => {
-    if (isTauri()) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<string>('backup_bottle', { bottleId, backupPath });
-    } else {
-      return `Mock backup completed successfully at ${backupPath}`;
-    }
-  };
-
-  const scanApps = async (bottleId: string): Promise<DiscoveredApp[]> => {
-    if (isTauri()) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<DiscoveredApp[]>('scan_apps', { bottleId });
-    } else {
-      return [
-        {
-          name: "Steam Client Launcher",
-          path: "C:\\Program Files (x86)\\Steam\\Steam.exe",
-          size_bytes: 84000000
-        },
-        {
-          name: "Microsoft Excel 2016",
-          path: "C:\\Program Files\\Microsoft Office\\root\\Office16\\EXCEL.EXE",
-          size_bytes: 42000000
-        },
-        {
-          name: "Winamp Classic",
-          path: "C:\\Program Files\\Winamp\\winamp.exe",
-          size_bytes: 14000000
-        }
-      ];
-    }
-  };
-
-  const exportLogs = async (logs: string[], path: string): Promise<string> => {
-    if (isTauri()) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<string>('export_logs', { logs, exportPath: path });
-    } else {
-      return `Mock logs exported successfully to ${path}`;
-    }
-  };
+  // ======================================================
+  // RENDER
+  // ======================================================
 
   return (
     <AppContext.Provider
@@ -871,15 +274,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         activeAppId,
         metrics,
         logs,
+        setLogs,
         clearLogs,
         downloadProgress,
         onboarded,
         setOnboarded,
-        createBottle,
+        createBottle: _createBottle,
         removeBottle,
-        duplicateBottle,
-        updateBottle,
-        registerApp,
+        duplicateBottle: _duplicateBottle,
+        updateBottle: _updateBottle,
+        registerApp: _registerApp,
         toggleFavorite,
         launchApp,
         stopApp,
@@ -899,7 +303,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         installDxvk,
         backupBottle,
         scanApps,
-        exportLogs
+        exportLogs,
+        notifications,
+        notify,
+        dismissNotification,
+        loading,
       }}
     >
       {children}

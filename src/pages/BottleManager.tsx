@@ -20,8 +20,13 @@ import {
   RefreshCw,
   Search,
   Download,
-  Check
+  DownloadCloud,
+  Check,
+  ArrowDownCircle,
+  HardDrive
 } from 'lucide-react';
+import { ConfirmModal } from '../components/ConfirmModal';
+import { RunCommandModal } from '../components/RunCommandModal';
 
 export const BottleManager: React.FC = () => {
   const { 
@@ -42,11 +47,13 @@ export const BottleManager: React.FC = () => {
     scanApps,
     apps,
     registerApp,
-    downloadProgress
+    downloadProgress,
+    downloadRuntime
   } = useApp();
 
-  const [selectedId, setSelectedId] = useState<string>(bottles[0]?.id || '');
-  const [activeSubTab, setActiveSubTab] = useState<'overrides' | 'env' | 'registry' | 'graphics' | 'dependencies' | 'scanner' | 'backups'>('overrides');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showGrid, setShowGrid] = useState<boolean>(true);
+  const [activeSubTab, setActiveSubTab] = useState<'overrides' | 'env' | 'registry' | 'graphics' | 'dependencies' | 'scanner' | 'backups' | 'runtimes'>('overrides');
 
   // Creation State
   const [showCreator, setShowCreator] = useState<boolean>(false);
@@ -70,8 +77,6 @@ export const BottleManager: React.FC = () => {
 
   // Run Custom Command State
   const [showRunCommand, setShowRunCommand] = useState<boolean>(false);
-  const [runExePath, setRunExePath] = useState<string>('');
-  const [runArgs, setRunArgs] = useState<string>('');
   const [isRunningCommand, setIsRunningCommand] = useState<boolean>(false);
   const [runComplete, setRunComplete] = useState<boolean>(false);
 
@@ -84,11 +89,14 @@ export const BottleManager: React.FC = () => {
   const [isBackingUp, setIsBackingUp] = useState<boolean>(false);
   const [backupMessage, setBackupMessage] = useState<string>( '');
 
+  // Confirm Dialog State
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
+
   const selectedBottle = bottles.find(b => b.id === selectedId) || bottles[0];
 
   useEffect(() => {
     if (selectedBottle) {
-      setBackupPath(`/Users/omkar/Desktop/${selectedBottle.name.toLowerCase().replace(/\s+/g, '_')}_backup.tar.gz`);
+      setBackupPath(`~/Desktop/${selectedBottle.name.toLowerCase().replace(/\s+/g, '_')}_backup.tar.gz`);
       setBackupMessage('');
       setScannedApps([]);
     }
@@ -180,23 +188,28 @@ export const BottleManager: React.FC = () => {
 
   const handleDelete = async () => {
     if (selectedBottle) {
-      const confirmed = window.confirm(`Are you sure you want to delete the bottle "${selectedBottle.name}" and all its applications?`);
-      if (confirmed) {
-        const nextId = bottles.find(b => b.id !== selectedBottle.id)?.id || '';
-        await removeBottle(selectedBottle.id);
-        setSelectedId(nextId);
-      }
+      setConfirmDialog({
+        message: `Are you sure you want to delete the bottle "${selectedBottle.name}" and all its applications?`,
+        onConfirm: async () => {
+          try {
+            const nextId = bottles.find(b => b.id !== selectedBottle.id)?.id || '';
+            await removeBottle(selectedBottle.id);
+            setSelectedId(nextId);
+          } catch (err) {
+            console.error('[FusionCross] handleDelete error:', err);
+          }
+        },
+      });
     }
   };
 
-  const handleRunCommand = async () => {
-    if (!runExePath.trim() || !selectedBottle) return;
+  const handleRunCommand = async (bottleId: string, exePath: string, args: string) => {
     setIsRunningCommand(true);
     setRunComplete(false);
     clearLogs();
     
     try {
-      await runCustomExe(selectedBottle.id, runExePath, runArgs);
+      await runCustomExe(bottleId, exePath, args);
       setRunComplete(true);
     } catch (err) {
       console.error(err);
@@ -229,7 +242,7 @@ export const BottleManager: React.FC = () => {
         "Games",
         ["Scanned", "Local"]
       );
-      alert(`Successfully registered '${scannedApp.name}' in library!`);
+      console.warn(`Registered '${scannedApp.name}' in library.`);
     } catch (err) {
       console.error(err);
     }
@@ -251,60 +264,111 @@ export const BottleManager: React.FC = () => {
 
   const activeRuntimes = runtimes.filter(r => r.downloaded && (r.category === 'wine' || r.category === 'proton'));
 
+  const handleSelectBottle = (id: string) => {
+    setSelectedId(id);
+    setShowGrid(false);
+  };
+
+  const handleBackToGrid = () => {
+    setShowGrid(true);
+    setSelectedId(null);
+  };
+
   return (
     <div className="flex-1 flex overflow-hidden h-full bg-graphite-900/40 relative">
       <div className="h-4 select-none pointer-events-none absolute top-0" />
 
-      {/* 1. Left Side Bottle Selector List */}
-      <div className="w-80 border-r border-graphite-800/80 bg-graphite-900/25 flex flex-col pt-12">
-        <div className="p-4 border-b border-graphite-800/40 flex items-center justify-between">
-          <span className="text-xs uppercase font-mono tracking-wider font-bold text-graphite-400">Bottles Directory</span>
-          <button 
-            onClick={() => setShowCreator(true)}
-            className="p-1.5 bg-neon-purple/10 border border-neon-purple/35 rounded-lg text-neon-purple hover:bg-neon-purple hover:text-white transition-all scale-105 active:scale-95"
-            title="Create New Bottle"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          {bottles.map((b) => (
-            <button
-              key={b.id}
-              onClick={() => setSelectedId(b.id)}
-              className={`w-full text-left p-3.5 rounded-xl border transition-all duration-200 ${
-                selectedId === b.id 
-                  ? 'bg-gradient-to-r from-neon-purple/15 to-neon-indigo/5 border-neon-purple/40 shadow-neon-purple/5' 
-                  : 'bg-graphite-900/20 border-graphite-850 hover:bg-graphite-800/20 hover:border-graphite-700/60'
-              }`}
-            >
-              <div className="space-y-1.5">
-                <div className="flex justify-between items-center pr-1">
-                  <span className="text-sm font-bold text-white truncate max-w-[80%]">{b.name}</span>
-                  <span className={`w-2 h-2 rounded-full ${b.dxvk_enabled ? 'bg-neon-purple shadow-[0_0_6px_rgba(157,78,221,0.6)]' : 'bg-graphite-650'}`} />
-                </div>
-                <div className="flex justify-between items-center text-[10px] font-mono text-graphite-400">
-                  <span className="bg-graphite-800 px-1.5 py-0.5 rounded border border-graphite-700/30 uppercase">{b.prefix_type}</span>
-                  <span>{(b.size_bytes / 1_000_000).toFixed(0)} MB</span>
-                </div>
+      {showGrid ? (
+        /* ==================== CARD GRID VIEW ==================== */
+        <div className="flex-1 overflow-y-auto pt-12">
+          <div className="p-6 space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-xl font-bold text-white tracking-tight">Bottles</h1>
+                <p className="text-xs text-graphite-400 font-mono mt-1">
+                  {bottles.length} bottle{bottles.length !== 1 ? 's' : ''}
+                </p>
               </div>
-            </button>
-          ))}
+              <button
+                onClick={() => setShowCreator(true)}
+                className="btn-primary flex items-center gap-1.5"
+              >
+                <Plus className="w-4 h-4" /> New Bottle
+              </button>
+            </div>
+            {bottles.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {bottles.map((b) => (
+                  <button
+                    key={b.id}
+                    onClick={() => handleSelectBottle(b.id)}
+                    className="glass-panel p-5 rounded-2xl border-graphite-800 hover:border-neon-purple/40 hover:bg-neon-purple/[0.02] transition-all text-left group"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-neon-purple/20 to-neon-indigo/10 border border-neon-purple/25 flex items-center justify-center font-mono font-bold text-neon-purple">
+                        {b.name.charAt(0).toUpperCase()}
+                      </div>
+                      <span className={`w-2.5 h-2.5 rounded-full mt-1 ${
+                        b.dxvk_enabled ? 'bg-neon-purple shadow-[0_0_8px_rgba(157,78,221,0.6)]' : 'bg-graphite-600'
+                      }`} />
+                    </div>
+                    <h3 className="text-sm font-bold text-white truncate">{b.name}</h3>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-[10px] uppercase font-mono font-semibold bg-graphite-800 px-2 py-0.5 rounded border border-graphite-700/30 text-graphite-300">
+                        {b.prefix_type}
+                      </span>
+                      <span className="text-[10px] font-mono text-graphite-400">
+                        {(b.size_bytes / 1_000_000).toFixed(0)} MB
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 mt-3 text-[10px] font-mono text-graphite-400">
+                      <span className="text-graphite-300">{b.wine_version}</span>
+                      <span className="flex items-center gap-1">
+                        <span className={`w-1.5 h-1.5 rounded-full ${b.dxvk_enabled ? 'bg-neon-indigo' : 'bg-graphite-600'}`} />
+                        DXVK
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className={`w-1.5 h-1.5 rounded-full ${b.moltenvk_enabled ? 'bg-neon-purple' : 'bg-graphite-600'}`} />
+                        MVK
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="glass-panel p-16 rounded-2xl text-center border-graphite-800">
+                <Layers className="w-12 h-12 text-graphite-600 mx-auto mb-3" />
+                <p className="text-sm text-graphite-400 font-mono">No bottles yet</p>
+                <p className="text-xs text-graphite-500 mt-1">Create your first bottle to get started</p>
+                <button
+                  onClick={() => setShowCreator(true)}
+                  className="btn-primary mt-4"
+                >
+                  <Plus className="w-4 h-4" /> Create Bottle
+                </button>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
-
-      {/* 2. Right Side Details Panel */}
-      {selectedBottle ? (
+      ) : (() => {
+        const currentBottle = bottles.find(b => b.id === selectedId);
+        if (!currentBottle) return null;
+        return (
         <div className="flex-1 flex flex-col pt-12 overflow-hidden">
           {/* Details header */}
           <div className="p-6 border-b border-graphite-800/40 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-graphite-950/20">
             <div className="space-y-1">
-              <h1 className="text-xl font-bold text-white tracking-tight font-mono">{selectedBottle.name}</h1>
+              <button
+                onClick={handleBackToGrid}
+                className="text-[10px] font-mono text-graphite-400 hover:text-white transition-colors flex items-center gap-1 mb-2"
+              >
+                ← Back to Bottles
+              </button>
+              <h1 className="text-xl font-bold text-white tracking-tight font-mono">{currentBottle.name}</h1>
               <div className="flex items-center gap-3 text-xs text-graphite-400 font-mono">
-                <span>Created: <strong>{selectedBottle.created_at}</strong></span>
+                <span>Created: <strong>{currentBottle.created_at}</strong></span>
                 <span>•</span>
-                <span>Runtime: <strong className="text-neon-purple">{selectedBottle.wine_version}</strong></span>
+                <span>Runtime: <strong className="text-neon-purple">{currentBottle.wine_version}</strong></span>
               </div>
             </div>
 
@@ -329,7 +393,7 @@ export const BottleManager: React.FC = () => {
                 <Trash2 className="w-3.5 h-3.5" /> DELETE
               </button>
               <button 
-                onClick={() => openPrefixInFinder(selectedBottle.path)}
+                onClick={() => openPrefixInFinder(currentBottle.path)}
                 className="btn-secondary py-2 text-xs font-mono"
                 title="Open WinePrefix folder in Finder"
               >
@@ -341,8 +405,8 @@ export const BottleManager: React.FC = () => {
           {/* Prefix Path Display */}
           <div className="px-6 py-2.5 border-b border-graphite-800/40 bg-graphite-950/30 flex items-center gap-2">
             <FolderOpen className="w-3.5 h-3.5 text-graphite-500 shrink-0" />
-            <span className="text-[10px] font-mono text-graphite-400 truncate" title={selectedBottle.path}>
-              Sandbox prefix: <strong className="text-graphite-300">{selectedBottle.path}</strong>
+            <span className="text-[10px] font-mono text-graphite-400 truncate" title={currentBottle.path}>
+              Sandbox prefix: <strong className="text-graphite-300">{currentBottle.path}</strong>
             </span>
           </div>
 
@@ -356,6 +420,7 @@ export const BottleManager: React.FC = () => {
               { id: 'dependencies', name: 'Winetricks', icon: Wrench },
               { id: 'scanner', name: 'App Scanner', icon: Search },
               { id: 'backups', name: 'Backups', icon: Download },
+              { id: 'runtimes', name: 'Runtimes', icon: DownloadCloud },
             ].map((sub) => {
               const Icon = sub.icon;
               const isSubActive = activeSubTab === sub.id;
@@ -813,7 +878,7 @@ export const BottleManager: React.FC = () => {
                   )
                 )}
               </div>
-            ) : (
+            ) : activeSubTab === 'backups' ? (
               /* G. BACKUP & RESTORE VIEW */
               <div className="space-y-6 max-w-xl">
                 <div className="space-y-1">
@@ -829,7 +894,7 @@ export const BottleManager: React.FC = () => {
                         type="text"
                         value={backupPath}
                         onChange={(e) => setBackupPath(e.target.value)}
-                        placeholder="e.g. /Users/omkar/Desktop/my_backup.tar.gz"
+                        placeholder="e.g. ~/Desktop/my_backup.tar.gz"
                         className="glass-input flex-1"
                       />
                       <button
@@ -895,8 +960,10 @@ export const BottleManager: React.FC = () => {
                   </div>
                   <button
                     onClick={() => {
-                      const confirmed = window.confirm(`Reset the sandbox for "${selectedBottle.name}"? This will wipe all installed programs and registry changes inside this bottle and recreate a fresh environment.`);
-                      if (confirmed) resetSandbox(selectedBottle.id, selectedBottle.path);
+                      setConfirmDialog({
+                        message: `Reset the sandbox for "${selectedBottle.name}"? This will wipe all installed programs and registry changes inside this bottle and recreate a fresh environment.`,
+                        onConfirm: () => resetSandbox(selectedBottle.id, selectedBottle.path),
+                      });
                     }}
                     className="btn-danger py-2 px-4 text-xs font-mono self-start"
                   >
@@ -904,14 +971,113 @@ export const BottleManager: React.FC = () => {
                   </button>
                 </div>
               </div>
+            ) : (
+              /* H. RUNTIMES VIEW */
+              <div className="space-y-6">
+                <div className="space-y-1">
+                  <h2 className="text-sm font-bold text-white font-mono uppercase tracking-wide">Runtime Engines</h2>
+                  <p className="text-xs text-graphite-400">Download and manage Wine, Proton, and graphics translation runtimes.</p>
+                </div>
+                <div className="space-y-4">
+                  {runtimes.filter(r => r.category === 'wine' || r.category === 'proton').length > 0 && (
+                    <div>
+                      <h3 className="text-xs font-bold text-graphite-400 uppercase font-mono tracking-wider mb-3">Compatibility Engines</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {runtimes.filter(r => r.category === 'wine' || r.category === 'proton').map((runtime) => {
+                          const progress = downloadProgress[runtime.id];
+                          const isDownloading = progress !== undefined && progress < 100;
+                          return (
+                            <div key={runtime.id} className="glass-panel p-4 rounded-xl border-graphite-800 flex flex-col justify-between h-36">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-mono font-semibold bg-graphite-800 px-2 py-0.5 rounded uppercase text-graphite-300">{runtime.category}</span>
+                                  <span className="text-[10px] text-graphite-400 font-mono">v{runtime.version}</span>
+                                </div>
+                                <h3 className="text-sm font-bold text-white">{runtime.name}</h3>
+                              </div>
+                              <div className="flex items-center justify-between pt-3 border-t border-graphite-800/40">
+                                <span className="text-xs font-mono text-graphite-400">{(runtime.size_bytes / 1_000_000_000).toFixed(1)} GB</span>
+                                {isDownloading ? (
+                                  <div className="flex-1 ml-4">
+                                    <div className="flex justify-between text-[10px] font-mono mb-1">
+                                      <span className="text-neon-blue font-bold">{progress}%</span>
+                                    </div>
+                                    <div className="w-full bg-graphite-800 h-1.5 rounded-full overflow-hidden">
+                                      <div className="bg-neon-blue h-full rounded-full transition-all" style={{ width: `${progress}%` }} />
+                                    </div>
+                                  </div>
+                                ) : runtime.downloaded ? (
+                                  <span className="flex items-center gap-1.5 text-xs text-neon-green font-semibold font-mono">
+                                    <Check className="w-4 h-4" /> Installed
+                                  </span>
+                                ) : (
+                                  <button onClick={() => downloadRuntime(runtime.id)} className="btn-primary py-1 px-3 text-[10px] font-mono">
+                                    <ArrowDownCircle className="w-3.5 h-3.5" /> Download
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {runtimes.filter(r => r.category === 'dxvk' || r.category === 'moltenvk').length > 0 && (
+                    <div>
+                      <h3 className="text-xs font-bold text-graphite-400 uppercase font-mono tracking-wider mb-3">Graphics Components</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {runtimes.filter(r => r.category === 'dxvk' || r.category === 'moltenvk').map((runtime) => {
+                          const progress = downloadProgress[runtime.id];
+                          const isDownloading = progress !== undefined && progress < 100;
+                          return (
+                            <div key={runtime.id} className="glass-panel p-4 rounded-xl border-graphite-800 flex flex-col justify-between h-32">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-mono font-semibold bg-graphite-800 px-2 py-0.5 rounded uppercase text-graphite-300">{runtime.category}</span>
+                                  <span className="text-[10px] text-graphite-400 font-mono">v{runtime.version}</span>
+                                </div>
+                                <h3 className="text-sm font-bold text-white">{runtime.name}</h3>
+                              </div>
+                              <div className="flex items-center justify-between pt-3 border-t border-graphite-800/40">
+                                <span className="text-xs font-mono text-graphite-400">{(runtime.size_bytes / 1_000_000).toFixed(0)} MB</span>
+                                {isDownloading ? (
+                                  <div className="flex-1 ml-4">
+                                    <div className="flex justify-between text-[10px] font-mono mb-1">
+                                      <span className="text-neon-indigo font-bold">{progress}%</span>
+                                    </div>
+                                    <div className="w-full bg-graphite-800 h-1.5 rounded-full overflow-hidden">
+                                      <div className="bg-neon-indigo h-full rounded-full transition-all" style={{ width: `${progress}%` }} />
+                                    </div>
+                                  </div>
+                                ) : runtime.downloaded ? (
+                                  <span className="flex items-center gap-1.5 text-xs text-neon-green font-semibold font-mono">
+                                    <Check className="w-4 h-4" /> Installed
+                                  </span>
+                                ) : (
+                                  <button onClick={() => downloadRuntime(runtime.id)} className="btn-primary py-1 px-3 text-[10px] font-mono">
+                                    <ArrowDownCircle className="w-3.5 h-3.5" /> Download
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {runtimes.filter(r => r.downloaded).length === 0 && (
+                    <div className="glass-panel p-10 rounded-xl text-center border-graphite-800">
+                      <HardDrive className="w-10 h-10 text-graphite-600 mx-auto mb-3" />
+                      <p className="text-sm text-graphite-400 font-mono">No runtimes downloaded</p>
+                      <p className="text-xs text-graphite-500 mt-1">Download Wine or Proton engines to get started.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </div>
-      ) : (
-        <div className="flex-1 flex items-center justify-center p-12 text-center text-graphite-400 text-sm font-mono pt-12">
-          No bottles available. Click the add icon to create a new prefix bottle.
-        </div>
-      )}
+      )})()}
 
       {/* CREATE BOTTLE MODAL WIZARD */}
       {showCreator && (
@@ -993,164 +1159,24 @@ export const BottleManager: React.FC = () => {
         </div>
       )}
 
-      {/* RUN CUSTOM COMMAND MODAL */}
-      {showRunCommand && selectedBottle && (
-        <div className="fixed inset-0 z-40 bg-graphite-950/80 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="glass-panel-glow w-full max-w-lg rounded-2xl overflow-hidden border-neon-purple/20 flex flex-col h-[520px] relative bg-graphite-950/90 shadow-[0_0_50px_rgba(157,78,221,0.15)]">
-            
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-5 border-b border-graphite-800/40 bg-graphite-950/40">
-              <div className="flex items-center gap-2">
-                <Terminal className="w-5 h-5 text-neon-purple" />
-                <span className="font-bold text-white font-mono text-sm uppercase">Run Command inside {selectedBottle.name}</span>
-              </div>
-              {!isRunningCommand && (
-                <button 
-                  onClick={() => { setShowRunCommand(false); setRunExePath(''); setRunArgs(''); setRunComplete(false); }}
-                  className="p-1 hover:bg-graphite-800 rounded-lg text-graphite-400 hover:text-white transition-all"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
+      <RunCommandModal
+        isOpen={showRunCommand}
+        onClose={() => { setShowRunCommand(false); setRunComplete(false); }}
+        bottles={bottles}
+        selectedBottleId={selectedBottle?.id}
+        onRun={handleRunCommand}
+        accentColor="purple"
+        logs={logs}
+        isRunning={isRunningCommand}
+        isComplete={runComplete}
+      />
 
-            {/* Modal Content */}
-            <div className="flex-1 p-6 overflow-y-auto space-y-4">
-              {!isRunningCommand && !runComplete ? (
-                <div className="space-y-4 font-mono text-xs">
-                  <div className="space-y-1 font-sans">
-                    <h2 className="text-sm font-bold text-white font-mono uppercase tracking-wide">Execute Custom Executable</h2>
-                    <p className="text-[11px] text-graphite-400">
-                      Specify an executable file path and command-line arguments to run inside the active prefix context.
-                    </p>
-                  </div>
-
-                  <div className="bg-neon-purple/5 border border-neon-purple/20 p-3 rounded-xl space-y-1 flex items-start gap-3">
-                    <div className="p-1.5 bg-neon-purple/10 border border-neon-purple/25 rounded text-neon-purple shrink-0 mt-0.5">
-                      <Database className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-graphite-400">Target Prefix / Environment</span>
-                      <p className="font-bold text-white text-sm">{selectedBottle.name}</p>
-                      <p className="text-[10px] text-graphite-400 mt-0.5 truncate max-w-xs">{selectedBottle.path}</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3.5 pt-2">
-                    {/* Exe Path */}
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-xs font-bold font-mono text-graphite-400 uppercase tracking-wider">Executable Path (.exe)</label>
-                      <input 
-                        type="text" 
-                        value={runExePath}
-                        onChange={(e) => setRunExePath(e.target.value)}
-                        className="glass-input font-mono"
-                        placeholder="e.g. C:\Program Files\App\app.exe or /path/to/local.exe"
-                      />
-                    </div>
-
-                    {/* Arguments */}
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-xs font-bold font-mono text-graphite-400 uppercase tracking-wider">Arguments (Optional)</label>
-                      <input 
-                        type="text" 
-                        value={runArgs}
-                        onChange={(e) => setRunArgs(e.target.value)}
-                        className="glass-input font-mono"
-                        placeholder="e.g. -windowed -nofriendsui"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Preset Examples */}
-                  <div className="space-y-2 pt-2">
-                    <span className="text-[10px] text-graphite-400 uppercase tracking-wider font-mono font-bold">Quick Diagnostics Presets</span>
-                    <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-                      <button 
-                        onClick={() => { setRunExePath("C:\\windows\\system32\\winecfg.exe"); setRunArgs(""); }}
-                        className="p-2.5 bg-graphite-800/80 border border-graphite-700 rounded-xl hover:border-neon-purple/50 text-left text-graphite-200 hover:text-white"
-                      >
-                        🛠️ Run winecfg (Wine Config)
-                      </button>
-                      <button 
-                        onClick={() => { setRunExePath("C:\\windows\\system32\\regedit.exe"); setRunArgs(""); }}
-                        className="p-2.5 bg-graphite-800/80 border border-graphite-700 rounded-xl hover:border-neon-purple/50 text-left text-graphite-200 hover:text-white"
-                      >
-                        🗂️ Run regedit (Registry Editor)
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4 h-full flex flex-col justify-between">
-                  <div className="space-y-1">
-                    <h2 className="text-sm font-bold text-white font-mono uppercase tracking-wide">
-                      {isRunningCommand ? 'Running Executable...' : 'Execution Completed'}
-                    </h2>
-                    <p className="text-[11px] text-graphite-400">
-                      {isRunningCommand ? 'Wine debugger hook is active. Streaming output streams from prefix.' : 'Process terminated successfully.'}
-                    </p>
-                  </div>
-
-                  {/* Terminal console */}
-                  <div className="flex-1 flex flex-col min-h-[220px]">
-                    <span className="text-[9px] font-bold font-mono text-graphite-400 uppercase mb-1">Standard Console Output (stdout/stderr)</span>
-                    <div className="bg-black/80 rounded-xl p-4 border border-graphite-850 flex-1 overflow-y-auto font-mono text-[10px] text-neon-purple space-y-1 scrollbar-thin">
-                      {logs.map((log, idx) => (
-                        <div key={idx} className="leading-relaxed border-l-2 border-neon-purple/35 pl-2 py-0.2 select-text">{log}</div>
-                      ))}
-                      {logs.length === 0 && (
-                        <div className="text-graphite-500 italic animate-pulse">Initializing Wine virtual machine...</div>
-                      )}
-                    </div>
-                  </div>
-
-                  {runComplete && (
-                    <div className="flex items-center gap-2 bg-neon-green/10 border border-neon-green/20 p-3 rounded-xl">
-                      <CheckCircle2 className="w-5 h-5 text-neon-green" />
-                      <div className="text-xs font-mono">
-                        <span className="font-bold text-white uppercase">Exit Code 0</span>
-                        <p className="text-graphite-400 text-[10px]">Virtual wrapper exited successfully and flushed resources.</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Modal Actions Footer */}
-            <div className="p-5 border-t border-graphite-800/40 bg-graphite-950/40 flex items-center justify-between">
-              <div className="ml-auto flex gap-3">
-                {!isRunningCommand && !runComplete ? (
-                  <>
-                    <button 
-                      onClick={() => { setShowRunCommand(false); setRunExePath(''); setRunArgs(''); }}
-                      className="btn-secondary py-2"
-                    >
-                      Cancel
-                    </button>
-                    <button 
-                      onClick={handleRunCommand}
-                      disabled={!runExePath.trim()}
-                      className={`btn-primary py-2 px-4 flex items-center gap-1.5 ${
-                        !runExePath.trim() ? 'opacity-40 cursor-not-allowed' : ''
-                      }`}
-                    >
-                      <Terminal className="w-4.5 h-4.5" /> Run Command
-                    </button>
-                  </>
-                ) : runComplete ? (
-                  <button 
-                    onClick={() => { setShowRunCommand(false); setRunExePath(''); setRunArgs(''); setRunComplete(false); }}
-                    className="btn-primary py-2 px-6"
-                  >
-                    Done
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        </div>
+      {confirmDialog && (
+        <ConfirmModal
+          message={confirmDialog.message}
+          onConfirm={() => { confirmDialog.onConfirm(); setConfirmDialog(null); }}
+          onCancel={() => setConfirmDialog(null)}
+        />
       )}
     </div>
   );

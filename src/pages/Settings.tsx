@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../store';
 import { AppSettings } from '../types';
-import { 
-  Settings as SettingsIcon, 
-  CheckCircle2, 
-  Terminal, 
-  Monitor, 
-  Cpu, 
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import {
+  Settings as SettingsIcon,
+  CheckCircle2,
+  Terminal,
+  Monitor,
+  Cpu,
   HardDrive,
   Info,
   ShieldCheck,
@@ -17,7 +18,7 @@ import {
 } from 'lucide-react';
 
 export const Settings: React.FC = () => {
-  const { rosettaDiagnostics, fetchRosettaStatus } = useApp();
+  const { rosettaDiagnostics, fetchRosettaStatus, notify } = useApp();
   const [defaultWine, setDefaultWine] = useState<string>('proton-ge');
   const [hudConfig, setHudConfig] = useState<string>('fps');
   const [rosettaThreadMode, setRosettaThreadMode] = useState<string>('hybrid');
@@ -26,6 +27,7 @@ export const Settings: React.FC = () => {
   const [wineBinaryPath, setWineBinaryPath] = useState<string>('');
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [settingsLoaded, setSettingsLoaded] = useState<boolean>(false);
+  const [pendingImportPath, setPendingImportPath] = useState<string | null>(null);
 
   const persistSettings = useCallback(async (patch: Partial<AppSettings>) => {
     const isTauri = typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined;
@@ -215,10 +217,10 @@ export const Settings: React.FC = () => {
                     });
                     if (path) {
                       const res = await invoke<string>('export_app_data', { exportPath: path });
-                      alert(res);
+                      notify(res, 'success');
                     }
                   } catch (e: any) {
-                    alert(`Export failed: ${e.message || e}`);
+                    notify(`Export failed: ${e.message || e}`, 'error');
                   }
                 }}
                 className="flex-1 btn-secondary py-2.5 px-4 text-xs font-mono font-bold flex items-center justify-center gap-2 border-graphite-750 hover:border-graphite-600 bg-graphite-900/50 hover:bg-graphite-800 text-white rounded-xl transition-all duration-250 cursor-pointer"
@@ -237,15 +239,10 @@ export const Settings: React.FC = () => {
                       fileTypes: ['json']
                     });
                     if (path) {
-                      const confirmImport = confirm("Are you sure you want to import this configuration? This will overwrite all of your active bottles, registered games, and compatibility presets.");
-                      if (confirmImport) {
-                        const res = await invoke<string>('import_app_data', { importPath: path });
-                        alert(res);
-                        window.location.reload();
-                      }
+                      setPendingImportPath(path);
                     }
                   } catch (e: any) {
-                    alert(`Import failed: ${e.message || e}`);
+                    notify(`Import failed: ${e.message || e}`, 'error');
                   }
                 }}
                 className="flex-1 btn-secondary py-2.5 px-4 text-xs font-mono font-bold flex items-center justify-center gap-2 border-graphite-750 hover:border-graphite-600 bg-graphite-900/50 hover:bg-graphite-800 text-white rounded-xl transition-all duration-250 cursor-pointer"
@@ -375,6 +372,27 @@ export const Settings: React.FC = () => {
           </div>
         </div>
       </div>
+      <ConfirmDialog
+        isOpen={pendingImportPath !== null}
+        onConfirm={async () => {
+          const path = pendingImportPath;
+          setPendingImportPath(null);
+          if (!path) return;
+          try {
+            const { invoke } = await import('@tauri-apps/api/core');
+            const res = await invoke<string>('import_app_data', { importPath: path });
+            notify(res, 'success');
+            window.location.reload();
+          } catch (e: any) {
+            notify(`Import failed: ${e.message || e}`, 'error');
+          }
+        }}
+        onCancel={() => setPendingImportPath(null)}
+        title="Import Configuration"
+        message="Are you sure you want to import this configuration? This will overwrite all of your active bottles, registered games, and compatibility presets."
+        confirmLabel="Import"
+        variant="warning"
+      />
     </div>
   );
 };

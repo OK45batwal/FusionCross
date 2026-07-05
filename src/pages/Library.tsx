@@ -18,6 +18,7 @@ import {
   Terminal,
   CheckCircle2
 } from 'lucide-react';
+import { RunCommandModal } from '../components/RunCommandModal';
 
 export const Library: React.FC = () => {
   const { 
@@ -55,9 +56,6 @@ export const Library: React.FC = () => {
 
   // Run Custom Command Modal State
   const [showRunCommand, setShowRunCommand] = useState<boolean>(false);
-  const [runExePath, setRunExePath] = useState<string>('');
-  const [runArgs, setRunArgs] = useState<string>('');
-  const [runBottleId, setRunBottleId] = useState<string>(bottles[0]?.id || '');
   const [isRunningCommand, setIsRunningCommand] = useState<boolean>(false);
   const [runComplete, setRunComplete] = useState<boolean>(false);
 
@@ -116,14 +114,13 @@ export const Library: React.FC = () => {
     setTags([]);
   };
 
-  const handleRunCommand = async () => {
-    if (!runExePath.trim() || !runBottleId) return;
+  const handleRunCommand = async (bottleId: string, exePath: string, args: string) => {
     setIsRunningCommand(true);
     setRunComplete(false);
     clearLogs();
-    
+
     try {
-      await runCustomExe(runBottleId, runExePath, runArgs);
+      await runCustomExe(bottleId, exePath, args);
       setRunComplete(true);
     } catch (err) {
       console.error(err);
@@ -158,14 +155,13 @@ export const Library: React.FC = () => {
                 Rosetta 2 Translation Subsystem Missing
               </div>
               <p className="text-[10px] text-graphite-400 leading-normal max-w-xl">
-                To run Windows x86_64 binaries on Apple Silicon M-series chips, you must bootstrap Apple's Rosetta 2 environment translator layer.
+                To run Windows x86_64 binaries on Apple Silicon M-series chips, you must bootstrap Apple&apos;s Rosetta 2 environment translator layer.
               </p>
             </div>
           </div>
           <button
             onClick={() => {
               navigator.clipboard.writeText("softwareupdate --install-rosetta --agree-to-license");
-              alert("Command copied to clipboard! Paste it inside your macOS Terminal.");
             }}
             className="btn-secondary py-1.5 px-4 text-[10px] font-mono font-bold flex items-center gap-1.5 border-neon-purple/35 text-neon-purple hover:bg-neon-purple/5 shrink-0 rounded-lg cursor-pointer"
           >
@@ -193,7 +189,6 @@ export const Library: React.FC = () => {
           <button
             onClick={() => {
               navigator.clipboard.writeText("brew install --cask --no-quarantine wine-stable");
-              alert("Command copied to clipboard! Paste it inside your macOS Terminal.");
             }}
             className="btn-secondary py-1.5 px-4 text-[10px] font-mono font-bold flex items-center gap-1.5 border-neon-indigo/35 text-neon-indigo hover:bg-neon-indigo/5 shrink-0 rounded-lg cursor-pointer"
           >
@@ -229,12 +224,7 @@ export const Library: React.FC = () => {
 
           {/* Run Custom Command Button */}
           <button 
-            onClick={() => {
-              if (bottles.length > 0 && !runBottleId) {
-                setRunBottleId(bottles[0].id);
-              }
-              setShowRunCommand(true);
-            }}
+            onClick={() => setShowRunCommand(true)}
             className="btn-secondary flex items-center gap-1.5"
           >
             <Terminal className="w-4.5 h-4.5" />
@@ -581,168 +571,16 @@ export const Library: React.FC = () => {
         </div>
       )}
 
-      {/* RUN CUSTOM COMMAND MODAL */}
-      {showRunCommand && (
-        <div className="fixed inset-0 z-40 bg-graphite-950/80 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="glass-panel-glow w-full max-w-lg rounded-2xl overflow-hidden border-neon-indigo/20 flex flex-col h-[520px] relative bg-graphite-950/90 shadow-[0_0_50px_rgba(99,102,241,0.15)]">
-            
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-5 border-b border-graphite-800/40 bg-graphite-950/40">
-              <div className="flex items-center gap-2">
-                <Terminal className="w-5 h-5 text-neon-indigo" />
-                <span className="font-bold text-white font-mono text-sm uppercase">Run Windows Command</span>
-              </div>
-              {!isRunningCommand && (
-                <button 
-                  onClick={() => { setShowRunCommand(false); setRunExePath(''); setRunArgs(''); setRunComplete(false); }}
-                  className="p-1 hover:bg-graphite-800 rounded-lg text-graphite-400 hover:text-white transition-all"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-
-            {/* Modal Content */}
-            <div className="flex-1 p-6 overflow-y-auto space-y-4">
-              {!isRunningCommand && !runComplete ? (
-                <div className="space-y-4">
-                  <div className="space-y-1">
-                    <h2 className="text-sm font-bold text-white font-mono uppercase tracking-wide">Execute Arbitrary .exe Binary</h2>
-                    <p className="text-[11px] text-graphite-400">
-                      Specify an executable file path and command-line arguments to run directly within the selected prefix environment.
-                    </p>
-                  </div>
-
-                  <div className="space-y-3.5 pt-2">
-                    {/* Select Bottle */}
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-xs font-bold font-mono text-graphite-400 uppercase tracking-wider">Wine Prefix/Bottle</label>
-                      <select 
-                        value={runBottleId}
-                        onChange={(e) => setRunBottleId(e.target.value)}
-                        className="glass-input bg-graphite-850 cursor-pointer font-mono font-bold text-white"
-                      >
-                        {bottles.map(b => (
-                          <option key={b.id} value={b.id}>{b.name} ({b.wine_version})</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Exe Path */}
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-xs font-bold font-mono text-graphite-400 uppercase tracking-wider">Executable Path (.exe)</label>
-                      <input 
-                        type="text" 
-                        value={runExePath}
-                        onChange={(e) => setRunExePath(e.target.value)}
-                        className="glass-input font-mono"
-                        placeholder="e.g. C:\Program Files\App\app.exe or /path/to/local.exe"
-                      />
-                    </div>
-
-                    {/* Arguments */}
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-xs font-bold font-mono text-graphite-400 uppercase tracking-wider">Arguments (Optional)</label>
-                      <input 
-                        type="text" 
-                        value={runArgs}
-                        onChange={(e) => setRunArgs(e.target.value)}
-                        className="glass-input font-mono"
-                        placeholder="e.g. --headless -gpu=high"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Preset Examples */}
-                  <div className="space-y-2 pt-2">
-                    <span className="text-[10px] text-graphite-400 uppercase tracking-wider font-mono font-bold">Quick Diagnostics Presets</span>
-                    <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-                      <button 
-                        onClick={() => { setRunExePath("C:\\windows\\system32\\winecfg.exe"); setRunArgs(""); }}
-                        className="p-2.5 bg-graphite-800/80 border border-graphite-700 rounded-xl hover:border-neon-indigo/50 text-left text-graphite-200 hover:text-white"
-                      >
-                        🛠️ Run winecfg (Wine Config)
-                      </button>
-                      <button 
-                        onClick={() => { setRunExePath("C:\\windows\\system32\\regedit.exe"); setRunArgs(""); }}
-                        className="p-2.5 bg-graphite-800/80 border border-graphite-700 rounded-xl hover:border-neon-indigo/50 text-left text-graphite-200 hover:text-white"
-                      >
-                        🗂️ Run regedit (Registry Editor)
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4 h-full flex flex-col justify-between">
-                  <div className="space-y-1">
-                    <h2 className="text-sm font-bold text-white font-mono uppercase tracking-wide">
-                      {isRunningCommand ? 'Running Executable...' : 'Execution Completed'}
-                    </h2>
-                    <p className="text-[11px] text-graphite-400">
-                      {isRunningCommand ? 'Wine debugger hook is active. Streaming output streams from prefix.' : 'Process terminated successfully.'}
-                    </p>
-                  </div>
-
-                  {/* Terminal console */}
-                  <div className="flex-1 flex flex-col min-h-[220px]">
-                    <span className="text-[9px] font-bold font-mono text-graphite-400 uppercase mb-1">Standard Console Output (stdout/stderr)</span>
-                    <div className="bg-black/80 rounded-xl p-4 border border-graphite-850 flex-1 overflow-y-auto font-mono text-[10px] text-neon-indigo space-y-1 scrollbar-thin">
-                      {logs.map((log, idx) => (
-                        <div key={idx} className="leading-relaxed border-l-2 border-neon-indigo/35 pl-2 py-0.2 select-text">{log}</div>
-                      ))}
-                      {logs.length === 0 && (
-                        <div className="text-graphite-500 italic animate-pulse">Initializing Wine virtual machine...</div>
-                      )}
-                    </div>
-                  </div>
-
-                  {runComplete && (
-                    <div className="flex items-center gap-2 bg-neon-green/10 border border-neon-green/20 p-3 rounded-xl">
-                      <CheckCircle2 className="w-5 h-5 text-neon-green" />
-                      <div className="text-xs font-mono">
-                        <span className="font-bold text-white uppercase">Exit Code 0</span>
-                        <p className="text-graphite-400 text-[10px]">Virtual wrapper exited successfully and flushed resources.</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Modal Actions Footer */}
-            <div className="p-5 border-t border-graphite-800/40 bg-graphite-950/40 flex items-center justify-between">
-              <div className="ml-auto flex gap-3">
-                {!isRunningCommand && !runComplete ? (
-                  <>
-                    <button 
-                      onClick={() => { setShowRunCommand(false); setRunExePath(''); setRunArgs(''); }}
-                      className="btn-secondary py-2"
-                    >
-                      Cancel
-                    </button>
-                    <button 
-                      onClick={handleRunCommand}
-                      disabled={!runExePath.trim() || !runBottleId}
-                      className={`btn-primary py-2 px-4 flex items-center gap-1.5 ${
-                        (!runExePath.trim() || !runBottleId) ? 'opacity-40 cursor-not-allowed' : ''
-                      }`}
-                    >
-                      <Play className="w-4 h-4 fill-current" /> Run Command
-                    </button>
-                  </>
-                ) : runComplete ? (
-                  <button 
-                    onClick={() => { setShowRunCommand(false); setRunExePath(''); setRunArgs(''); setRunComplete(false); }}
-                    className="btn-primary py-2 px-6"
-                  >
-                    Done
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <RunCommandModal
+        isOpen={showRunCommand}
+        onClose={() => { setShowRunCommand(false); setRunComplete(false); }}
+        bottles={bottles}
+        onRun={handleRunCommand}
+        accentColor="indigo"
+        logs={logs}
+        isRunning={isRunningCommand}
+        isComplete={runComplete}
+      />
     </div>
   );
 };

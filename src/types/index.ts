@@ -48,6 +48,7 @@ export interface Runtime {
   size_bytes: number;
   downloaded: boolean;
   path: string;
+  download_url?: string;
 }
 
 export interface SysMetrics {
@@ -59,6 +60,7 @@ export interface SysMetrics {
   gpu_usage: number;
   fps: number;
   shader_compilation_percent: number;
+  active_pid: number;
 }
 
 export interface SoftwareRecipe {

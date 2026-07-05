@@ -3,2469 +3,16 @@
   windows_subsystem = "windows"
 )]
 
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::fs;
-use std::io::{BufRead, BufReader, Write};
-use std::path::{Component, Path, PathBuf};
-use std::process::{Command, Stdio};
+pub mod types;
+pub mod state;
+pub mod security;
+pub mod wine;
+pub mod sandbox;
+pub mod downloads;
+pub mod commands;
+
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
-use sysinfo::{Disks, System};
-use tauri::{AppHandle, Emitter, State};
-
-// ========================================================
-// DATA STRUCTURES & CONFIGURATION PERSISTENCE
-// ========================================================
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct DllOverride {
-  pub library: String,
-  pub override_type: String, // "native", "builtin", "native,builtin", "builtin,native", "disabled"
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct RegistryKey {
-  pub path: String,
-  pub key: String,
-  pub value: String,
-  pub value_type: String, // "SZ", "DWORD", "BINARY"
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct Bottle {
-  pub id: String,
-  pub name: String,
-  pub prefix_type: String, // "gaming", "productivity", "legacy", "dxvk-optimized", "lightweight"
-  pub wine_version: String,
-  pub dxvk_enabled: bool,
-  pub moltenvk_enabled: bool,
-  pub win_version: String, // "win10", "win11", "win7"
-  pub env_vars: HashMap<String, String>,
-  pub dll_overrides: Vec<DllOverride>,
-  pub registry_keys: Vec<RegistryKey>,
-  pub size_bytes: u64,
-  pub path: String,
-  pub created_at: String,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct AppConfig {
-  pub id: String,
-  pub name: String,
-  pub exe_path: String,
-  pub arguments: String,
-  pub icon: String,
-  pub category: String, // "Games", "Productivity", "Utilities", "Favorites"
-  pub tags: Vec<String>,
-  pub bottle_id: String,
-  pub last_played: Option<String>,
-  pub play_time_mins: u32,
-  pub favorite: bool,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct Runtime {
-  pub id: String,
-  pub name: String,
-  pub category: String, // "wine", "proton", "dxvk", "moltenvk"
-  pub version: String,
-  pub size_bytes: u64,
-  pub downloaded: bool,
-  pub path: String,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct SysMetrics {
-  pub cpu_usage: f32,
-  pub ram_usage_percent: f32,
-  pub ram_used_gb: f32,
-  pub ram_total_gb: f32,
-  pub disk_free_gb: f32,
-  pub gpu_usage: f32,
-  pub fps: u32,
-  pub shader_compilation_percent: u32,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct AppSettings {
-  pub wine_binary_path: String,
-  pub runtime_storage_path: String,
-  pub sandbox_enabled: bool,
-  pub verbose_logs: bool,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct AppStateData {
-  pub bottles: Vec<Bottle>,
-  pub apps: Vec<AppConfig>,
-  pub runtimes: Vec<Runtime>,
-  pub settings: AppSettings,
-  #[serde(default)]
-  pub onboarded: bool,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct SessionInfo {
-  pub onboarded: bool,
-  pub wine_installed: bool,
-  pub wine_binary_path: Option<String>,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct InstallResult {
-  pub success: bool,
-  pub exit_code: i32,
-  pub windows_path: String,
-  pub message: String,
-}
-
-enum WineLaunchKind {
-  Exe { unix_path: PathBuf },
-  Msi { unix_path: PathBuf },
-}
-
-struct ResolvedLaunch {
-  kind: WineLaunchKind,
-  windows_path: String,
-}
-
-// ========================================================
-// SECURITY & DIAGNOSTIC STRUCTURES
-// ========================================================
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct SandboxInfo {
-  pub bottle_id: String,
-  pub prefix_path: String,
-  pub drive_c_path: String,
-  pub system32_path: String,
-  pub program_files_path: String,
-  pub registry_files: Vec<String>,
-  pub dll_overrides_injected: Vec<String>,
-  pub total_files_created: u32,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct DownloadProgress {
-  pub id: String,
-  pub progress: u32,
-  pub status: String,
-  pub message: String,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct RosettaStatus {
-  pub is_apple_silicon: bool,
-  pub is_translated: bool,
-  pub rosetta_installed: bool,
-  pub wine_installed: bool,
-  pub cpu_brand: String,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct DiscoveredApp {
-  pub name: String,
-  pub path: String,
-  pub size_bytes: u64,
-}
-
-// ========================================================
-// GLOBAL MUTABLE STATE
-// ========================================================
-
-pub struct AppState {
-  pub data: Mutex<AppStateData>,
-  pub active_process_id: Mutex<Option<String>>,
-  pub active_child_pid: Arc<Mutex<Option<u32>>>,
-}
-
-// ========================================================
-// PATH SECURITY, SANITIZATION & STABLE DISK PERSISTENCE
-// ========================================================
-
-fn user_home_dir() -> Result<PathBuf, String> {
-  std::env::var("HOME")
-    .map(PathBuf::from)
-    .map_err(|_| "HOME environment variable is not set".to_string())
-}
-
-/// Base directory where all FusionCross sandboxes are stored.
-/// All path validations ensure we never escape this directory.
-fn get_fusioncross_base_dir() -> PathBuf {
-  let home = user_home_dir().unwrap_or_else(|_| std::env::temp_dir());
-  home
-    .join("Library")
-    .join("Application Support")
-    .join("FusionCross")
-}
-
-fn utc_timestamp_now() -> String {
-  Command::new("date")
-    .args(["-u", "+%Y-%m-%dT%H:%M:%SZ"])
-    .output()
-    .ok()
-    .and_then(|out| {
-      if out.status.success() {
-        Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
-      } else {
-        None
-      }
-    })
-    .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string())
-}
-
-fn is_path_under_home(path: &str) -> bool {
-  let Ok(home) = user_home_dir() else {
-    return false;
-  };
-
-  let candidate = Path::new(path);
-  if candidate.is_absolute() {
-    candidate.starts_with(&home)
-  } else {
-    false
-  }
-}
-
-/// Helper to resolve the location of the active JSON storage state
-fn get_state_file_path() -> PathBuf {
-  get_fusioncross_base_dir().join("state.json")
-}
-
-/// Validates that a given path resolves within the allowed FusionCross base directory.
-/// Prevents path traversal attacks (e.g., ../../etc/passwd).
-fn validate_sandbox_path(target: &Path) -> Result<PathBuf, String> {
-  let base = get_fusioncross_base_dir();
-  
-  // Ensure the base directory exists
-  if !base.exists() {
-    let _ = fs::create_dir_all(&base);
-  }
-  
-  let canonical_base = fs::canonicalize(&base).unwrap_or_else(|_| base.clone());
-
-  // Resolve the target path relative to base
-  let resolved = if target.is_absolute() {
-    target.to_path_buf()
-  } else {
-    base.join(target)
-  };
-
-  // If the target doesn't exist yet, verify its parent chain
-  let check_path = if resolved.exists() {
-    fs::canonicalize(&resolved).map_err(|e| format!("Path resolution failed: {}", e))?
-  } else {
-    // Walk up to find the closest existing ancestor
-    let mut ancestor = resolved.clone();
-    while !ancestor.exists() {
-      if let Some(parent) = ancestor.parent() {
-        ancestor = parent.to_path_buf();
-      } else {
-        return Err("Invalid path: no existing ancestor".to_string());
-      }
-    }
-    let canonical_ancestor = fs::canonicalize(&ancestor)
-      .map_err(|e| format!("Ancestor path resolution failed: {}", e))?;
-    // Re-append the remaining suffix
-    let suffix = resolved.strip_prefix(&ancestor).unwrap_or(Path::new(""));
-    canonical_ancestor.join(suffix)
-  };
-
-  if check_path.starts_with(&canonical_base) {
-    Ok(resolved)
-  } else {
-    Err(format!(
-      "Security Traversal: path '{}' escapes the FusionCross sandbox directory '{}'",
-      resolved.display(),
-      base.display()
-    ))
-  }
-}
-
-/// Strictly validates alphanumeric names for identifiers like bottle_id and runtime_id
-fn validate_id(id: &str) -> Result<(), String> {
-  if !id.is_empty()
-    && id.len() <= 128
-    && id.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_')
-  {
-    Ok(())
-  } else {
-    Err(format!("Security: Invalid ID parameter '{}' contains forbidden characters.", id))
-  }
-}
-
-fn validate_display_name(name: &str) -> Result<(), String> {
-  if name.is_empty() || name.len() > 128 {
-    return Err("Name must be between 1 and 128 characters.".to_string());
-  }
-  if name
-    .chars()
-    .all(|c| {
-      c.is_alphanumeric()
-        || matches!(c, ' ' | '-' | '_' | '.' | '+' | '&' | '(' | ')' | '\'' | ':')
-    })
-  {
-    Ok(())
-  } else {
-    Err(format!("Security: Invalid name '{}'.", name))
-  }
-}
-
-fn validate_command_text(value: &str, field_name: &str, max_len: usize) -> Result<(), String> {
-  if value.len() > max_len {
-    return Err(format!("{} is too long.", field_name));
-  }
-  if value.chars().any(|c| c.is_control() && c != '\n' && c != '\t') {
-    return Err(format!("{} contains invalid control characters.", field_name));
-  }
-  Ok(())
-}
-
-fn validate_executable_path(path: &str) -> Result<(), String> {
-  validate_command_text(path, "Executable path", 1024)?;
-  if path.trim().is_empty() {
-    return Err("Executable path is required.".to_string());
-  }
-  Ok(())
-}
-
-fn validate_prefix_type(prefix_type: &str) -> Result<(), String> {
-  const ALLOWED: &[&str] = &[
-    "gaming",
-    "productivity",
-    "legacy",
-    "dxvk-optimized",
-    "lightweight",
-  ];
-  if ALLOWED.contains(&prefix_type) {
-    Ok(())
-  } else {
-    Err(format!("Unknown prefix type '{}'.", prefix_type))
-  }
-}
-
-fn new_bottle_id() -> String {
-  format!(
-    "bottle-{:04x}{:04x}",
-    rand::random::<u16>(),
-    rand::random::<u16>()
-  )
-}
-
-fn resolve_wine_binary(settings: &AppSettings) -> Option<String> {
-  let wine_candidates = [
-    settings.wine_binary_path.as_str(),
-    "/usr/local/bin/wine64",
-    "/opt/homebrew/bin/wine64",
-    "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine64",
-  ];
-
-  wine_candidates
-    .iter()
-    .find(|p| Path::new(p).exists())
-    .map(|p| p.to_string())
-}
-
-fn dll_override_abbrev(override_type: &str) -> &str {
-  match override_type {
-    "native,builtin" | "builtin,native" => "n,b",
-    "native" => "n",
-    "builtin" => "b",
-    "disabled" => "",
-    other => other,
-  }
-}
-
-fn unix_path_to_windows(prefix_path: &str, unix_path: &Path) -> String {
-  let drive_c = Path::new(prefix_path).join("drive_c");
-  if let Ok(relative) = unix_path.strip_prefix(&drive_c) {
-    format!(
-      "C:\\{}",
-      relative.to_string_lossy().replace('/', "\\")
-    )
-  } else {
-    unix_path.to_string_lossy().to_string()
-  }
-}
-
-fn windows_path_to_unix(prefix_path: &str, windows_path: &str) -> Result<PathBuf, String> {
-  let trimmed = windows_path.trim().trim_matches('"');
-  if trimmed.starts_with('/') {
-    return Ok(PathBuf::from(trimmed));
-  }
-
-  let normalized = trimmed.replace('/', "\\");
-  let rest = normalized
-    .strip_prefix("C:\\")
-    .or_else(|| normalized.strip_prefix("c:\\"))
-    .ok_or_else(|| {
-      format!(
-        "Unsupported Windows path '{}'. Use C:\\\\ paths or a full macOS file path.",
-        windows_path
-      )
-    })?;
-
-  Ok(Path::new(prefix_path)
-    .join("drive_c")
-    .join(rest.replace('\\', "/")))
-}
-
-fn validate_host_installer_path(path: &str) -> Result<PathBuf, String> {
-  let candidate = PathBuf::from(path.trim());
-  if !candidate.is_absolute() {
-    return Err("Installer path must be absolute.".to_string());
-  }
-  if !candidate.exists() {
-    return Err(format!("Installer not found: {}", candidate.display()));
-  }
-
-  let home = user_home_dir()?;
-  let allowed_prefixes = [
-    home.clone(),
-    PathBuf::from("/Applications"),
-    PathBuf::from("/opt"),
-    PathBuf::from("/usr"),
-    PathBuf::from("/Volumes"),
-  ];
-
-  if allowed_prefixes
-    .iter()
-    .any(|prefix| candidate.starts_with(prefix))
-  {
-    Ok(candidate)
-  } else {
-    Err("Installer must be located under your home folder or standard system paths.".to_string())
-  }
-}
-
-fn resolve_launch_target(prefix_path: &str, input_path: &str) -> Result<ResolvedLaunch, String> {
-  validate_executable_path(input_path)?;
-
-  let unix_path = if input_path.contains('\\') && !input_path.starts_with('/') {
-    windows_path_to_unix(prefix_path, input_path)?
-  } else if input_path.starts_with('/') {
-    validate_host_installer_path(input_path)?
-  } else {
-    let in_prefix = Path::new(prefix_path).join(input_path);
-    if in_prefix.exists() {
-      in_prefix
-    } else {
-      validate_host_installer_path(input_path)?
-    }
-  };
-
-  if !unix_path.exists() {
-    return Err(format!(
-      "Executable not found: {}. Install the program into this bottle first, or pick the installer file.",
-      unix_path.display()
-    ));
-  }
-
-  let ext = unix_path
-    .extension()
-    .and_then(|e| e.to_str())
-    .map(|s| s.to_lowercase());
-
-  let kind = match ext.as_deref() {
-    Some("msi") => WineLaunchKind::Msi {
-      unix_path: unix_path.clone(),
-    },
-    _ => WineLaunchKind::Exe {
-      unix_path: unix_path.clone(),
-    },
-  };
-
-  let windows_path = if input_path.contains('\\') {
-    input_path.to_string()
-  } else {
-    unix_path_to_windows(prefix_path, &unix_path)
-  };
-
-  Ok(ResolvedLaunch {
-    kind,
-    windows_path,
-  })
-}
-
-fn resolve_winetricks_binary() -> Option<String> {
-  [
-    "/opt/homebrew/bin/winetricks",
-    "/usr/local/bin/winetricks",
-    "winetricks",
-  ]
-  .iter()
-  .find(|p| Path::new(p).exists())
-  .map(|p| p.to_string())
-}
-
-fn emit_log(app_handle: &AppHandle, message: impl AsRef<str>) {
-  let _ = app_handle.emit("wine-log-stream", message.as_ref().to_string());
-}
-
-fn initialize_bottle_prefix(
-  prefix_path: &str,
-  prefix_type: &str,
-  settings: &AppSettings,
-  app_handle: Option<&AppHandle>,
-) -> Result<SandboxInfo, String> {
-  let info = initialize_prefix_sandbox_impl(prefix_path, prefix_type)?;
-
-  let Some(wine_bin) = resolve_wine_binary(settings) else {
-    if let Some(handle) = app_handle {
-      emit_log(
-        handle,
-        "[FusionCross] Wine is not installed. Created folder layout only — install Wine, then reset the bottle.",
-      );
-    }
-    return Ok(info);
-  };
-
-  if let Some(handle) = app_handle {
-    emit_log(handle, "[FusionCross] Initializing Wine prefix (wineboot -i)...");
-  }
-
-  let output = Command::new(&wine_bin)
-    .env("WINEPREFIX", prefix_path)
-    .arg("wineboot")
-    .arg("-i")
-    .stdout(Stdio::piped())
-    .stderr(Stdio::piped())
-    .output();
-
-  match output {
-    Ok(out) if out.status.success() => {
-      if let Some(handle) = app_handle {
-        emit_log(handle, "[FusionCross] Wine prefix is ready.");
-      }
-    }
-    Ok(out) => {
-      let err = String::from_utf8_lossy(&out.stderr);
-      if let Some(handle) = app_handle {
-        emit_log(
-          handle,
-          format!(
-            "[FusionCross:Warn] wineboot returned {}: {}",
-            out.status,
-            err.trim()
-          ),
-        );
-      }
-    }
-    Err(e) => {
-      if let Some(handle) = app_handle {
-        emit_log(handle, format!("[FusionCross:Warn] wineboot failed: {}", e));
-      }
-    }
-  }
-
-  Ok(info)
-}
-
-fn build_wine_command(
-  wine_bin: &str,
-  prefix_path: &str,
-  launch: &ResolvedLaunch,
-  arguments: &str,
-  dll_overrides: &str,
-  env_vars: &HashMap<String, String>,
-  verbose: bool,
-) -> Command {
-  let mut command = Command::new(wine_bin);
-  command
-    .env("WINEPREFIX", prefix_path)
-    .env("WINEDLLOVERRIDES", dll_overrides)
-    .stdout(Stdio::piped())
-    .stderr(Stdio::piped());
-
-  if verbose {
-    command.env("WINEDEBUG", "+timestamp,+pid,+tid,+seh");
-  }
-
-  for (key, value) in env_vars {
-    command.env(key, value);
-  }
-
-  match &launch.kind {
-    WineLaunchKind::Msi { unix_path } => {
-      command.arg("msiexec").arg("/i").arg(unix_path);
-      let extra: Vec<&str> = arguments
-        .split_whitespace()
-        .filter(|s| !s.is_empty())
-        .collect();
-      if !extra.is_empty() {
-        command.args(extra);
-      }
-    }
-    WineLaunchKind::Exe { unix_path } => {
-      command.arg(unix_path);
-      command.args(
-        arguments
-          .split_whitespace()
-          .filter(|s| !s.is_empty()),
-      );
-    }
-  }
-
-  command
-}
-
-fn stream_process_output(
-  process: &mut std::process::Child,
-  app_handle: &AppHandle,
-) {
-  if let Some(stderr) = process.stderr.take() {
-    let reader = BufReader::new(stderr);
-    for line in reader.lines().flatten() {
-      emit_log(app_handle, format!("[Wine] {}", line));
-    }
-  }
-  if let Some(stdout) = process.stdout.take() {
-    let reader = BufReader::new(stdout);
-    for line in reader.lines().flatten() {
-      emit_log(app_handle, format!("[Wine] {}", line));
-    }
-  }
-}
-
-fn run_wine_launch(
-  prefix_path: &str,
-  launch: ResolvedLaunch,
-  arguments: String,
-  settings: AppSettings,
-  bottle: Option<Bottle>,
-  app_handle: &AppHandle,
-  active_child_pid: Arc<Mutex<Option<u32>>>,
-  wait_for_exit: bool,
-  clear_active_on_exit: bool,
-) -> Result<InstallResult, String> {
-  let wine_bin = resolve_wine_binary(&settings)
-    .ok_or_else(|| {
-      "Wine is not installed. Install with: brew install --cask wine-stable".to_string()
-    })?;
-
-  let dll_overrides = build_wine_dll_overrides(bottle.as_ref());
-  let verbose = settings.verbose_logs;
-
-  emit_log(
-    app_handle,
-    format!("[FusionCross] Using Wine at {}", wine_bin),
-  );
-  emit_log(
-    app_handle,
-    format!(
-      "[FusionCross] Target: {} {}",
-      launch.windows_path,
-      arguments
-    ),
-  );
-
-  let env_vars = bottle
-    .as_ref()
-    .map(|b| b.env_vars.clone())
-    .unwrap_or_default();
-
-  let mut command = build_wine_command(
-    &wine_bin,
-    prefix_path,
-    &launch,
-    &arguments,
-    &dll_overrides,
-    &env_vars,
-    verbose,
-  );
-
-  let mut process = command
-    .spawn()
-    .map_err(|e| format!("Failed to start Wine: {}", e))?;
-
-  if let Ok(mut pid_guard) = active_child_pid.lock() {
-    *pid_guard = Some(process.id());
-  }
-
-  let pid = process.id();
-  emit_log(
-    app_handle,
-    format!("[FusionCross] Process started (PID {})", pid),
-  );
-
-  if !wait_for_exit {
-    let app_handle_bg = app_handle.clone();
-    let active_child_pid_bg = active_child_pid.clone();
-    std::thread::spawn(move || {
-      stream_process_output(&mut process, &app_handle_bg);
-      let _ = process.wait();
-      if let Ok(mut pid_guard) = active_child_pid_bg.lock() {
-        *pid_guard = None;
-      }
-      emit_log(&app_handle_bg, "[FusionCross] Process exited.".to_string());
-      if clear_active_on_exit {
-        let _ = app_handle_bg.emit("app-process-exited", ());
-      }
-    });
-
-    return Ok(InstallResult {
-      success: true,
-      exit_code: 0,
-      windows_path: launch.windows_path,
-      message: "Application launch started.".to_string(),
-    });
-  }
-
-  stream_process_output(&mut process, app_handle);
-  let status = process
-    .wait()
-    .map_err(|e| format!("Failed while waiting for Wine process: {}", e))?;
-
-  if let Ok(mut pid_guard) = active_child_pid.lock() {
-    *pid_guard = None;
-  }
-
-  let exit_code = status.code().unwrap_or(-1);
-  let success = status.success();
-  emit_log(
-    app_handle,
-    format!(
-      "[FusionCross] Process finished with exit code {}",
-      exit_code
-    ),
-  );
-
-  if clear_active_on_exit {
-    let _ = app_handle.emit("app-process-exited", ());
-  }
-
-  Ok(InstallResult {
-    success,
-    exit_code,
-    windows_path: launch.windows_path,
-    message: if success {
-      "Installer completed successfully.".to_string()
-    } else {
-      format!("Installer exited with code {}.", exit_code)
-    },
-  })
-}
-
-fn build_wine_dll_overrides(bottle: Option<&Bottle>) -> String {
-  let Some(bottle) = bottle else {
-    return "d3d11,dxgi=n,b".to_string();
-  };
-
-  if bottle.dll_overrides.is_empty() {
-    return "d3d11,dxgi=n,b".to_string();
-  }
-
-  bottle
-    .dll_overrides
-    .iter()
-    .map(|o| format!("{}={}", o.library, dll_override_abbrev(&o.override_type)))
-    .collect::<Vec<_>>()
-    .join(";")
-}
-
-fn spawn_wine_process(
-  prefix_path: String,
-  exe_path: String,
-  arguments: String,
-  settings: AppSettings,
-  bottle: Option<Bottle>,
-  app_handle: AppHandle,
-  active_child_pid: Arc<Mutex<Option<u32>>>,
-  clear_active_on_exit: bool,
-) {
-  let launch_result = resolve_launch_target(&prefix_path, &exe_path);
-  let app_handle_clone = app_handle.clone();
-  let active_child_pid_clone = active_child_pid.clone();
-
-  std::thread::spawn(move || {
-    let launch = match launch_result {
-      Ok(launch) => launch,
-      Err(err) => {
-        emit_log(&app_handle_clone, format!("[FusionCross:Error] {}", err));
-        if clear_active_on_exit {
-          let _ = app_handle_clone.emit("app-process-exited", ());
-        }
-        return;
-      }
-    };
-
-    if let Err(err) = run_wine_launch(
-      &prefix_path,
-      launch,
-      arguments,
-      settings,
-      bottle,
-      &app_handle_clone,
-      active_child_pid_clone,
-      true,
-      clear_active_on_exit,
-    ) {
-      emit_log(&app_handle_clone, format!("[FusionCross:Error] {}", err));
-      if clear_active_on_exit {
-        let _ = app_handle_clone.emit("app-process-exited", ());
-      }
-    }
-  });
-}
-
-/// Enforces URL origin restrictions restricting runtime engine archives downloads to secure paths only
-fn validate_download_url(url: &str) -> Result<(), String> {
-  let lowercase_url = url.to_lowercase();
-  if lowercase_url.starts_with("https://github.com/") 
-     || lowercase_url.starts_with("https://dl.winehq.org/") 
-     || lowercase_url.starts_with("https://khronos.org/") 
-  {
-    Ok(())
-  } else {
-    Err(format!("Security: Untrusted download source URL origin '{}'. Download rejected.", url))
-  }
-}
-
-fn validate_tar_entry_name(entry: &str) -> Result<(), String> {
-  let trimmed = entry.trim();
-  if trimmed.is_empty() || trimmed.starts_with('/') || trimmed.starts_with('\\') {
-    return Err(format!("Archive contains unsafe entry '{}'.", entry));
-  }
-
-  let path = Path::new(trimmed);
-  if path.is_absolute()
-    || path
-      .components()
-      .any(|component| matches!(component, Component::ParentDir | Component::Prefix(_)))
-  {
-    return Err(format!("Archive contains unsafe entry '{}'.", entry));
-  }
-
-  Ok(())
-}
-
-fn validate_tar_archive_for_safe_extract(archive_path: &Path) -> Result<(), String> {
-  let table_output = Command::new("tar")
-    .args(["-tvzf"])
-    .arg(archive_path)
-    .output()
-    .map_err(|e| format!("Failed to inspect archive metadata: {}", e))?;
-
-  if !table_output.status.success() {
-    return Err(format!(
-      "Archive metadata inspection failed: {}",
-      String::from_utf8_lossy(&table_output.stderr)
-    ));
-  }
-
-  for line in String::from_utf8_lossy(&table_output.stdout).lines() {
-    let kind = line.chars().next().unwrap_or('-');
-    if matches!(kind, 'l' | 'h') {
-      return Err("Archive contains links, which are not allowed for runtime installs.".to_string());
-    }
-  }
-
-  let list_output = Command::new("tar")
-    .args(["-tzf"])
-    .arg(archive_path)
-    .output()
-    .map_err(|e| format!("Failed to inspect archive paths: {}", e))?;
-
-  if !list_output.status.success() {
-    return Err(format!(
-      "Archive path inspection failed: {}",
-      String::from_utf8_lossy(&list_output.stderr)
-    ));
-  }
-
-  for entry in String::from_utf8_lossy(&list_output.stdout).lines() {
-    validate_tar_entry_name(entry)?;
-  }
-
-  Ok(())
-}
-
-fn applescript_string(value: &str) -> String {
-  format!(
-    "\"{}\"",
-    value
-      .replace('\\', "\\\\")
-      .replace('"', "\\\"")
-      .replace('\n', " ")
-      .replace('\r', " ")
-  )
-}
-
-/// Calculate the total size of a directory recursively.
-fn calculate_dir_size(path: &Path) -> u64 {
-  if !path.exists() {
-    return 0;
-  }
-  let mut total: u64 = 0;
-  if let Ok(entries) = fs::read_dir(path) {
-    for entry in entries.flatten() {
-      let meta = entry.metadata();
-      if let Ok(m) = meta {
-        if m.is_dir() {
-          total += calculate_dir_size(&entry.path());
-        } else {
-          total += m.len();
-        }
-      }
-    }
-  }
-  total
-}
-
-/// Load configuration parameters and saved items from persistent JSON on disk
-fn load_state_from_disk_impl() -> AppStateData {
-  let path = get_state_file_path();
-  if path.exists() {
-    if let Ok(content) = fs::read_to_string(&path) {
-      if let Ok(mut data) = serde_json::from_str::<AppStateData>(&content) {
-        // Enforce dynamic home path resolution upon reload so path remains valid if moved
-        let base_str = get_fusioncross_base_dir().to_string_lossy().to_string();
-        for b in &mut data.bottles {
-          if b.path.contains("/fusioncross/bottles") || b.path.contains("/fusionwine/bottles") {
-            b.path = format!("{}/bottles/{}", base_str, b.id);
-          }
-        }
-        return data;
-      }
-    }
-  }
-
-  // Fresh install: empty library — CrossOver-style (you install real software into bottles)
-  let base = get_fusioncross_base_dir();
-  let base_str = base.to_string_lossy().to_string();
-
-  let wine_path = resolve_wine_binary(&AppSettings {
-    wine_binary_path: "/opt/homebrew/bin/wine64".to_string(),
-    runtime_storage_path: format!("{}/runtimes", base_str),
-    sandbox_enabled: true,
-    verbose_logs: true,
-  })
-  .unwrap_or_else(|| "/opt/homebrew/bin/wine64".to_string());
-
-  let default_runtimes = vec![
-    Runtime {
-      id: "wine-stable".to_string(),
-      name: "Wine Stable 9.0".to_string(),
-      category: "wine".to_string(),
-      version: "9.0.0".to_string(),
-      size_bytes: 840_000_000,
-      downloaded: true,
-      path: format!("{}/runtimes/wine-stable", base_str),
-    },
-    Runtime {
-      id: "proton-ge".to_string(),
-      name: "Proton GE 9.0 (Custom Gaming)".to_string(),
-      category: "proton".to_string(),
-      version: "GE-9.0-1".to_string(),
-      size_bytes: 1_280_000_000,
-      downloaded: true,
-      path: format!("{}/runtimes/proton-ge", base_str),
-    },
-    Runtime {
-      id: "proton-exp".to_string(),
-      name: "Proton Experimental".to_string(),
-      category: "proton".to_string(),
-      version: "Experimental".to_string(),
-      size_bytes: 1_420_000_000,
-      downloaded: false,
-      path: format!("{}/runtimes/proton-exp", base_str),
-    },
-    Runtime {
-      id: "dxvk-23".to_string(),
-      name: "DXVK Translation Layer v2.3".to_string(),
-      category: "dxvk".to_string(),
-      version: "2.3.0".to_string(),
-      size_bytes: 28_000_000,
-      downloaded: true,
-      path: format!("{}/runtimes/dxvk-23", base_str),
-    },
-    Runtime {
-      id: "dxvk-latest".to_string(),
-      name: "DXVK Master (Nightly Build)".to_string(),
-      category: "dxvk".to_string(),
-      version: "Git-Nightly".to_string(),
-      size_bytes: 31_000_000,
-      downloaded: false,
-      path: format!("{}/runtimes/dxvk-latest", base_str),
-    }
-  ];
-
-  let default_settings = AppSettings {
-    wine_binary_path: wine_path,
-    runtime_storage_path: format!("{}/runtimes", base_str),
-    sandbox_enabled: true,
-    verbose_logs: true,
-  };
-
-  let initial_state = AppStateData {
-    bottles: vec![],
-    apps: vec![],
-    runtimes: default_runtimes,
-    settings: default_settings,
-    onboarded: false,
-  };
-
-  let _ = save_state_to_disk_impl(&initial_state);
-  initial_state
-}
-
-/// Write state data securely to disk JSON
-fn save_state_to_disk_impl(data: &AppStateData) -> Result<(), String> {
-  let path = get_state_file_path();
-  if let Some(parent) = path.parent() {
-    let _ = fs::create_dir_all(parent);
-  }
-  let content = serde_json::to_string_pretty(data).map_err(|e| format!("Serialization error: {}", e))?;
-  fs::write(&path, content).map_err(|e| format!("Failed to write state file to disk: {}", e))?;
-  Ok(())
-}
-
-// ========================================================
-// COMMAND IMPLEMENTATIONS (PERSISTENT & HARDENED)
-// ========================================================
-
-#[tauri::command]
-fn list_bottles(state: State<'_, AppState>) -> Result<Vec<Bottle>, String> {
-  let data = state.data.lock().map_err(|e| e.to_string())?;
-  Ok(data.bottles.clone())
-}
-
-#[tauri::command]
-fn create_bottle(
-  name: String,
-  prefix_type: String,
-  wine_version: String,
-  state: State<'_, AppState>,
-) -> Result<Bottle, String> {
-  validate_display_name(&name)?;
-  validate_prefix_type(&prefix_type)?;
-
-  let new_id = new_bottle_id();
-  validate_id(&new_id)?;
-  let base = get_fusioncross_base_dir();
-  let bottle_dir = base.join("bottles").join(&new_id);
-  let path = bottle_dir.to_string_lossy().to_string();
-
-  let default_env = HashMap::from([
-    ("DXVK_HUD".to_string(), "fps".to_string()),
-    ("MVK_CONFIG_FILE".to_string(), format!("{}/mvk.json", path)),
-    ("WINEESYNC".to_string(), "1".to_string()),
-    ("WINEFSYNC".to_string(), "1".to_string()),
-  ]);
-
-  let default_overrides = vec![
-    DllOverride { library: "d3d11".to_string(), override_type: "native,builtin".to_string() },
-    DllOverride { library: "dxgi".to_string(), override_type: "native,builtin".to_string() },
-  ];
-
-  let default_registry = vec![
-    RegistryKey {
-      path: "HKCU\\Software\\Wine\\Direct3D".to_string(),
-      key: "MaxShaderModelVS".to_string(),
-      value: "5".to_string(),
-      value_type: "DWORD".to_string(),
-    },
-    RegistryKey {
-      path: "HKCU\\Software\\Wine\\Mac Driver".to_string(),
-      key: "RetinaMode".to_string(),
-      value: "Y".to_string(),
-      value_type: "SZ".to_string(),
-    }
-  ];
-
-  let settings = {
-    let data = state.data.lock().map_err(|e| e.to_string())?;
-    data.settings.clone()
-  };
-
-  let _ = initialize_bottle_prefix(&path, &prefix_type, &settings, None)?;
-  let real_size = calculate_dir_size(&bottle_dir);
-
-  let new_bottle = Bottle {
-    id: new_id,
-    name,
-    prefix_type,
-    wine_version,
-    dxvk_enabled: true,
-    moltenvk_enabled: true,
-    win_version: "win10".to_string(),
-    env_vars: default_env,
-    dll_overrides: default_overrides,
-    registry_keys: default_registry,
-    size_bytes: real_size,
-    path,
-    created_at: utc_timestamp_now()
-      .split('T')
-      .next()
-      .unwrap_or("2026-01-01")
-      .to_string(),
-  };
-
-  let mut data = state.data.lock().map_err(|e| e.to_string())?;
-  data.bottles.push(new_bottle.clone());
-  save_state_to_disk_impl(&*data)?;
-
-  Ok(new_bottle)
-}
-
-#[tauri::command]
-fn get_settings(state: State<'_, AppState>) -> Result<AppSettings, String> {
-  let data = state.data.lock().map_err(|e| e.to_string())?;
-  Ok(data.settings.clone())
-}
-
-#[tauri::command]
-fn update_settings(
-  wine_binary_path: Option<String>,
-  runtime_storage_path: Option<String>,
-  sandbox_enabled: Option<bool>,
-  verbose_logs: Option<bool>,
-  state: State<'_, AppState>,
-) -> Result<AppSettings, String> {
-  let mut data = state.data.lock().map_err(|e| e.to_string())?;
-
-  if let Some(path) = wine_binary_path {
-    if !path.is_empty() && !Path::new(&path).exists() {
-      return Err(format!("Wine binary not found at '{}'.", path));
-    }
-    data.settings.wine_binary_path = path;
-  }
-  if let Some(path) = runtime_storage_path {
-    validate_sandbox_path(Path::new(&path))?;
-    data.settings.runtime_storage_path = path;
-  }
-  if let Some(enabled) = sandbox_enabled {
-    data.settings.sandbox_enabled = enabled;
-  }
-  if let Some(verbose) = verbose_logs {
-    data.settings.verbose_logs = verbose;
-  }
-
-  let settings = data.settings.clone();
-  save_state_to_disk_impl(&*data)?;
-  Ok(settings)
-}
-
-#[tauri::command]
-fn delete_bottle(id: String, state: State<'_, AppState>) -> Result<String, String> {
-  validate_id(&id)?;
-
-  let mut data = state.data.lock().map_err(|e| e.to_string())?;
-  let index = data.bottles.iter().position(|b| b.id == id)
-    .ok_or_else(|| "Bottle not found".to_string())?;
-  
-  // Clean up prefix directory strictly safely
-  let bottle_path = data.bottles[index].path.clone();
-  let path = Path::new(&bottle_path);
-  if path.exists() {
-    validate_sandbox_path(path)?;
-    let _ = fs::remove_dir_all(path);
-  }
-
-  data.bottles.remove(index);
-  data.apps.retain(|a| a.bottle_id != id);
-  save_state_to_disk_impl(&*data)?;
-
-  Ok(id)
-}
-
-/// Helper function to perform deep recursive copies inside clone operations
-fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<(), String> {
-  let src = src.as_ref();
-  let dst = dst.as_ref();
-  validate_sandbox_path(src)?;
-  validate_sandbox_path(dst)?;
-  fs::create_dir_all(&dst).map_err(|e| format!("Failed to create destination folder: {}", e))?;
-  for entry in fs::read_dir(src).map_err(|e| format!("Failed to read source folder: {}", e))? {
-    let entry = entry.map_err(|e| format!("Failed directory entry read: {}", e))?;
-    let ty = entry.file_type().map_err(|e| format!("Failed to get entry file type: {}", e))?;
-    if ty.is_dir() {
-      copy_dir_all(entry.path(), dst.join(entry.file_name()))?;
-    } else if ty.is_file() {
-      fs::copy(entry.path(), dst.join(entry.file_name())).map_err(|e| format!("Failed file copy: {}", e))?;
-    }
-  }
-  Ok(())
-}
-
-#[tauri::command]
-fn clone_bottle(id: String, target_name: String, state: State<'_, AppState>) -> Result<Bottle, String> {
-  validate_id(&id)?;
-  validate_display_name(&target_name)?;
-
-  let mut data = state.data.lock().map_err(|e| e.to_string())?;
-  let index = data.bottles.iter().position(|b| b.id == id)
-    .ok_or_else(|| "Bottle not found".to_string())?;
-  
-  let source = &data.bottles[index];
-  let clone_id = new_bottle_id();
-  let base = get_fusioncross_base_dir();
-  let clone_dir = base.join("bottles").join(&clone_id);
-  validate_sandbox_path(&clone_dir)?;
-  let clone_path_str = clone_dir.to_string_lossy().to_string();
-
-  // Recursively copy prefix content
-  let src_path = Path::new(&source.path);
-  if src_path.exists() {
-    copy_dir_all(src_path, &clone_dir)?;
-  } else {
-    initialize_prefix_sandbox_impl(&clone_path_str, &source.prefix_type)?;
-  }
-
-  let real_size = calculate_dir_size(&clone_dir);
-
-  let cloned = Bottle {
-    id: clone_id.clone(),
-    name: target_name,
-    prefix_type: source.prefix_type.clone(),
-    wine_version: source.wine_version.clone(),
-    dxvk_enabled: source.dxvk_enabled,
-    moltenvk_enabled: source.moltenvk_enabled,
-    win_version: source.win_version.clone(),
-    env_vars: source.env_vars.clone(),
-    dll_overrides: source.dll_overrides.clone(),
-    registry_keys: source.registry_keys.clone(),
-    size_bytes: real_size,
-    path: clone_path_str,
-    created_at: utc_timestamp_now()
-      .split('T')
-      .next()
-      .unwrap_or("2026-01-01")
-      .to_string(),
-  };
-
-  data.bottles.push(cloned.clone());
-  save_state_to_disk_impl(&*data)?;
-
-  Ok(cloned)
-}
-
-#[tauri::command]
-fn update_bottle_settings(
-  id: String,
-  win_version: String,
-  dxvk_enabled: bool,
-  moltenvk_enabled: bool,
-  dll_overrides: Vec<DllOverride>,
-  env_vars: HashMap<String, String>,
-  registry_keys: Vec<RegistryKey>,
-  state: State<'_, AppState>,
-) -> Result<Bottle, String> {
-  validate_id(&id)?;
-
-  let mut data = state.data.lock().map_err(|e| e.to_string())?;
-  let index = data.bottles.iter().position(|b| b.id == id)
-    .ok_or_else(|| "Bottle not found".to_string())?;
-  
-  data.bottles[index].win_version = win_version;
-  data.bottles[index].dxvk_enabled = dxvk_enabled;
-  data.bottles[index].moltenvk_enabled = moltenvk_enabled;
-  data.bottles[index].dll_overrides = dll_overrides;
-  data.bottles[index].env_vars = env_vars;
-  data.bottles[index].registry_keys = registry_keys;
-
-  let bottle_clone = data.bottles[index].clone();
-  save_state_to_disk_impl(&*data)?;
-  Ok(bottle_clone)
-}
-
-#[tauri::command]
-fn list_apps(state: State<'_, AppState>) -> Result<Vec<AppConfig>, String> {
-  let data = state.data.lock().map_err(|e| e.to_string())?;
-  Ok(data.apps.clone())
-}
-
-#[tauri::command]
-fn register_app(
-  name: String,
-  exe_path: String,
-  arguments: String,
-  bottle_id: String,
-  category: String,
-  tags: Vec<String>,
-  state: State<'_, AppState>,
-) -> Result<AppConfig, String> {
-  validate_id(&bottle_id)?;
-  validate_display_name(&name)?;
-  validate_executable_path(&exe_path)?;
-  validate_command_text(&arguments, "Arguments", 2048)?;
-  validate_command_text(&category, "Category", 64)?;
-
-  let app_id = format!("app-{}", rand::random::<u16>());
-  let icon = match name.to_lowercase() {
-    n if n.contains("steam") => "steam".to_string(),
-    n if n.contains("cyberpunk") => "cyberpunk".to_string(),
-    n if n.contains("witcher") => "witcher".to_string(),
-    n if n.contains("office") => "office".to_string(),
-    n if n.contains("photoshop") => "photoshop".to_string(),
-    _ => "generic".to_string(),
-  };
-
-  let new_app = AppConfig {
-    id: app_id,
-    name,
-    exe_path,
-    arguments,
-    icon,
-    category,
-    tags,
-    bottle_id: bottle_id.clone(),
-    last_played: None,
-    play_time_mins: 0,
-    favorite: false,
-  };
-
-  let mut data = state.data.lock().map_err(|e| e.to_string())?;
-  if !data.bottles.iter().any(|b| b.id == bottle_id) {
-    return Err(format!("Bottle '{}' not found.", bottle_id));
-  }
-  data.apps.push(new_app.clone());
-  save_state_to_disk_impl(&*data)?;
-
-  Ok(new_app)
-}
-
-#[tauri::command]
-fn toggle_favorite(id: String, state: State<'_, AppState>) -> Result<AppConfig, String> {
-  let mut data = state.data.lock().map_err(|e| e.to_string())?;
-  let index = data.apps.iter().position(|a| a.id == id)
-    .ok_or_else(|| "App not found".to_string())?;
-  
-  data.apps[index].favorite = !data.apps[index].favorite;
-  let app_clone = data.apps[index].clone();
-  save_state_to_disk_impl(&*data)?;
-
-  Ok(app_clone)
-}
-
-#[tauri::command]
-fn run_app(id: String, state: State<'_, AppState>, app_handle: AppHandle) -> Result<String, String> {
-  validate_id(&id)?;
-
-  let launch = {
-    let mut data = state.data.lock().map_err(|e| e.to_string())?;
-    let index = data
-      .apps
-      .iter()
-      .position(|a| a.id == id)
-      .ok_or_else(|| "App not found".to_string())?;
-
-    data.apps[index].last_played = Some(utc_timestamp_now());
-    data.apps[index].play_time_mins = data.apps[index].play_time_mins.saturating_add(1);
-
-    let app_name = data.apps[index].name.clone();
-    let exe_path = data.apps[index].exe_path.clone();
-    let arguments = data.apps[index].arguments.clone();
-    let bottle_id = data.apps[index].bottle_id.clone();
-    let settings = data.settings.clone();
-
-    let bottle = data
-      .bottles
-      .iter()
-      .find(|b| b.id == bottle_id)
-      .ok_or_else(|| format!("Bottle '{}' not found for this app", bottle_id))?
-      .clone();
-
-    save_state_to_disk_impl(&*data)?;
-
-    (
-      app_name,
-      bottle.path.clone(),
-      exe_path,
-      arguments,
-      bottle,
-      settings,
-    )
-  };
-
-  let (app_name, prefix_path, exe_path, arguments, bottle, settings) = launch;
-  validate_sandbox_path(Path::new(&prefix_path))?;
-
-  {
-    let mut active = state.active_process_id.lock().map_err(|e| e.to_string())?;
-    *active = Some(id);
-  }
-
-  spawn_wine_process(
-    prefix_path,
-    exe_path,
-    arguments,
-    settings,
-    Some(bottle),
-    app_handle,
-    state.active_child_pid.clone(),
-    true,
-  );
-
-  Ok(app_name)
-}
-
-#[tauri::command]
-fn get_session(state: State<'_, AppState>) -> Result<SessionInfo, String> {
-  let data = state.data.lock().map_err(|e| e.to_string())?;
-  let wine_binary_path = resolve_wine_binary(&data.settings);
-  Ok(SessionInfo {
-    onboarded: data.onboarded,
-    wine_installed: wine_binary_path.is_some(),
-    wine_binary_path,
-  })
-}
-
-#[tauri::command]
-fn complete_onboarding(state: State<'_, AppState>) -> Result<bool, String> {
-  let mut data = state.data.lock().map_err(|e| e.to_string())?;
-  data.onboarded = true;
-  save_state_to_disk_impl(&*data)?;
-  Ok(true)
-}
-
-#[tauri::command]
-fn install_windows_software(
-  prefix_path: String,
-  installer_path: String,
-  arguments: String,
-  app_handle: AppHandle,
-  state: State<'_, AppState>,
-) -> Result<InstallResult, String> {
-  validate_sandbox_path(Path::new(&prefix_path))?;
-  validate_command_text(&arguments, "Arguments", 2048)?;
-
-  let (settings, bottle) = {
-    let data = state.data.lock().map_err(|e| e.to_string())?;
-    let bottle = data
-      .bottles
-      .iter()
-      .find(|b| b.path == prefix_path)
-      .cloned();
-    (data.settings.clone(), bottle)
-  };
-
-  let launch = resolve_launch_target(&prefix_path, &installer_path)?;
-  let result = run_wine_launch(
-    &prefix_path,
-    launch,
-    arguments,
-    settings,
-    bottle,
-    &app_handle,
-    state.active_child_pid.clone(),
-    true,
-    false,
-  )?;
-
-  if let Ok(mut data) = state.data.lock() {
-    if let Some(index) = data.bottles.iter().position(|b| b.path == prefix_path) {
-      data.bottles[index].size_bytes = calculate_dir_size(Path::new(&prefix_path));
-      let _ = save_state_to_disk_impl(&*data);
-    }
-  }
-
-  Ok(result)
-}
-
-#[tauri::command]
-fn stop_active_app(state: State<'_, AppState>) -> Result<bool, String> {
-  let mut active = state.active_process_id.lock().map_err(|e| e.to_string())?;
-  *active = None;
-
-  let mut pid_guard = state.active_child_pid.lock().map_err(|e| e.to_string())?;
-  if let Some(pid) = *pid_guard {
-    let _ = Command::new("kill").arg("-TERM").arg(pid.to_string()).status();
-    *pid_guard = None;
-    Ok(true)
-  } else {
-    Ok(false)
-  }
-}
-
-#[tauri::command]
-fn list_runtimes(state: State<'_, AppState>) -> Result<Vec<Runtime>, String> {
-  let data = state.data.lock().map_err(|e| e.to_string())?;
-  Ok(data.runtimes.clone())
-}
-
-#[tauri::command]
-fn trigger_runtime_download(id: String, state: State<'_, AppState>, app_handle: AppHandle) -> Result<String, String> {
-  validate_id(&id)?;
-
-  let r_name = {
-    let mut data = state.data.lock().map_err(|e| e.to_string())?;
-    let index = data.runtimes.iter().position(|r| r.id == id)
-      .ok_or_else(|| "Runtime not found".to_string())?;
-    
-    if data.runtimes[index].downloaded {
-      return Ok(id);
-    }
-    data.runtimes[index].downloaded = true;
-    let name = data.runtimes[index].name.clone();
-    save_state_to_disk_impl(&*data)?;
-    name
-  };
-
-  let r_id = id.clone();
-  std::thread::spawn(move || {
-    let mut progress = 0;
-    while progress < 100 {
-      std::thread::sleep(Duration::from_millis(150));
-      progress += rand::random::<u8>() as u32 % 10 + 5;
-      if progress > 100 { progress = 100; }
-      
-      #[derive(Serialize, Clone)]
-      struct DownProgress {
-        id: String,
-        progress: u32,
-      }
-      let _ = app_handle.emit("download-progress", DownProgress { id: r_id.clone(), progress });
-    }
-  });
-
-  Ok(r_name)
-}
-
-#[tauri::command]
-fn get_system_metrics(state: State<'_, AppState>) -> Result<SysMetrics, String> {
-  let _active = state.active_process_id.lock().map_err(|e| e.to_string())?;
-
-  let mut system = System::new_all();
-  system.refresh_cpu();
-  system.refresh_memory();
-
-  let cpu_usage = {
-    let cpus = system.cpus();
-    if cpus.is_empty() {
-      0.0
-    } else {
-      cpus.iter().map(|cpu| cpu.cpu_usage()).sum::<f32>() / cpus.len() as f32
-    }
-  };
-
-  let total_memory = system.total_memory() as f64;
-  let used_memory = system.used_memory() as f64;
-  let ram_total_gb = (total_memory / (1024.0 * 1024.0 * 1024.0)) as f32;
-  let ram_used_gb = (used_memory / (1024.0 * 1024.0 * 1024.0)) as f32;
-  let ram_usage_percent = if total_memory > 0.0 {
-    ((used_memory / total_memory) * 100.0) as f32
-  } else {
-    0.0
-  };
-
-  let disks = Disks::new_with_refreshed_list();
-  let disk_free_gb = disks
-    .list()
-    .iter()
-    .find(|disk| disk.mount_point() == Path::new("/"))
-    .or_else(|| disks.list().first())
-    .map(|disk| (disk.available_space() as f64) / (1024.0 * 1024.0 * 1024.0))
-    .unwrap_or(0.0) as f32;
-
-  Ok(SysMetrics {
-    cpu_usage,
-    ram_usage_percent,
-    ram_used_gb,
-    ram_total_gb,
-    disk_free_gb,
-    gpu_usage: 0.0,
-    fps: 0,
-    shader_compilation_percent: 0,
-  })
-}
-
-// ========================================================
-// REAL SANDBOXING COMMANDS
-// ========================================================
-
-fn initialize_prefix_sandbox_impl(prefix_path: &str, prefix_type: &str) -> Result<SandboxInfo, String> {
-  let base_path = Path::new(prefix_path);
-  validate_sandbox_path(base_path)?;
-
-  let directories = vec![
-    base_path.join("drive_c"),
-    base_path.join("drive_c").join("windows"),
-    base_path.join("drive_c").join("windows").join("system32"),
-    base_path.join("drive_c").join("windows").join("syswow64"),
-    base_path.join("drive_c").join("windows").join("Fonts"),
-    base_path.join("drive_c").join("windows").join("Installer"),
-    base_path.join("drive_c").join("windows").join("temp"),
-    base_path.join("drive_c").join("Program Files"),
-    base_path.join("drive_c").join("Program Files (x86)"),
-    base_path.join("drive_c").join("ProgramData"),
-    base_path.join("drive_c").join("users"),
-    base_path.join("drive_c").join("users").join("steamuser"),
-    base_path.join("drive_c").join("users").join("steamuser").join("Desktop"),
-    base_path.join("drive_c").join("users").join("steamuser").join("Documents"),
-    base_path.join("drive_c").join("users").join("steamuser").join("Downloads"),
-    base_path.join("drive_c").join("users").join("steamuser").join("AppData"),
-    base_path.join("drive_c").join("users").join("steamuser").join("AppData").join("Local"),
-    base_path.join("drive_c").join("users").join("steamuser").join("AppData").join("Roaming"),
-    base_path.join("dosdevices"),
-  ];
-
-  let mut total_files: u32 = 0;
-  for dir in &directories {
-    fs::create_dir_all(dir).map_err(|e| format!("Failed to create directory {}: {}", dir.display(), e))?;
-    total_files += 1;
-  }
-
-  let dos_c = base_path.join("dosdevices").join("c:");
-  if !dos_c.exists() {
-    #[cfg(unix)]
-    {
-      let _ = std::os::unix::fs::symlink(base_path.join("drive_c"), &dos_c);
-      total_files += 1;
-    }
-  }
-
-  let system_reg_content = format!(
-    r#"WINE REGISTRY Version 2
-;; FusionCross Auto-Generated System Registry
-;; Prefix Type: {prefix_type}
-;; Generated: 2026-05-22
-
-[System\\CurrentControlSet\\Control\\Windows]
-"CSDVersion"=dword:00000200
-
-[Software\\Microsoft\\Windows\\CurrentVersion]
-"ProgramFilesDir"="C:\\Program Files"
-"CommonFilesDir"="C:\\Program Files\\Common Files"
-
-[Software\\Microsoft\\Windows NT\\CurrentVersion]
-"CurrentBuild"="19045"
-"CurrentBuildNumber"="19045"
-"CurrentVersion"="6.3"
-"ProductName"="Windows 10 Pro"
-
-[Software\\Wine\\DllOverrides]
-"d3d11"="native,builtin"
-"d3d9"="native,builtin"
-"dxgi"="native,builtin"
-"d3d10core"="native,builtin"
-
-[Software\\Wine\\Direct3D]
-"MaxShaderModelVS"=dword:00000005
-"MaxShaderModelPS"=dword:00000005
-"MaxShaderModelGS"=dword:00000005
-"csmt"=dword:00000003
-"#
-  );
-
-  let user_reg_content = format!(
-    r#"WINE REGISTRY Version 2
-;; FusionCross Auto-Generated User Registry
-;; Generated: 2026-05-22
-
-[Software\\Wine\\Mac Driver]
-"RetinaMode"="Y"
-
-[Software\\Wine\\DllOverrides]
-"winemenubuilder.exe"=""
-
-[Control Panel\\Desktop]
-"FontSmoothing"="2"
-"FontSmoothingType"=dword:00000002
-"FontSmoothingGamma"=dword:00000578
-"#
-  );
-
-  let system_reg_path = base_path.join("system.reg");
-  let user_reg_path = base_path.join("user.reg");
-  let userdef_reg_path = base_path.join("userdef.reg");
-
-  fs::write(&system_reg_path, system_reg_content).map_err(|e| format!("Failed system.reg: {}", e))?;
-  total_files += 1;
-
-  fs::write(&user_reg_path, user_reg_content).map_err(|e| format!("Failed user.reg: {}", e))?;
-  total_files += 1;
-
-  fs::write(&userdef_reg_path, "WINE REGISTRY Version 2\n;; Default user registry\n").map_err(|e| format!("Failed userdef.reg: {}", e))?;
-  total_files += 1;
-
-  let mut dll_stubs: Vec<String> = Vec::new();
-  let dlls_to_inject = ["d3d11.dll", "d3d9.dll", "dxgi.dll", "d3d10core.dll"];
-  for dll_name in &dlls_to_inject {
-    let dll_path = base_path.join("drive_c").join("windows").join("system32").join(dll_name);
-    let stub_content = format!(
-      "FusionCross DLL Override Stub\nLibrary: {}\nType: native,builtin\nNote: DXVK active\n",
-      dll_name
-    );
-    fs::write(&dll_path, stub_content).map_err(|e| format!("Failed stub copy {}: {}", dll_name, e))?;
-    dll_stubs.push(dll_name.to_string());
-    total_files += 1;
-  }
-
-  let timestamp_path = base_path.join(".update-timestamp");
-  fs::write(&timestamp_path, "1716393600").map_err(|e| format!("Failed to write timestamp: {}", e))?;
-  total_files += 1;
-
-  let info = SandboxInfo {
-    bottle_id: String::new(),
-    prefix_path: prefix_path.to_string(),
-    drive_c_path: base_path.join("drive_c").to_string_lossy().to_string(),
-    system32_path: base_path.join("drive_c").join("windows").join("system32").to_string_lossy().to_string(),
-    program_files_path: base_path.join("drive_c").join("Program Files").to_string_lossy().to_string(),
-    registry_files: vec![
-      system_reg_path.to_string_lossy().to_string(),
-      user_reg_path.to_string_lossy().to_string(),
-      userdef_reg_path.to_string_lossy().to_string(),
-    ],
-    dll_overrides_injected: dll_stubs,
-    total_files_created: total_files,
-  };
-
-  Ok(info)
-}
-
-#[tauri::command]
-fn initialize_prefix_sandbox(bottle_id: String, prefix_path: String, prefix_type: String) -> Result<SandboxInfo, String> {
-  validate_id(&bottle_id)?;
-  let info = initialize_prefix_sandbox_impl(&prefix_path, &prefix_type)?;
-  // preserve command behavior for explicit initialize command (no wineboot side effects)
-  let mut info = info;
-  info.bottle_id = bottle_id;
-  Ok(info)
-}
-
-#[tauri::command]
-fn reset_sandbox(
-  bottle_id: String,
-  prefix_path: String,
-  state: State<'_, AppState>,
-) -> Result<String, String> {
-  validate_id(&bottle_id)?;
-  let path = Path::new(&prefix_path);
-  validate_sandbox_path(path)?;
-
-  if path.exists() {
-    fs::remove_dir_all(path).map_err(|e| format!("Failed to remove sandbox: {}", e))?;
-  }
-  let settings = {
-    let data = state.data.lock().map_err(|e| e.to_string())?;
-    data.settings.clone()
-  };
-  let _ = initialize_bottle_prefix(&prefix_path, "gaming", &settings, None)?;
-
-  Ok(format!("Sandbox '{}' has been reset successfully", bottle_id))
-}
-
-#[tauri::command]
-fn open_prefix_in_finder(prefix_path: String) -> Result<bool, String> {
-  let path = Path::new(&prefix_path);
-  validate_sandbox_path(path)?;
-
-  if !path.exists() {
-    return Err(format!("Path does not exist: {}", prefix_path));
-  }
-
-  Command::new("open")
-    .arg(&prefix_path)
-    .spawn()
-    .map_err(|e| format!("Failed to open Finder: {}", e))?;
-
-  Ok(true)
-}
-
-#[tauri::command]
-fn download_wine_engine(
-  engine_url: String,
-  target_id: String,
-  app_handle: AppHandle,
-) -> Result<String, String> {
-  validate_id(&target_id)?;
-  validate_download_url(&engine_url)?;
-
-  let base = get_fusioncross_base_dir();
-  let runtimes_dir = base.join("runtimes");
-  let target_dir = runtimes_dir.join(&target_id);
-  validate_sandbox_path(&target_dir)?;
-  
-  fs::create_dir_all(&target_dir)
-    .map_err(|e| format!("Failed to create runtime directory: {}", e))?;
-
-  let target_id_clone = target_id.clone();
-  let target_dir_clone = target_dir.clone();
-
-  std::thread::spawn(move || {
-    let _ = app_handle.emit("download-progress", DownloadProgress {
-      id: target_id_clone.clone(),
-      progress: 0,
-      status: "downloading".to_string(),
-      message: format!("Starting download from {}...", engine_url),
-    });
-
-    let archive_path = target_dir_clone.join("engine.tar.gz");
-    let curl_result = Command::new("curl")
-      .args(["-L", "-o"])
-      .arg(archive_path.to_string_lossy().as_ref())
-      .arg(&engine_url)
-      .arg("--progress-bar")
-      .stdout(Stdio::piped())
-      .stderr(Stdio::piped())
-      .output();
-
-    match curl_result {
-      Ok(output) => {
-        if !output.status.success() {
-          let err = String::from_utf8_lossy(&output.stderr);
-          let _ = app_handle.emit("download-progress", DownloadProgress {
-            id: target_id_clone.clone(),
-            progress: 0,
-            status: "error".to_string(),
-            message: format!("Download failed: {}", err),
-          });
-          return;
-        }
-
-        let _ = app_handle.emit("download-progress", DownloadProgress {
-          id: target_id_clone.clone(),
-          progress: 60,
-          status: "extracting".to_string(),
-          message: "Download complete. Extracting safely...".to_string(),
-        });
-
-        if let Err(err) = validate_tar_archive_for_safe_extract(&archive_path) {
-          let _ = app_handle.emit("download-progress", DownloadProgress {
-            id: target_id_clone.clone(),
-            progress: 60,
-            status: "error".to_string(),
-            message: format!("Unsafe archive rejected: {}", err),
-          });
-          let _ = fs::remove_file(&archive_path);
-          return;
-        }
-
-        let tar_result = Command::new("tar")
-          .args(["-xzf"])
-          .arg(archive_path.to_string_lossy().as_ref())
-          .arg("-C")
-          .arg(target_dir_clone.to_string_lossy().as_ref())
-          .output();
-
-        match tar_result {
-          Ok(tar_out) => {
-            if tar_out.status.success() {
-              let _ = fs::remove_file(&archive_path);
-
-              let _ = app_handle.emit("download-progress", DownloadProgress {
-                id: target_id_clone.clone(),
-                progress: 100,
-                status: "complete".to_string(),
-                message: "Engine installed successfully!".to_string(),
-              });
-            } else {
-              let err = String::from_utf8_lossy(&tar_out.stderr);
-              let _ = app_handle.emit("download-progress", DownloadProgress {
-                id: target_id_clone.clone(),
-                progress: 60,
-                status: "error".to_string(),
-                message: format!("Extraction failed: {}", err),
-              });
-            }
-          }
-          Err(e) => {
-            let _ = app_handle.emit("download-progress", DownloadProgress {
-              id: target_id_clone.clone(),
-              progress: 60,
-              status: "error".to_string(),
-              message: format!("Failed to run tar: {}", e),
-            });
-          }
-        }
-      }
-      Err(e) => {
-        let _ = app_handle.emit("download-progress", DownloadProgress {
-          id: target_id_clone.clone(),
-          progress: 0,
-          status: "error".to_string(),
-          message: format!("Failed to start curl: {}", e),
-        });
-      }
-    }
-  });
-
-  Ok(format!("Download started for engine '{}'", target_id))
-}
-
-#[tauri::command]
-fn execute_windows_binary(
-  prefix_path: String,
-  exe_path: String,
-  arguments: String,
-  app_handle: AppHandle,
-  state: State<'_, AppState>,
-) -> Result<String, String> {
-  validate_sandbox_path(Path::new(&prefix_path))?;
-  validate_command_text(&arguments, "Arguments", 2048)?;
-
-  let (settings, bottle) = {
-    let data = state.data.lock().map_err(|e| e.to_string())?;
-    let bottle = data
-      .bottles
-      .iter()
-      .find(|b| b.path == prefix_path)
-      .cloned();
-    (data.settings.clone(), bottle)
-  };
-
-  if resolve_wine_binary(&settings).is_none() {
-    return Err(
-      "Wine is not installed. Install with: brew install --cask wine-stable".to_string(),
-    );
-  }
-
-  spawn_wine_process(
-    prefix_path.clone(),
-    exe_path.clone(),
-    arguments,
-    settings,
-    bottle,
-    app_handle,
-    state.active_child_pid.clone(),
-    false,
-  );
-
-  Ok(format!("Launching via Wine: {}", exe_path))
-}
-
-// ========================================================
-// ADVANCED PRODUCTION BACKEND COMMANDS
-// ========================================================
-
-#[tauri::command]
-fn check_rosetta_status() -> Result<RosettaStatus, String> {
-  let mut is_apple_silicon = false;
-  let mut is_translated = false;
-  let mut rosetta_installed = false;
-  let mut wine_installed = false;
-  let mut cpu_brand = "Intel Core Processor".to_string();
-
-  // 1. Check if running on ARM64 macOS (Apple Silicon)
-  let output = Command::new("sysctl")
-    .arg("-n")
-    .arg("hw.optional.arm64")
-    .output();
-  if let Ok(out) = output {
-    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    if s == "1" {
-      is_apple_silicon = true;
-      cpu_brand = "Apple M-Series Silicon (ARM64)".to_string();
-    }
-  }
-
-  // 2. Check if process is translated (Rosetta 2 translation active)
-  let output = Command::new("sysctl")
-    .arg("-n")
-    .arg("sysctl.proc_translated")
-    .output();
-  if let Ok(out) = output {
-    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    if s == "1" {
-      is_translated = true;
-    }
-  }
-
-  // 3. Check if Rosetta is installed / operational
-  let rosetta_paths = [
-    "/Library/Apple/usr/libexec/oah/translate",
-    "/usr/libexec/oah/translate",
-  ];
-  for path in &rosetta_paths {
-    if Path::new(path).exists() {
-      rosetta_installed = true;
-      break;
-    }
-  }
-  if is_apple_silicon && !rosetta_installed {
-    let pgrep = Command::new("pgrep").arg("oahd").output();
-    if let Ok(pgrep_out) = pgrep {
-      if pgrep_out.status.success() {
-        rosetta_installed = true;
-      }
-    }
-  }
-
-  // 4. Validate if wine is installed
-  let wine_candidates = [
-    "/usr/local/bin/wine64",
-    "/opt/homebrew/bin/wine64",
-  ];
-  for candidate in &wine_candidates {
-    if Path::new(candidate).exists() {
-      wine_installed = true;
-      break;
-    }
-  }
-
-  Ok(RosettaStatus {
-    is_apple_silicon,
-    is_translated,
-    rosetta_installed: rosetta_installed || is_translated,
-    wine_installed,
-    cpu_brand,
-  })
-}
-
-#[tauri::command]
-fn install_dependencies(
-  bottle_id: String,
-  dependency: String,
-  app_handle: AppHandle,
-  state: State<'_, AppState>,
-) -> Result<String, String> {
-  validate_id(&bottle_id)?;
-  validate_command_text(&dependency, "Dependency verb", 128)?;
-
-  let (bottle_name, prefix_path, settings) = {
-    let data = state.data.lock().map_err(|e| e.to_string())?;
-    let index = data.bottles.iter().position(|b| b.id == bottle_id)
-      .ok_or_else(|| "Bottle not found".to_string())?;
-    
-    (
-      data.bottles[index].name.clone(),
-      data.bottles[index].path.clone(),
-      data.settings.clone(),
-    )
-  };
-
-  let dep_clone = dependency.clone();
-  let app_handle_clone = app_handle.clone();
-
-  std::thread::spawn(move || {
-    #[derive(Serialize, Clone)]
-    struct DepProgress {
-      id: String,
-      progress: u32,
-    }
-
-    let _ = app_handle_clone.emit(
-      "wine-log-stream",
-      format!("[Winetricks] Resolving dependency '{}' for '{}'.", dep_clone, bottle_name),
-    );
-
-    let Some(wine_bin) = resolve_wine_binary(&settings) else {
-      let _ = app_handle_clone.emit(
-        "wine-log-stream",
-        "[FusionCross:Error] Wine is not installed. Cannot run winetricks.".to_string(),
-      );
-      return;
-    };
-
-    let Some(winetricks_bin) = resolve_winetricks_binary() else {
-      let _ = app_handle_clone.emit(
-        "wine-log-stream",
-        "[FusionCross:Error] Winetricks is not installed. Install with: brew install winetricks".to_string(),
-      );
-      return;
-    };
-
-    let _ = app_handle_clone.emit(
-      "download-progress",
-      DepProgress { id: format!("dep-{}", dep_clone), progress: 10 },
-    );
-    let _ = app_handle_clone.emit(
-      "wine-log-stream",
-      format!("[Winetricks] WINEPREFIX={}", prefix_path),
-    );
-
-    let output = Command::new(winetricks_bin)
-      .env("WINEPREFIX", &prefix_path)
-      .env("WINE", &wine_bin)
-      .arg("-q")
-      .arg(&dep_clone)
-      .output();
-
-    match output {
-      Ok(out) => {
-        let _ = app_handle_clone.emit(
-          "download-progress",
-          DepProgress { id: format!("dep-{}", dep_clone), progress: 90 },
-        );
-
-        for line in String::from_utf8_lossy(&out.stdout).lines() {
-          let _ = app_handle_clone.emit("wine-log-stream", format!("[Winetricks] {}", line));
-        }
-        for line in String::from_utf8_lossy(&out.stderr).lines() {
-          let _ = app_handle_clone.emit("wine-log-stream", format!("[Winetricks] {}", line));
-        }
-
-        let status_line = if out.status.success() {
-          format!(
-            "[Winetricks] Successfully installed '{}' into bottle '{}'.",
-            dep_clone, bottle_name
-          )
-        } else {
-          format!(
-            "[Winetricks:Error] Dependency '{}' failed with status {}.",
-            dep_clone, out.status
-          )
-        };
-        let _ = app_handle_clone.emit("wine-log-stream", status_line);
-        let _ = app_handle_clone.emit(
-          "download-progress",
-          DepProgress {
-            id: format!("dep-{}", dep_clone),
-            progress: if out.status.success() { 100 } else { 0 },
-          },
-        );
-      }
-      Err(err) => {
-        let _ = app_handle_clone.emit(
-          "wine-log-stream",
-          format!("[Winetricks:Error] Failed to execute winetricks: {}", err),
-        );
-        let _ = app_handle_clone.emit(
-          "download-progress",
-          DepProgress { id: format!("dep-{}", dep_clone), progress: 0 },
-        );
-      }
-    }
-  });
-
-  Ok(format!("Dependency installation started for '{}'", dependency))
-}
-
-#[tauri::command]
-fn install_dxvk(
-  bottle_id: String,
-  version: String,
-  app_handle: AppHandle,
-  state: State<'_, AppState>,
-) -> Result<String, String> {
-  validate_id(&bottle_id)?;
-
-  let prefix_path = {
-    let mut data = state.data.lock().map_err(|e| e.to_string())?;
-    let index = data.bottles.iter().position(|b| b.id == bottle_id)
-      .ok_or_else(|| "Bottle not found".to_string())?;
-    
-    data.bottles[index].dxvk_enabled = true;
-    data.bottles[index].moltenvk_enabled = true;
-    
-    let has_d3d11 = data.bottles[index].dll_overrides.iter().any(|o| o.library == "d3d11");
-    if !has_d3d11 {
-      data.bottles[index].dll_overrides.push(DllOverride {
-        library: "d3d11".to_string(),
-        override_type: "native,builtin".to_string(),
-      });
-    }
-    let has_dxgi = data.bottles[index].dll_overrides.iter().any(|o| o.library == "dxgi");
-    if !has_dxgi {
-      data.bottles[index].dll_overrides.push(DllOverride {
-        library: "dxgi".to_string(),
-        override_type: "native,builtin".to_string(),
-      });
-    }
-
-    save_state_to_disk_impl(&*data)?;
-    data.bottles[index].path.clone()
-  };
-
-  let base_path = Path::new(&prefix_path);
-  let system32 = base_path.join("drive_c").join("windows").join("system32");
-
-  if system32.exists() {
-    let dlls = ["d3d11.dll", "dxgi.dll", "d3d9.dll", "d3d10core.dll"];
-    for dll in &dlls {
-      let dll_path = system32.join(dll);
-      let content = format!(
-        "FusionCross DXVK Translation Layer DLL\nVersion: {}\nBinding preferences: native,builtin\nActive Vulkan-to-Metal loader pipeline.\n",
-        version
-      );
-      let _ = fs::write(&dll_path, content);
-    }
-  }
-
-  let app_handle_clone = app_handle.clone();
-  let version_clone = version.clone();
-  std::thread::spawn(move || {
-    let _ = app_handle_clone.emit("wine-log-stream", format!(
-      "[FusionCross] Initializing DXVK GPU translation pipeline (Version: {})...", version_clone
-    ));
-    std::thread::sleep(Duration::from_millis(300));
-    let _ = app_handle_clone.emit("wine-log-stream", "[DXVK] Checking Vulkan 1.3 host support... OK".to_string());
-    std::thread::sleep(Duration::from_millis(300));
-    let _ = app_handle_clone.emit("wine-log-stream", "[DXVK] MoltenVK pipeline mapped to Metal API context successfully.".to_string());
-    std::thread::sleep(Duration::from_millis(300));
-    let _ = app_handle_clone.emit("wine-log-stream", format!(
-      "[DXVK] Installed translation dlls successfully into drive_c/windows/system32 (v{})", version_clone
-    ));
-  });
-
-  Ok(format!("DXVK version {} successfully installed.", version))
-}
-
-#[tauri::command]
-fn backup_bottle(
-  bottle_id: String,
-  backup_path: String,
-  state: State<'_, AppState>,
-) -> Result<String, String> {
-  validate_id(&bottle_id)?;
-  
-  let prefix_path = {
-    let data = state.data.lock().map_err(|e| e.to_string())?;
-    let index = data.bottles.iter().position(|b| b.id == bottle_id)
-      .ok_or_else(|| "Bottle not found".to_string())?;
-    data.bottles[index].path.clone()
-  };
-
-  let source_path = Path::new(&prefix_path);
-  if !source_path.exists() {
-    return Err("Bottle sandbox directory does not exist on disk.".to_string());
-  }
-
-  validate_sandbox_path(source_path)?;
-  let target_archive = Path::new(&backup_path);
-  
-  let status = Command::new("tar")
-    .arg("-czf")
-    .arg(target_archive)
-    .arg("-C")
-    .arg(source_path.parent().unwrap())
-    .arg(source_path.file_name().unwrap())
-    .status()
-    .map_err(|e| format!("Failed to run tar command: {}", e))?;
-
-  if status.success() {
-    Ok(format!("Successfully backed up bottle '{}' to archive '{}'.", bottle_id, backup_path))
-  } else {
-    Err("Tar compression command failed during execution.".to_string())
-  }
-}
-
-#[tauri::command]
-fn scan_apps(bottle_id: String, state: State<'_, AppState>) -> Result<Vec<DiscoveredApp>, String> {
-  validate_id(&bottle_id)?;
-
-  let prefix_path = {
-    let data = state.data.lock().map_err(|e| e.to_string())?;
-    let index = data.bottles.iter().position(|b| b.id == bottle_id)
-      .ok_or_else(|| "Bottle not found".to_string())?;
-    data.bottles[index].path.clone()
-  };
-
-  let base_path = Path::new(&prefix_path);
-  let drive_c = base_path.join("drive_c");
-  
-  if !drive_c.exists() {
-    return Ok(vec![]);
-  }
-
-  let mut discovered = Vec::new();
-  let search_folders = [
-    drive_c.join("Program Files"),
-    drive_c.join("Program Files (x86)"),
-  ];
-
-  for folder in &search_folders {
-    if folder.exists() {
-      scan_exes_recursively(&drive_c, folder, &mut discovered);
-    }
-  }
-
-  discovered.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-  Ok(discovered)
-}
-
-fn scan_exes_recursively(drive_c: &Path, dir: &Path, acc: &mut Vec<DiscoveredApp>) {
-  if let Ok(entries) = fs::read_dir(dir) {
-    for entry in entries.flatten() {
-      let path = entry.path();
-      if path.is_dir() {
-        let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
-        if !matches!(name.as_str(), "Windows" | "System32" | "SysWOW64") {
-          scan_exes_recursively(drive_c, &path, acc);
-        }
-      } else if path.is_file() {
-        if let Some(ext) = path.extension() {
-          if ext.to_string_lossy().to_lowercase() == "exe" {
-            let file_name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
-            let lower = file_name.to_lowercase();
-            if lower.contains("uninstall")
-              || lower.contains("helper")
-              || lower.contains("setup")
-              || lower.contains("redist")
-            {
-              continue;
-            }
-            let windows_path = unix_path_to_windows(
-              drive_c
-                .parent()
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_default()
-                .as_str(),
-              &path,
-            );
-            let meta = entry.metadata().ok();
-            let size = meta.map(|m| m.len()).unwrap_or(0);
-            acc.push(DiscoveredApp {
-              name: file_name
-                .trim_end_matches(".exe")
-                .trim_end_matches(".EXE")
-                .to_string(),
-              path: windows_path,
-              size_bytes: size,
-            });
-          }
-        }
-      }
-    }
-  }
-}
-
-#[tauri::command]
-fn export_logs(logs: Vec<String>, export_path: String) -> Result<String, String> {
-  let file_path = Path::new(&export_path);
-  
-  if !is_path_under_home(&export_path) {
-    return Err("Security Error: Export log path must reside inside your user home folder.".to_string());
-  }
-
-  let mut file = fs::File::create(file_path).map_err(|e| format!("Failed to create export log file: {}", e))?;
-  for line in logs {
-    writeln!(file, "{}", line).map_err(|e| format!("Failed to write log line: {}", e))?;
-  }
-
-  Ok(format!("Successfully exported diagnostic logs to '{}'.", export_path))
-}
-
-fn export_app_data_impl(export_path: &str, data: &AppStateData) -> Result<String, String> {
-  let path = Path::new(export_path);
-  if !is_path_under_home(export_path) {
-    return Err("Security Error: Export backup path must reside inside your user home folder.".to_string());
-  }
-  
-  let content = serde_json::to_string_pretty(data).map_err(|e| format!("Serialization error: {}", e))?;
-  fs::write(path, content).map_err(|e| format!("Failed to write backup file: {}", e))?;
-  
-  Ok(format!("Successfully exported database to '{}'.", export_path))
-}
-
-fn import_app_data_impl(import_path: &str, data_mutex: &Mutex<AppStateData>) -> Result<String, String> {
-  let path = Path::new(import_path);
-  if !is_path_under_home(import_path) {
-    return Err("Security Error: Import path must reside inside your user home folder.".to_string());
-  }
-  if !path.exists() {
-    return Err("Import path does not exist on disk.".to_string());
-  }
-  
-  let content = fs::read_to_string(path).map_err(|e| format!("Failed to read backup file: {}", e))?;
-  let mut imported_data = serde_json::from_str::<AppStateData>(&content)
-    .map_err(|e| format!("Invalid backup file format: {}", e))?;
-    
-  // Enforce dynamic home path resolution upon import
-  let base_str = get_fusioncross_base_dir().to_string_lossy().to_string();
-  for b in &mut imported_data.bottles {
-    if b.path.contains("/fusioncross/bottles") || b.path.contains("/fusionwine/bottles") {
-      b.path = format!("{}/bottles/{}", base_str, b.id);
-    }
-  }
-  
-  let mut data = data_mutex.lock().map_err(|e| e.to_string())?;
-  *data = imported_data;
-  save_state_to_disk_impl(&*data)?;
-  
-  Ok("Successfully imported database configurations. Refreshing application...".to_string())
-}
-
-#[tauri::command]
-fn export_app_data(export_path: String, state: State<'_, AppState>) -> Result<String, String> {
-  let data = state.data.lock().map_err(|e| e.to_string())?;
-  export_app_data_impl(&export_path, &*data)
-}
-
-#[tauri::command]
-fn import_app_data(import_path: String, state: State<'_, AppState>) -> Result<String, String> {
-  import_app_data_impl(&import_path, &state.data)
-}
-
-// ========================================================
-// APPLE CORNERSTONE NATIVE DIALOG PICKERS
-// ========================================================
-
-#[tauri::command]
-fn open_file_picker(title: String, file_types: Vec<String>) -> Result<String, String> {
-  let types_str = if file_types.is_empty() {
-    "".to_string()
-  } else {
-    let items: Vec<String> = file_types.iter().map(|t| applescript_string(t)).collect();
-    format!(" of type {{{}}}", items.join(", "))
-  };
-
-  let script = format!(
-    "POSIX path of (choose file{} with prompt {})",
-    types_str,
-    applescript_string(&title)
-  );
-
-  let output = Command::new("osascript")
-    .arg("-e")
-    .arg(&script)
-    .output();
-
-  match output {
-    Ok(out) => {
-      if out.status.success() {
-        let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
-        Ok(path)
-      } else {
-        Ok("".to_string())
-      }
-    }
-    Err(e) => Err(format!("Failed to execute AppleScript file picker: {}", e)),
-  }
-}
-
-#[tauri::command]
-fn open_folder_picker(title: String) -> Result<String, String> {
-  let script = format!(
-    "POSIX path of (choose folder with prompt {})",
-    applescript_string(&title)
-  );
-
-  let output = Command::new("osascript")
-    .arg("-e")
-    .arg(&script)
-    .output();
-
-  match output {
-    Ok(out) => {
-      if out.status.success() {
-        let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
-        Ok(path)
-      } else {
-        Ok("".to_string())
-      }
-    }
-    Err(e) => Err(format!("Failed to execute AppleScript folder picker: {}", e)),
-  }
-}
-
-#[tauri::command]
-fn save_file_picker(title: String, default_name: String) -> Result<String, String> {
-  let script = format!(
-    "POSIX path of (choose file name with prompt {} default name {})",
-    applescript_string(&title),
-    applescript_string(&default_name)
-  );
-
-  let output = Command::new("osascript")
-    .arg("-e")
-    .arg(&script)
-    .output();
-
-  match output {
-    Ok(out) => {
-      if out.status.success() {
-        let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
-        Ok(path)
-      } else {
-        Ok("".to_string())
-      }
-    }
-    Err(e) => Err(format!("Failed to execute AppleScript save dialog: {}", e)),
-  }
-}
+use state::{AppState, load_state_from_disk_impl};
 
 // ========================================================
 // APPLICATION BOOTSTRAP
@@ -2474,52 +21,53 @@ fn save_file_picker(title: String, default_name: String) -> Result<String, Strin
 fn main() {
   let initial_state = load_state_from_disk_impl();
 
-  let state = AppState {
+  let app_state = AppState {
     data: Mutex::new(initial_state),
-    active_process_id: Mutex::new(None),
+    active_process_id: Arc::new(Mutex::new(None)),
     active_child_pid: Arc::new(Mutex::new(None)),
   };
 
   tauri::Builder::default()
-    .manage(state)
+    .manage(app_state)
     .invoke_handler(tauri::generate_handler![
-      list_bottles,
-      create_bottle,
-      get_session,
-      complete_onboarding,
-      get_settings,
-      update_settings,
-      delete_bottle,
-      clone_bottle,
-      update_bottle_settings,
-      list_apps,
-      register_app,
-      toggle_favorite,
-      run_app,
-      stop_active_app,
-      list_runtimes,
-      trigger_runtime_download,
-      get_system_metrics,
+      commands::list_bottles,
+      commands::create_bottle,
+      commands::get_session,
+      commands::complete_onboarding,
+      commands::get_settings,
+      commands::update_settings,
+      commands::delete_bottle,
+      commands::clone_bottle,
+      commands::update_bottle_settings,
+      commands::list_apps,
+      commands::register_app,
+      commands::toggle_favorite,
+      commands::run_app,
+      commands::stop_active_app,
+      commands::list_runtimes,
+      commands::mark_runtime_downloaded,
+      commands::trigger_runtime_download,
+      commands::get_system_metrics,
       // Sandboxing commands
-      initialize_prefix_sandbox,
-      reset_sandbox,
-      open_prefix_in_finder,
-      download_wine_engine,
-      install_windows_software,
-      execute_windows_binary,
+      commands::initialize_prefix_sandbox,
+      commands::reset_sandbox,
+      commands::open_prefix_in_finder,
+      commands::download_wine_engine,
+      commands::install_windows_software,
+      commands::execute_windows_binary,
       // Diagnostics & Dependency utilities
-      check_rosetta_status,
-      install_dependencies,
-      install_dxvk,
-      backup_bottle,
-      scan_apps,
-      export_logs,
-      export_app_data,
-      import_app_data,
+      commands::check_rosetta_status,
+      commands::install_dependencies,
+      commands::install_dxvk,
+      commands::backup_bottle,
+      commands::scan_apps,
+      commands::export_logs,
+      commands::export_app_data,
+      commands::import_app_data,
       // Native AppleScript dialog pickers
-      open_file_picker,
-      open_folder_picker,
-      save_file_picker
+      commands::open_file_picker,
+      commands::open_folder_picker,
+      commands::save_file_picker
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
@@ -2530,13 +78,76 @@ fn main() {
 // ========================================================
 #[cfg(test)]
 mod tests {
-  use super::*;
+  use std::fs;
+  use std::path::Path;
+  use std::sync::Mutex;
+
+  use crate::state::*;
+  use crate::security::*;
+  use crate::wine::*;
+  use crate::types::*;
+
+  // =====================================================
+  // PATH HELPERS
+  // =====================================================
 
   #[test]
   fn test_get_fusioncross_base_dir() {
     let dir = get_fusioncross_base_dir();
     assert!(dir.to_string_lossy().contains("Library/Application Support/FusionCross"));
   }
+
+  #[test]
+  fn test_new_bottle_id_format() {
+    let id = new_bottle_id();
+    assert!(id.starts_with("bottle-"));
+    assert_eq!(id.chars().count(), 15); // "bottle-" + 8 hex chars
+    assert!(id.chars().skip(7).all(|c| c.is_ascii_hexdigit()));
+  }
+
+  #[test]
+  fn test_utc_timestamp_format() {
+    let ts = utc_timestamp_now();
+    assert!(!ts.is_empty());
+    // Should look like an ISO 8601 date or the fallback
+    assert!(ts.contains('T') || ts == FALLBACK_TIMESTAMP);
+  }
+
+  // =====================================================
+  // CALCULATE DIR SIZE
+  // =====================================================
+
+  #[test]
+  fn test_calculate_dir_size_nonexistent() {
+    let size = calculate_dir_size(Path::new("/nonexistent/directory/path/"));
+    assert_eq!(size, 0);
+  }
+
+  #[test]
+  fn test_calculate_dir_size_empty() {
+    let tmp = std::env::temp_dir().join("fc-test-empty-dir");
+    let _ = fs::remove_dir_all(&tmp);
+    fs::create_dir_all(&tmp).expect("create temp dir");
+    let size = calculate_dir_size(&tmp);
+    assert_eq!(size, 0);
+    let _ = fs::remove_dir_all(&tmp);
+  }
+
+  #[test]
+  fn test_calculate_dir_size_with_files() {
+    let tmp = std::env::temp_dir().join("fc-test-size-dir");
+    let _ = fs::remove_dir_all(&tmp);
+    fs::create_dir_all(&tmp).expect("create temp dir");
+    fs::write(tmp.join("a.txt"), "hello").expect("write file");
+    fs::write(tmp.join("b.txt"), "world").expect("write file");
+    let size = calculate_dir_size(&tmp);
+    assert!(size > 0);
+    let _ = fs::remove_dir_all(&tmp);
+  }
+
+  // =====================================================
+  // SANDBOX PATH VALIDATION
+  // =====================================================
 
   #[test]
   fn test_validate_sandbox_path_safe() {
@@ -2555,9 +166,22 @@ mod tests {
   }
 
   #[test]
+  fn test_validate_sandbox_path_outside() {
+    let outside = Path::new("/tmp").join("malicious");
+    let res = validate_sandbox_path(&outside);
+    assert!(res.is_err());
+  }
+
+  // =====================================================
+  // ID VALIDATION
+  // =====================================================
+
+  #[test]
   fn test_validate_id_success() {
     assert!(validate_id("bottle-gaming-90").is_ok());
     assert!(validate_id("my_bottle_1").is_ok());
+    assert!(validate_id("a").is_ok());
+    assert!(validate_id("abc123-_").is_ok());
   }
 
   #[test]
@@ -2567,21 +191,308 @@ mod tests {
   }
 
   #[test]
+  fn test_validate_id_empty() {
+    assert!(validate_id("").is_err());
+  }
+
+  #[test]
+  fn test_validate_id_too_long() {
+    let long = "a".repeat(129);
+    assert!(validate_id(&long).is_err());
+  }
+
+  // =====================================================
+  // DISPLAY NAME VALIDATION
+  // =====================================================
+
+  #[test]
+  fn test_validate_display_name_valid() {
+    assert!(validate_display_name("Steam").is_ok());
+    assert!(validate_display_name("Cyberpunk 2077").is_ok());
+    assert!(validate_display_name("My-App_v1.0").is_ok());
+  }
+
+  #[test]
+  fn test_validate_display_name_empty() {
+    assert!(validate_display_name("").is_err());
+  }
+
+  #[test]
+  fn test_validate_display_name_too_long() {
+    let long = "a".repeat(129);
+    assert!(validate_display_name(&long).is_err());
+  }
+
+  #[test]
+  fn test_validate_display_name_invalid_chars() {
+    assert!(validate_display_name("steam@home").is_err());
+    assert!(validate_display_name("steam;rm").is_err());
+    assert!(validate_display_name("steam<script>").is_err());
+  }
+
+  // =====================================================
+  // COMMAND TEXT VALIDATION
+  // =====================================================
+
+  #[test]
+  fn test_validate_command_text_valid() {
+    assert!(validate_command_text("hello world", "test", 256).is_ok());
+    assert!(validate_command_text("", "test", 256).is_ok());
+  }
+
+  #[test]
+  fn test_validate_command_text_too_long() {
+    let long = "a".repeat(257);
+    assert!(validate_command_text(&long, "test", 256).is_err());
+  }
+
+  #[test]
+  fn test_validate_command_text_control_chars() {
+    assert!(validate_command_text("hello\nworld", "test", 256).is_ok());
+    assert!(validate_command_text("hello\tworld", "test", 256).is_ok());
+    assert!(validate_command_text("hello\x00world", "test", 256).is_err());
+  }
+
+  // =====================================================
+  // EXECUTABLE PATH VALIDATION
+  // =====================================================
+
+  #[test]
+  fn test_validate_executable_path_valid() {
+    assert!(validate_executable_path("/Applications/some.app/Content.exe").is_ok());
+  }
+
+  #[test]
+  fn test_validate_executable_path_empty() {
+    assert!(validate_executable_path("").is_err());
+  }
+
+  #[test]
+  fn test_validate_executable_path_whitespace() {
+    assert!(validate_executable_path("   ").is_err());
+  }
+
+  // =====================================================
+  // PREFIX TYPE VALIDATION
+  // =====================================================
+
+  #[test]
+  fn test_validate_prefix_type_valid() {
+    assert!(validate_prefix_type("gaming").is_ok());
+    assert!(validate_prefix_type("productivity").is_ok());
+    assert!(validate_prefix_type("legacy").is_ok());
+    assert!(validate_prefix_type("dxvk-optimized").is_ok());
+    assert!(validate_prefix_type("lightweight").is_ok());
+  }
+
+  #[test]
+  fn test_validate_prefix_type_invalid() {
+    assert!(validate_prefix_type("unknown").is_err());
+    assert!(validate_prefix_type("default").is_err());
+  }
+
+  // =====================================================
+  // HOST INSTALLER PATH VALIDATION
+  // =====================================================
+
+  #[test]
+  fn test_validate_host_installer_path_non_absolute() {
+    let res = validate_host_installer_path("relative/path.exe");
+    assert!(res.is_err());
+    assert!(res.unwrap_err().contains("must be absolute"));
+  }
+
+  #[test]
+  fn test_validate_host_installer_path_nonexistent() {
+    let res = validate_host_installer_path("/tmp/fc-nonexistent-installer-xyz.exe");
+    assert!(res.is_err());
+  }
+
+  // =====================================================
+  // IS PATH UNDER HOME
+  // =====================================================
+
+  #[test]
+  fn test_is_path_under_home_valid() {
+    if let Ok(home) = std::env::var("HOME") {
+      assert!(is_path_under_home(&format!("{}/Documents/test.txt", home)));
+      assert!(is_path_under_home(&home));
+    }
+  }
+
+  #[test]
+  fn test_is_path_under_home_outside() {
+    assert!(!is_path_under_home("/etc/passwd"));
+    assert!(!is_path_under_home("/tmp"));
+  }
+
+  #[test]
+  fn test_is_path_under_home_relative() {
+    assert!(!is_path_under_home("relative/path.txt"));
+  }
+
+  // =====================================================
+  // DOWNLOAD URL VALIDATION
+  // =====================================================
+
+  #[test]
   fn test_validate_download_url_trusted() {
     assert!(validate_download_url("https://github.com/wine/wine/releases").is_ok());
     assert!(validate_download_url("https://dl.winehq.org/wine-builds/").is_ok());
+    assert!(validate_download_url("https://khronos.org/vulkan-sdk/").is_ok());
   }
 
   #[test]
   fn test_validate_download_url_untrusted() {
     assert!(validate_download_url("https://malicious-domain.com/wine.tar.gz").is_err());
+    assert!(validate_download_url("http://github.com/").is_err());
+    assert!(validate_download_url("").is_err());
+  }
+
+  // =====================================================
+  // TAR ENTRY VALIDATION
+  // =====================================================
+
+  #[test]
+  fn test_validate_tar_entry_name_valid() {
+    assert!(validate_tar_entry_name("dxvk/x64/d3d11.dll").is_ok());
+    assert!(validate_tar_entry_name("file.txt").is_ok());
+    assert!(validate_tar_entry_name("dir/subdir/file").is_ok());
   }
 
   #[test]
-  fn test_calculate_dir_size_nonexistent() {
-    let size = calculate_dir_size(Path::new("/nonexistent/directory/path/"));
-    assert_eq!(size, 0);
+  fn test_validate_tar_entry_name_absolute() {
+    assert!(validate_tar_entry_name("/etc/passwd").is_err());
+    assert!(validate_tar_entry_name("\\Windows\\system32").is_err());
   }
+
+  #[test]
+  fn test_validate_tar_entry_name_parent_dir() {
+    assert!(validate_tar_entry_name("../../etc/passwd").is_err());
+  }
+
+  #[test]
+  fn test_validate_tar_entry_name_empty() {
+    assert!(validate_tar_entry_name("").is_err());
+    assert!(validate_tar_entry_name("   ").is_err());
+  }
+
+  // =====================================================
+  // DLL OVERRIDE ABBREVIATION
+  // =====================================================
+
+  #[test]
+  fn test_dll_override_abbrev() {
+    assert_eq!(dll_override_abbrev("native,builtin"), "n,b");
+    assert_eq!(dll_override_abbrev("builtin,native"), "n,b");
+    assert_eq!(dll_override_abbrev("native"), "n");
+    assert_eq!(dll_override_abbrev("builtin"), "b");
+    assert_eq!(dll_override_abbrev("disabled"), "");
+    assert_eq!(dll_override_abbrev("custom_value"), "custom_value");
+  }
+
+  // =====================================================
+  // PATH CONVERSION
+  // =====================================================
+
+  #[test]
+  fn test_unix_path_to_windows_inside_prefix() {
+    let prefix = "/tmp/fc-test-prefix";
+    let unix = Path::new("/tmp/fc-test-prefix/drive_c/Program Files/some.exe");
+    let win = unix_path_to_windows(prefix, unix);
+    assert_eq!(win, "C:\\Program Files\\some.exe");
+  }
+
+  #[test]
+  fn test_unix_path_to_windows_outside_prefix() {
+    let prefix = "/tmp/fc-test-prefix";
+    let unix = Path::new("/tmp/other/file.exe");
+    let win = unix_path_to_windows(prefix, unix);
+    assert_eq!(win, "/tmp/other/file.exe");
+  }
+
+  #[test]
+  fn test_windows_path_to_unix_valid() {
+    let prefix = "/tmp/fc-test-prefix";
+    let result = windows_path_to_unix(prefix, "C:\\Program Files\\some.exe");
+    assert!(result.is_ok());
+    let expected = Path::new("/tmp/fc-test-prefix/drive_c/Program Files/some.exe");
+    assert_eq!(result.unwrap(), expected);
+  }
+
+  #[test]
+  fn test_windows_path_to_unix_already_unix() {
+    let prefix = "/tmp/fc-test-prefix";
+    let result = windows_path_to_unix(prefix, "/tmp/other/file.exe");
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), Path::new("/tmp/other/file.exe"));
+  }
+
+  #[test]
+  fn test_windows_path_to_unix_unsupported() {
+    let prefix = "/tmp/fc-test-prefix";
+    let result = windows_path_to_unix(prefix, "D:\\some.exe");
+    assert!(result.is_err());
+  }
+
+  // =====================================================
+  // BUILD WINE DLL OVERRIDES
+  // =====================================================
+
+  #[test]
+  fn test_build_wine_dll_overrides_no_bottle() {
+    let result = build_wine_dll_overrides(None);
+    assert_eq!(result, "d3d11,dxgi=n,b");
+  }
+
+  #[test]
+  fn test_build_wine_dll_overrides_empty() {
+    let bottle = Bottle {
+      id: "test".to_string(),
+      name: "Test".to_string(),
+      prefix_type: "gaming".to_string(),
+      wine_version: "9.0".to_string(),
+      dxvk_enabled: true,
+      moltenvk_enabled: true,
+      win_version: "win10".to_string(),
+      env_vars: std::collections::HashMap::new(),
+      dll_overrides: vec![],
+      registry_keys: vec![],
+      size_bytes: 0,
+      path: "/tmp/test".to_string(),
+      created_at: "2026-01-01".to_string(),
+    };
+    let result = build_wine_dll_overrides(Some(&bottle));
+    assert_eq!(result, "d3d11,dxgi=n,b");
+  }
+
+  #[test]
+  fn test_build_wine_dll_overrides_with_overrides() {
+    let bottle = Bottle {
+      id: "test".to_string(),
+      name: "Test".to_string(),
+      prefix_type: "gaming".to_string(),
+      wine_version: "9.0".to_string(),
+      dxvk_enabled: true,
+      moltenvk_enabled: true,
+      win_version: "win10".to_string(),
+      env_vars: std::collections::HashMap::new(),
+      dll_overrides: vec![
+        DllOverride { library: "d3d11".to_string(), override_type: "native,builtin".to_string() },
+        DllOverride { library: "d3d9".to_string(), override_type: "builtin".to_string() },
+      ],
+      registry_keys: vec![],
+      size_bytes: 0,
+      path: "/tmp/test".to_string(),
+      created_at: "2026-01-01".to_string(),
+    };
+    let result = build_wine_dll_overrides(Some(&bottle));
+    assert_eq!(result, "d3d11=n,b;d3d9=b");
+  }
+
+  // =====================================================
+  // EXPORT / IMPORT
+  // =====================================================
 
   #[test]
   fn test_export_import_validation() {
@@ -2592,7 +503,7 @@ mod tests {
     }
     let test_file = temp_dir.join("test_backup.json");
     let test_file_str = test_file.to_string_lossy().to_string();
-    
+
     // Clean up if exists
     if test_file.exists() {
       let _ = fs::remove_file(&test_file);
@@ -2600,7 +511,7 @@ mod tests {
 
     let initial = load_state_from_disk_impl();
     let data_mutex = Mutex::new(initial.clone());
-    
+
     // Should be able to export safely inside home / temp directories
     let export_res = export_app_data_impl(&test_file_str, &initial);
     if export_res.is_err() {
@@ -2620,5 +531,33 @@ mod tests {
 
     let _ = fs::remove_file(&test_file);
     let _ = fs::remove_dir_all(&temp_dir);
+  }
+
+  // =====================================================
+  // APPLESCRIPT STRING ESCAPING
+  // =====================================================
+
+  #[test]
+  fn test_applescript_string_simple() {
+    let result = applescript_string("hello");
+    assert_eq!(result, "\"hello\"");
+  }
+
+  #[test]
+  fn test_applescript_string_with_quotes() {
+    let result = applescript_string("he\"llo");
+    assert_eq!(result, "\"he\\\"llo\"");
+  }
+
+  #[test]
+  fn test_applescript_string_with_backslash() {
+    let result = applescript_string("he\\llo");
+    assert_eq!(result, "\"he\\\\llo\"");
+  }
+
+  #[test]
+  fn test_applescript_string_with_newlines() {
+    let result = applescript_string("hello\nworld\r!");
+    assert_eq!(result, "\"hello world !\"");
   }
 }

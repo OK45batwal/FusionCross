@@ -37,7 +37,6 @@ export const PerformanceMonitor: React.FC = () => {
   const handleCopyLogs = () => {
     const text = frozenLogs.join('\n');
     navigator.clipboard.writeText(text);
-    alert("Wine system logs copied to clipboard.");
   };
 
   const runningApp = apps.find(a => a.id === activeAppId);
@@ -140,7 +139,7 @@ export const PerformanceMonitor: React.FC = () => {
             <h3 className="text-sm font-bold text-white font-mono uppercase tracking-wider">Active Executable Sandbox</h3>
             <p className="text-xs text-graphite-400 font-mono mt-0.5">
               {runningApp ? (
-                <>Process active: <strong className="text-neon-pink">{runningApp.name}</strong> (PID: {Math.floor(Math.random() * 8000 + 4000)})</>
+                <>Process active: <strong className="text-neon-pink">{runningApp.name}</strong> (PID: {metrics.active_pid || 'N/A'})</>
               ) : (
                 "No process active. Launch a Windows EXE to stream debugger diagnostic telemetry."
               )}
