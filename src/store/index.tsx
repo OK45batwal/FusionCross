@@ -115,6 +115,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const launchApp = async (id: string) => {
     await _launchApp(id, apps);
+    setApps((prev) =>
+      prev.map((a) =>
+        a.id === id
+          ? { ...a, last_played: new Date().toISOString(), launch_count: a.launch_count + 1 }
+          : a,
+      ),
+    );
   };
 
   const runCustomExe = async (bottleId: string, exePath: string, args: string) => {

@@ -22,6 +22,7 @@ export function useBottles() {
         dxvk_enabled: true,
         moltenvk_enabled: true,
         win_version: 'win10',
+        graphics_backend: 'auto',
         env_vars: { DXVK_HUD: 'fps', WINEESYNC: '1' },
         dll_overrides: [{ library: 'd3d11', override_type: 'native,builtin' }],
         registry_keys: [],

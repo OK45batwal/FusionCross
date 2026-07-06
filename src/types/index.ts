@@ -18,6 +18,7 @@ export interface Bottle {
   dxvk_enabled: boolean;
   moltenvk_enabled: boolean;
   win_version: string;
+  graphics_backend: 'auto' | 'dxvk' | 'd3dmetal';
   env_vars: Record<string, string>;
   dll_overrides: DllOverride[];
   registry_keys: RegistryKey[];
@@ -37,6 +38,7 @@ export interface AppConfig {
   bottle_id: string;
   last_played: string | null;
   play_time_mins: number;
+  launch_count: number;
   favorite: boolean;
 }
 

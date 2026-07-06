@@ -23,10 +23,17 @@ import {
   DownloadCloud,
   Check,
   ArrowDownCircle,
-  HardDrive
+  HardDrive,
+  Play,
+  Upload,
+  Circle,
+  Settings,
+  AlertTriangle,
+  ChevronRight
 } from 'lucide-react';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { RunCommandModal } from '../components/RunCommandModal';
+import { ContextMenu } from '../components/ContextMenu';
 
 export const BottleManager: React.FC = () => {
   const { 
@@ -48,12 +55,14 @@ export const BottleManager: React.FC = () => {
     apps,
     registerApp,
     downloadProgress,
-    downloadRuntime
+    downloadRuntime,
+    activeAppId,
+    setShowWizard
   } = useApp();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showGrid, setShowGrid] = useState<boolean>(true);
-  const [activeSubTab, setActiveSubTab] = useState<'overrides' | 'env' | 'registry' | 'graphics' | 'dependencies' | 'scanner' | 'backups' | 'runtimes'>('overrides');
+  const [activeSubTab, setActiveSubTab] = useState<'graphics' | 'dependencies' | 'scanner' | 'backups' | 'runtimes' | 'advanced'>('graphics');
 
   // Creation State
   const [showCreator, setShowCreator] = useState<boolean>(false);
@@ -91,6 +100,12 @@ export const BottleManager: React.FC = () => {
 
   // Confirm Dialog State
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
+
+  // Context Menu State
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; bottleId: string } | null>(null);
+
+  // Drag-and-drop state
+  const [dragOverBottleId, setDragOverBottleId] = useState<string | null>(null);
 
   const selectedBottle = bottles.find(b => b.id === selectedId) || bottles[0];
 
@@ -177,6 +192,18 @@ export const BottleManager: React.FC = () => {
       } else {
         updateBottle({ ...selectedBottle, moltenvk_enabled: !selectedBottle.moltenvk_enabled });
       }
+    }
+  };
+
+  const handleSetGraphicsBackend = (backend: 'auto' | 'dxvk' | 'd3dmetal') => {
+    if (selectedBottle) {
+      updateBottle({ ...selectedBottle, graphics_backend: backend });
+    }
+  };
+
+  const handleSetWineVersion = (version: string) => {
+    if (selectedBottle) {
+      updateBottle({ ...selectedBottle, wine_version: version });
     }
   };
 
@@ -274,6 +301,69 @@ export const BottleManager: React.FC = () => {
     setSelectedId(null);
   };
 
+  const getBottleRunningApp = (bottleId: string) =>
+    apps.find(a => a.bottle_id === bottleId && a.id === activeAppId);
+
+  const handleContextMenu = (e: React.MouseEvent, bottleId: string) => {
+    e.preventDefault();
+    setCtxMenu({ x: e.clientX, y: e.clientY, bottleId });
+  };
+
+  const handleCardDragOver = (e: React.DragEvent, bottleId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverBottleId(bottleId);
+  };
+
+  const handleCardDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverBottleId(null);
+  };
+
+  const handleCardDrop = (e: React.DragEvent, bottleId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverBottleId(null);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      if (file.name.endsWith('.exe') || file.name.endsWith('.msi')) {
+        setShowWizard(true);
+      }
+    }
+  };
+
+  const bottleHasApps = (bottleId: string) => apps.some(a => a.bottle_id === bottleId);
+
+  const handleCtxAction = (action: string, bottleId: string) => {
+    const bottle = bottles.find(b => b.id === bottleId);
+    if (!bottle) return;
+    switch (action) {
+      case 'configure':
+        handleSelectBottle(bottleId);
+        break;
+      case 'launch':
+        setShowWizard(true);
+        break;
+      case 'open':
+        openPrefixInFinder(bottle.path);
+        break;
+      case 'delete':
+        setConfirmDialog({
+          message: `Delete bottle "${bottle.name}" and all its applications?`,
+          onConfirm: async () => {
+            const nextId = bottles.find(b => b.id !== bottleId)?.id || null;
+            await removeBottle(bottleId);
+            if (selectedId === bottleId) {
+              setSelectedId(nextId);
+              if (!nextId) setShowGrid(true);
+            }
+          },
+        });
+        break;
+    }
+  };
+
   return (
     <div className="flex-1 flex overflow-hidden h-full bg-graphite-900/40 relative">
       <div className="h-4 select-none pointer-events-none absolute top-0" />
@@ -298,42 +388,93 @@ export const BottleManager: React.FC = () => {
             </div>
             {bottles.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {bottles.map((b) => (
-                  <button
-                    key={b.id}
-                    onClick={() => handleSelectBottle(b.id)}
-                    className="glass-panel p-5 rounded-2xl border-graphite-800 hover:border-neon-purple/40 hover:bg-neon-purple/[0.02] transition-all text-left group"
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-neon-purple/20 to-neon-indigo/10 border border-neon-purple/25 flex items-center justify-center font-mono font-bold text-neon-purple">
-                        {b.name.charAt(0).toUpperCase()}
+                {bottles.map((b) => {
+                  const runningApp = getBottleRunningApp(b.id);
+                  const hasApps = bottleHasApps(b.id);
+                  const isDragOver = dragOverBottleId === b.id;
+                  return (
+                    <div
+                      key={b.id}
+                      onClick={() => handleSelectBottle(b.id)}
+                      onContextMenu={(e) => handleContextMenu(e, b.id)}
+                      onDragOver={(e) => handleCardDragOver(e, b.id)}
+                      onDragLeave={handleCardDragLeave}
+                      onDrop={(e) => handleCardDrop(e, b.id)}
+                      className={`glass-panel p-5 rounded-2xl border transition-all cursor-pointer group relative ${
+                        isDragOver
+                          ? 'border-neon-indigo border-2 bg-neon-indigo/5 scale-[1.02]'
+                          : 'border-graphite-800 hover:border-neon-purple/40 hover:bg-neon-purple/[0.02]'
+                      } ${runningApp ? 'ring-1 ring-neon-purple/30' : ''}`}
+                    >
+                      {/* Drop overlay */}
+                      {isDragOver && (
+                        <div className="absolute inset-0 rounded-2xl flex items-center justify-center bg-graphite-900/70 z-10">
+                          <div className="text-center">
+                            <Upload className="w-8 h-8 text-neon-indigo mx-auto mb-2" />
+                            <span className="text-xs font-mono text-neon-indigo font-bold">Drop to install</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Status badges */}
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="relative">
+                          <div className={`w-10 h-10 rounded-xl bg-gradient-to-br from-${b.prefix_type === 'gaming' ? 'neon-purple' : 'neon-indigo'}/20 to-${b.prefix_type === 'gaming' ? 'neon-pink' : 'neon-blue'}/10 border border-${b.prefix_type === 'gaming' ? 'neon-purple' : 'neon-indigo'}/25 flex items-center justify-center font-mono font-bold text-${b.prefix_type === 'gaming' ? 'neon-purple' : 'neon-indigo'}`}>
+                            {b.name.charAt(0).toUpperCase()}
+                          </div>
+                          {runningApp && (
+                            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-neon-green rounded-full border-2 border-graphite-900 shadow-[0_0_6px_rgba(52,211,153,0.6)] flex items-center justify-center">
+                              <Circle className="w-2 h-2 fill-neon-green text-neon-green" />
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`w-2 h-2 rounded-full ${
+                            b.dxvk_enabled ? 'bg-neon-indigo shadow-[0_0_6px_rgba(99,102,241,0.6)]' : 'bg-graphite-600'
+                          }`} />
+                          {hasApps && (
+                            <span className="text-[9px] font-mono text-graphite-400 bg-graphite-800/80 px-1.5 py-0.5 rounded">
+                              {apps.filter(a => a.bottle_id === b.id).length}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <span className={`w-2.5 h-2.5 rounded-full mt-1 ${
-                        b.dxvk_enabled ? 'bg-neon-purple shadow-[0_0_8px_rgba(157,78,221,0.6)]' : 'bg-graphite-600'
-                      }`} />
+
+                      {/* Name + running indicator */}
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="text-sm font-bold text-white truncate group-hover:text-neon-purple transition-colors">{b.name}</h3>
+                        {runningApp && (
+                          <span className="text-[9px] font-mono text-neon-green bg-neon-green/10 px-1.5 py-0.5 rounded border border-neon-green/20 animate-pulse shrink-0">
+                            RUNNING
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Type + size */}
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <span className="text-[10px] uppercase font-mono font-semibold bg-graphite-800 px-2 py-0.5 rounded border border-graphite-700/30 text-graphite-300">
+                          {b.prefix_type}
+                        </span>
+                        <span className="text-[10px] font-mono text-graphite-400">
+                          {(b.size_bytes / 1_000_000).toFixed(0)} MB
+                        </span>
+                      </div>
+
+                      {/* Wine + GPU status */}
+                      <div className="flex items-center gap-3 mt-3 text-[10px] font-mono text-graphite-400">
+                        <span className="px-1.5 py-0.5 rounded bg-graphite-800/50 text-graphite-300">{b.wine_version}</span>
+                        <span className="flex items-center gap-1">
+                          <span className={`w-1.5 h-1.5 rounded-full ${b.dxvk_enabled ? 'bg-neon-indigo' : 'bg-graphite-600'}`} />
+                          DXVK
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className={`w-1.5 h-1.5 rounded-full ${b.moltenvk_enabled ? 'bg-neon-purple' : 'bg-graphite-600'}`} />
+                          MVK
+                        </span>
+                      </div>
                     </div>
-                    <h3 className="text-sm font-bold text-white truncate">{b.name}</h3>
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <span className="text-[10px] uppercase font-mono font-semibold bg-graphite-800 px-2 py-0.5 rounded border border-graphite-700/30 text-graphite-300">
-                        {b.prefix_type}
-                      </span>
-                      <span className="text-[10px] font-mono text-graphite-400">
-                        {(b.size_bytes / 1_000_000).toFixed(0)} MB
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 mt-3 text-[10px] font-mono text-graphite-400">
-                      <span className="text-graphite-300">{b.wine_version}</span>
-                      <span className="flex items-center gap-1">
-                        <span className={`w-1.5 h-1.5 rounded-full ${b.dxvk_enabled ? 'bg-neon-indigo' : 'bg-graphite-600'}`} />
-                        DXVK
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <span className={`w-1.5 h-1.5 rounded-full ${b.moltenvk_enabled ? 'bg-neon-purple' : 'bg-graphite-600'}`} />
-                        MVK
-                      </span>
-                    </div>
-                  </button>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="glass-panel p-16 rounded-2xl text-center border-graphite-800">
@@ -365,10 +506,25 @@ export const BottleManager: React.FC = () => {
                 ← Back to Bottles
               </button>
               <h1 className="text-xl font-bold text-white tracking-tight font-mono">{currentBottle.name}</h1>
-              <div className="flex items-center gap-3 text-xs text-graphite-400 font-mono">
+              <div className="flex items-center gap-3 text-xs text-graphite-400 font-mono flex-wrap">
                 <span>Created: <strong>{currentBottle.created_at}</strong></span>
                 <span>•</span>
-                <span>Runtime: <strong className="text-neon-purple">{currentBottle.wine_version}</strong></span>
+                <div className="flex items-center gap-1.5">
+                  <span>Runtime:</span>
+                  <select
+                    value={currentBottle.wine_version}
+                    onChange={(e) => handleSetWineVersion(e.target.value)}
+                    className="bg-graphite-800 border border-graphite-700 rounded-lg px-2 py-0.5 text-xs font-mono text-neon-purple cursor-pointer hover:border-neon-purple/40 transition-colors"
+                  >
+                    {activeRuntimes.length > 0 ? (
+                      activeRuntimes.map(r => (
+                        <option key={r.id} value={r.name}>{r.name}</option>
+                      ))
+                    ) : (
+                      <option value={currentBottle.wine_version}>{currentBottle.wine_version}</option>
+                    )}
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -413,14 +569,12 @@ export const BottleManager: React.FC = () => {
           {/* Sub-tabs buttons */}
           <div className="flex border-b border-graphite-800/40 px-6 bg-graphite-950/25 overflow-x-auto select-none no-scrollbar">
             {[
-              { id: 'overrides', name: 'DLL Overrides', icon: Sliders },
-              { id: 'env', name: 'Environment', icon: Variable },
-              { id: 'registry', name: 'Registry Keys', icon: Database },
-              { id: 'graphics', name: 'GPU Config', icon: Cpu },
-              { id: 'dependencies', name: 'Winetricks', icon: Wrench },
-              { id: 'scanner', name: 'App Scanner', icon: Search },
+              { id: 'graphics', name: 'Graphics', icon: Cpu },
+              { id: 'dependencies', name: 'Dependencies', icon: Wrench },
+              { id: 'scanner', name: 'Scanner', icon: Search },
               { id: 'backups', name: 'Backups', icon: Download },
               { id: 'runtimes', name: 'Runtimes', icon: DownloadCloud },
+              { id: 'advanced', name: 'Advanced', icon: Sliders },
             ].map((sub) => {
               const Icon = sub.icon;
               const isSubActive = activeSubTab === sub.id;
@@ -443,257 +597,185 @@ export const BottleManager: React.FC = () => {
 
           {/* Dynamic Configuration Panel Views */}
           <div className="flex-1 overflow-y-auto p-6 bg-graphite-900/20">
-            {activeSubTab === 'overrides' ? (
-              /* A. DLL OVERRIDES VIEW */
-              <div className="space-y-6">
+            {activeSubTab === 'advanced' ? (
+              /* ADVANCED: Collapsible DLL Overrides, Environment, Registry */
+              <div className="space-y-6 max-w-2xl">
                 <div className="space-y-1">
-                  <h2 className="text-sm font-bold text-white font-mono uppercase tracking-wide">Wine DLL Overrides</h2>
-                  <p className="text-xs text-graphite-400">Configure custom library bindings for graphics plugins, translation plugins, or customized win32 system wrappers.</p>
+                  <h2 className="text-sm font-bold text-white font-mono uppercase tracking-wide">Advanced Configuration</h2>
+                  <p className="text-xs text-graphite-400">Low-level settings for power users. Changes here can affect bottle stability.</p>
                 </div>
 
-                {/* Add override tool */}
-                <div className="glass-panel p-4 rounded-2xl flex flex-col md:flex-row gap-3 border-graphite-800 max-w-2xl bg-graphite-950/20">
-                  <div className="flex-1 flex flex-col gap-1">
-                    <label className="text-[10px] font-mono text-graphite-400 font-bold uppercase">Library DLL Name</label>
-                    <input 
-                      type="text" 
-                      placeholder="e.g. d3d11, dxgi, openal"
-                      value={newLibName}
-                      onChange={(e) => setNewLibName(e.target.value)}
-                      className="glass-input py-1.5 font-mono"
-                    />
-                  </div>
-                  <div className="w-48 flex flex-col gap-1">
-                    <label className="text-[10px] font-mono text-graphite-400 font-bold uppercase">Binding Type</label>
-                    <select 
-                      value={newLibType}
-                      onChange={(e) => setNewLibType(e.target.value)}
-                      className="glass-input py-1.5 bg-graphite-800 cursor-pointer"
-                    >
-                      <option value="native,builtin">native, builtin</option>
-                      <option value="builtin,native">builtin, native</option>
-                      <option value="native">native only</option>
-                      <option value="builtin">builtin only</option>
-                      <option value="disabled">disabled</option>
-                    </select>
-                  </div>
-                  <button 
-                    onClick={handleAddOverride}
-                    className="btn-primary self-end py-2 px-4"
-                  >
-                    Add Override
-                  </button>
-                </div>
-
-                {/* Overrides list table */}
-                <div className="glass-panel rounded-xl overflow-hidden border-graphite-800 max-w-2xl">
-                  <table className="w-full text-xs font-mono">
-                    <thead className="bg-graphite-950/60 text-graphite-400 border-b border-graphite-800/40">
-                      <tr>
-                        <th className="text-left p-3.5 font-bold uppercase tracking-wider">DLL Library</th>
-                        <th className="text-left p-3.5 font-bold uppercase tracking-wider">Execution Preference</th>
-                        <th className="w-16"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-graphite-850">
-                      {selectedBottle.dll_overrides.map((override, idx) => (
-                        <tr key={idx} className="hover:bg-graphite-800/20 text-graphite-200">
-                          <td className="p-3.5 font-bold text-white">{override.library}</td>
-                          <td className="p-3.5">
-                            <span className="bg-neon-purple/10 text-neon-purple border border-neon-purple/20 px-2 py-0.5 rounded text-[10px] font-semibold uppercase">
-                              {override.override_type}
-                            </span>
-                          </td>
-                          <td className="p-3.5 text-center">
-                            <button 
-                              onClick={() => handleRemoveOverride(override.library)}
-                              className="text-red-500 hover:text-red-400 hover:scale-105 active:scale-95 transition-all"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                      {selectedBottle.dll_overrides.length === 0 && (
-                        <tr>
-                          <td colSpan={3} className="p-6 text-center text-graphite-400">No overrides active.</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ) : activeSubTab === 'env' ? (
-              /* B. ENVIRONMENT VARIABLES VIEW */
-              <div className="space-y-6">
-                <div className="space-y-1">
-                  <h2 className="text-sm font-bold text-white font-mono uppercase tracking-wide">Environment Variables</h2>
-                  <p className="text-xs text-graphite-400">Define runtime overrides, rendering telemetry, multi-threading switches, and execution flags.</p>
-                </div>
-
-                {/* Add variable panel */}
-                <div className="glass-panel p-4 rounded-2xl flex flex-col md:flex-row gap-3 border-graphite-800 max-w-2xl bg-graphite-950/20">
-                  <div className="flex-1 flex flex-col gap-1">
-                    <label className="text-[10px] font-mono text-graphite-400 font-bold uppercase">Variable Key</label>
-                    <input 
-                      type="text" 
-                      placeholder="e.g. WINEESYNC, DXVK_HUD"
-                      value={newEnvKey}
-                      onChange={(e) => setNewEnvKey(e.target.value)}
-                      className="glass-input py-1.5 font-mono"
-                    />
-                  </div>
-                  <div className="flex-1 flex flex-col gap-1">
-                    <label className="text-[10px] font-mono text-graphite-400 font-bold uppercase">Variable Value</label>
-                    <input 
-                      type="text" 
-                      placeholder="e.g. 1, fps, compiler"
-                      value={newEnvVal}
-                      onChange={(e) => setNewEnvVal(e.target.value)}
-                      className="glass-input py-1.5 font-mono"
-                    />
-                  </div>
-                  <button 
-                    onClick={handleAddEnv}
-                    className="btn-primary self-end py-2 px-4"
-                  >
-                    Add Variable
-                  </button>
-                </div>
-
-                {/* Env list table */}
-                <div className="glass-panel rounded-xl overflow-hidden border-graphite-800 max-w-2xl">
-                  <table className="w-full text-xs font-mono">
-                    <thead className="bg-graphite-950/60 text-graphite-400 border-b border-graphite-800/40">
-                      <tr>
-                        <th className="text-left p-3.5 font-bold uppercase tracking-wider">Key</th>
-                        <th className="text-left p-3.5 font-bold uppercase tracking-wider">Value</th>
-                        <th className="w-16"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-graphite-850">
-                      {Object.entries(selectedBottle.env_vars).map(([key, val]) => (
-                        <tr key={key} className="hover:bg-graphite-800/20 text-graphite-200">
-                          <td className="p-3.5 font-bold text-white">{key}</td>
-                          <td className="p-3.5 text-graphite-300">{val}</td>
-                          <td className="p-3.5 text-center">
-                            <button 
-                              onClick={() => handleRemoveEnv(key)}
-                              className="text-red-500 hover:text-red-400 hover:scale-105 active:scale-95 transition-all"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                      {Object.keys(selectedBottle.env_vars).length === 0 && (
-                        <tr>
-                          <td colSpan={3} className="p-6 text-center text-graphite-400">No environment variables defined.</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ) : activeSubTab === 'registry' ? (
-              /* C. REGISTRY KEY EDITOR VIEW */
-              <div className="space-y-6">
-                <div className="space-y-1">
-                  <h2 className="text-sm font-bold text-white font-mono uppercase tracking-wide">Registry Key Editor</h2>
-                  <p className="text-xs text-graphite-400">Direct interface to inject virtual Windows registry parameters, Retina toggles, and Direct3D overrides.</p>
-                </div>
-
-                {/* Add Registry key Panel */}
-                <div className="glass-panel p-4 rounded-2xl space-y-3.5 border-graphite-800 max-w-2xl bg-graphite-950/20">
-                  <div className="text-xs font-semibold font-mono text-white border-b border-graphite-850 pb-2 flex items-center gap-1.5">
-                    <Database className="w-4 h-4 text-neon-purple" /> Add Virtual Registry Entry
-                  </div>
-                  <div className="grid grid-cols-2 gap-3.5">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] font-mono text-graphite-400 font-bold uppercase">Registry Tree Path</label>
-                      <select 
-                        value={newRegPath}
-                        onChange={(e) => setNewRegPath(e.target.value)}
-                        className="glass-input py-1.5 bg-graphite-850 cursor-pointer font-mono"
-                      >
-                        <option value="HKCU\\Software\\Wine\\Direct3D">HKCU\Software\Wine\Direct3D</option>
-                        <option value="HKCU\\Software\\Wine\\Mac Driver">HKCU\Software\Wine\Mac Driver</option>
-                        <option value="HKLM\\Software\\Microsoft\\Windows NT">HKLM\Software\Microsoft\Windows NT</option>
-                      </select>
+                {/* DLL Overrides Section (collapsible) */}
+                <details className="glass-panel rounded-2xl border-graphite-800 overflow-hidden group">
+                  <summary className="flex items-center justify-between p-4 cursor-pointer hover:bg-graphite-800/20 transition-colors list-none text-sm font-bold text-white font-mono">
+                    <span className="flex items-center gap-2"><Sliders className="w-4 h-4 text-neon-purple" /> DLL Overrides</span>
+                    <ChevronRight className="w-4 h-4 text-graphite-400 group-open:rotate-90 transition-transform" />
+                  </summary>
+                  <div className="px-4 pb-4 space-y-4 border-t border-graphite-800/40 pt-4">
+                    <div className="glass-panel p-4 rounded-xl border-graphite-800 flex flex-col md:flex-row gap-3 bg-graphite-950/20">
+                      <div className="flex-1 flex flex-col gap-1">
+                        <label className="text-[10px] font-mono text-graphite-400 font-bold uppercase">Library DLL Name</label>
+                        <input type="text" placeholder="e.g. d3d11, dxgi, openal" value={newLibName} onChange={(e) => setNewLibName(e.target.value)} className="glass-input py-1.5 font-mono" />
+                      </div>
+                      <div className="w-48 flex flex-col gap-1">
+                        <label className="text-[10px] font-mono text-graphite-400 font-bold uppercase">Binding Type</label>
+                        <select value={newLibType} onChange={(e) => setNewLibType(e.target.value)} className="glass-input py-1.5 bg-graphite-800 cursor-pointer">
+                          <option value="native,builtin">native, builtin</option>
+                          <option value="builtin,native">builtin, native</option>
+                          <option value="native">native only</option>
+                          <option value="builtin">builtin only</option>
+                          <option value="disabled">disabled</option>
+                        </select>
+                      </div>
+                      <button onClick={handleAddOverride} className="btn-primary self-end py-2 px-4">Add Override</button>
                     </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] font-mono text-graphite-400 font-bold uppercase">Registry Key Name</label>
-                      <input 
-                        type="text" 
-                        placeholder="e.g. MaxShaderModelVS, RetinaMode"
-                        value={newRegKey}
-                        onChange={(e) => setNewRegKey(e.target.value)}
-                        className="glass-input py-1.5 font-mono"
-                      />
+                    <div className="glass-panel rounded-xl overflow-hidden border-graphite-800">
+                      <table className="w-full text-xs font-mono">
+                        <thead className="bg-graphite-950/60 text-graphite-400 border-b border-graphite-800/40">
+                          <tr><th className="text-left p-3.5 font-bold uppercase tracking-wider">DLL Library</th><th className="text-left p-3.5 font-bold uppercase tracking-wider">Preference</th><th className="w-16"></th></tr>
+                        </thead>
+                        <tbody className="divide-y divide-graphite-850">
+                          {selectedBottle.dll_overrides.map((override, idx) => (
+                            <tr key={idx} className="hover:bg-graphite-800/20 text-graphite-200">
+                              <td className="p-3.5 font-bold text-white">{override.library}</td>
+                              <td className="p-3.5"><span className="bg-neon-purple/10 text-neon-purple border border-neon-purple/20 px-2 py-0.5 rounded text-[10px] font-semibold uppercase">{override.override_type}</span></td>
+                              <td className="p-3.5 text-center">
+                                <button onClick={() => handleRemoveOverride(override.library)} className="text-red-500 hover:text-red-400 transition-all"><X className="w-4 h-4" /></button>
+                              </td>
+                            </tr>
+                          ))}
+                          {selectedBottle.dll_overrides.length === 0 && (
+                            <tr><td colSpan={3} className="p-6 text-center text-graphite-400">No overrides active.</td></tr>
+                          )}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-3.5 items-end">
-                    <div className="col-span-2 flex flex-col gap-1">
-                      <label className="text-[10px] font-mono text-graphite-400 font-bold uppercase">Value</label>
-                      <input 
-                        type="text" 
-                        placeholder="e.g. 5, Y, win10"
-                        value={newRegVal}
-                        onChange={(e) => setNewRegVal(e.target.value)}
-                        className="glass-input py-1.5 font-mono"
-                      />
-                    </div>
-                    <button 
-                      onClick={handleAddRegistry}
-                      className="btn-primary py-2 px-4 h-[38px] flex items-center justify-center gap-1.5"
-                    >
-                      <PlusCircle className="w-4.5 h-4.5" /> Save Key
-                    </button>
-                  </div>
-                </div>
+                </details>
 
-                {/* Keys list table */}
-                <div className="glass-panel rounded-xl overflow-hidden border-graphite-800 max-w-2xl">
-                  <table className="w-full text-xs font-mono">
-                    <thead className="bg-graphite-950/60 text-graphite-400 border-b border-graphite-800/40">
-                      <tr>
-                        <th className="text-left p-3.5 font-bold uppercase tracking-wider">Sub Tree Path</th>
-                        <th className="text-left p-3.5 font-bold uppercase tracking-wider">Key</th>
-                        <th className="text-left p-3.5 font-bold uppercase tracking-wider">Value</th>
-                        <th className="w-16"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-graphite-850">
-                      {selectedBottle.registry_keys.map((reg, idx) => (
-                        <tr key={idx} className="hover:bg-graphite-800/20 text-graphite-200">
-                          <td className="p-3.5 text-graphite-400 truncate max-w-[200px]" title={reg.path}>{reg.path}</td>
-                          <td className="p-3.5 font-bold text-white">{reg.key}</td>
-                          <td className="p-3.5 text-neon-purple font-semibold">{reg.value}</td>
-                          <td className="p-3.5 text-center">
-                            <button 
-                              onClick={() => handleRemoveRegistry(reg.path, reg.key)}
-                              className="text-red-500 hover:text-red-400 hover:scale-105 active:scale-95 transition-all"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                      {selectedBottle.registry_keys.length === 0 && (
-                        <tr>
-                          <td colSpan={4} className="p-6 text-center text-graphite-400">No custom registry overrides active.</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                {/* Environment Variables Section (collapsible) */}
+                <details className="glass-panel rounded-2xl border-graphite-800 overflow-hidden group">
+                  <summary className="flex items-center justify-between p-4 cursor-pointer hover:bg-graphite-800/20 transition-colors list-none text-sm font-bold text-white font-mono">
+                    <span className="flex items-center gap-2"><Variable className="w-4 h-4 text-neon-blue" /> Environment Variables</span>
+                    <ChevronRight className="w-4 h-4 text-graphite-400 group-open:rotate-90 transition-transform" />
+                  </summary>
+                  <div className="px-4 pb-4 space-y-4 border-t border-graphite-800/40 pt-4">
+                    <div className="glass-panel p-4 rounded-xl border-graphite-800 flex flex-col md:flex-row gap-3 bg-graphite-950/20">
+                      <div className="flex-1 flex flex-col gap-1">
+                        <label className="text-[10px] font-mono text-graphite-400 font-bold uppercase">Variable Key</label>
+                        <input type="text" placeholder="e.g. WINEESYNC, DXVK_HUD" value={newEnvKey} onChange={(e) => setNewEnvKey(e.target.value)} className="glass-input py-1.5 font-mono" />
+                      </div>
+                      <div className="flex-1 flex flex-col gap-1">
+                        <label className="text-[10px] font-mono text-graphite-400 font-bold uppercase">Variable Value</label>
+                        <input type="text" placeholder="e.g. 1, fps, compiler" value={newEnvVal} onChange={(e) => setNewEnvVal(e.target.value)} className="glass-input py-1.5 font-mono" />
+                      </div>
+                      <button onClick={handleAddEnv} className="btn-primary self-end py-2 px-4">Add Variable</button>
+                    </div>
+                    <div className="glass-panel rounded-xl overflow-hidden border-graphite-800">
+                      <table className="w-full text-xs font-mono">
+                        <thead className="bg-graphite-950/60 text-graphite-400 border-b border-graphite-800/40">
+                          <tr><th className="text-left p-3.5 font-bold uppercase tracking-wider">Key</th><th className="text-left p-3.5 font-bold uppercase tracking-wider">Value</th><th className="w-16"></th></tr>
+                        </thead>
+                        <tbody className="divide-y divide-graphite-850">
+                          {Object.entries(selectedBottle.env_vars).map(([key, val]) => (
+                            <tr key={key} className="hover:bg-graphite-800/20 text-graphite-200">
+                              <td className="p-3.5 font-bold text-white">{key}</td>
+                              <td className="p-3.5 text-graphite-300">{val}</td>
+                              <td className="p-3.5 text-center">
+                                <button onClick={() => handleRemoveEnv(key)} className="text-red-500 hover:text-red-400 transition-all"><X className="w-4 h-4" /></button>
+                              </td>
+                            </tr>
+                          ))}
+                          {Object.keys(selectedBottle.env_vars).length === 0 && (
+                            <tr><td colSpan={3} className="p-6 text-center text-graphite-400">No environment variables defined.</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </details>
+
+                {/* Registry Keys Section (collapsible) */}
+                <details className="glass-panel rounded-2xl border-graphite-800 overflow-hidden group">
+                  <summary className="flex items-center justify-between p-4 cursor-pointer hover:bg-graphite-800/20 transition-colors list-none text-sm font-bold text-white font-mono">
+                    <span className="flex items-center gap-2"><Database className="w-4 h-4 text-neon-green" /> Registry Keys</span>
+                    <ChevronRight className="w-4 h-4 text-graphite-400 group-open:rotate-90 transition-transform" />
+                  </summary>
+                  <div className="px-4 pb-4 space-y-4 border-t border-graphite-800/40 pt-4">
+                    <div className="glass-panel p-4 rounded-xl space-y-3.5 border-graphite-800 bg-graphite-950/20">
+                      <div className="grid grid-cols-2 gap-3.5">
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] font-mono text-graphite-400 font-bold uppercase">Registry Tree Path</label>
+                          <select value={newRegPath} onChange={(e) => setNewRegPath(e.target.value)} className="glass-input py-1.5 bg-graphite-850 cursor-pointer font-mono">
+                            <option value="HKCU\\Software\\Wine\\Direct3D">HKCU\Software\Wine\Direct3D</option>
+                            <option value="HKCU\\Software\\Wine\\Mac Driver">HKCU\Software\Wine\Mac Driver</option>
+                            <option value="HKLM\\Software\\Microsoft\\Windows NT">HKLM\Software\Microsoft\Windows NT</option>
+                          </select>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] font-mono text-graphite-400 font-bold uppercase">Registry Key Name</label>
+                          <input type="text" placeholder="e.g. MaxShaderModelVS, RetinaMode" value={newRegKey} onChange={(e) => setNewRegKey(e.target.value)} className="glass-input py-1.5 font-mono" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3.5 items-end">
+                        <div className="col-span-2 flex flex-col gap-1">
+                          <label className="text-[10px] font-mono text-graphite-400 font-bold uppercase">Value</label>
+                          <input type="text" placeholder="e.g. 5, Y, win10" value={newRegVal} onChange={(e) => setNewRegVal(e.target.value)} className="glass-input py-1.5 font-mono" />
+                        </div>
+                        <button onClick={handleAddRegistry} className="btn-primary py-2 px-4 h-[38px] flex items-center justify-center gap-1.5">
+                          <PlusCircle className="w-4.5 h-4.5" /> Save Key
+                        </button>
+                      </div>
+                    </div>
+                    <div className="glass-panel rounded-xl overflow-hidden border-graphite-800">
+                      <table className="w-full text-xs font-mono">
+                        <thead className="bg-graphite-950/60 text-graphite-400 border-b border-graphite-800/40">
+                          <tr><th className="text-left p-3.5 font-bold uppercase tracking-wider">Path</th><th className="text-left p-3.5 font-bold uppercase tracking-wider">Key</th><th className="text-left p-3.5 font-bold uppercase tracking-wider">Value</th><th className="w-16"></th></tr>
+                        </thead>
+                        <tbody className="divide-y divide-graphite-850">
+                          {selectedBottle.registry_keys.map((reg, idx) => (
+                            <tr key={idx} className="hover:bg-graphite-800/20 text-graphite-200">
+                              <td className="p-3.5 text-graphite-400 truncate max-w-[200px]" title={reg.path}>{reg.path}</td>
+                              <td className="p-3.5 font-bold text-white">{reg.key}</td>
+                              <td className="p-3.5 text-neon-purple font-semibold">{reg.value}</td>
+                              <td className="p-3.5 text-center">
+                                <button onClick={() => handleRemoveRegistry(reg.path, reg.key)} className="text-red-500 hover:text-red-400 transition-all"><X className="w-4 h-4" /></button>
+                              </td>
+                            </tr>
+                          ))}
+                          {selectedBottle.registry_keys.length === 0 && (
+                            <tr><td colSpan={4} className="p-6 text-center text-graphite-400">No custom registry overrides active.</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </details>
               </div>
             ) : activeSubTab === 'graphics' ? (
               /* D. GRAPHICS / GPU CONFIG VIEW */
               <div className="space-y-6 max-w-2xl">
                 <div className="space-y-1">
-                  <h2 className="text-sm font-bold text-white font-mono uppercase tracking-wide">Graphics Adapter & GPU translation</h2>
-                  <p className="text-xs text-graphite-400">Toggle translation APIs, Rosetta core parameters, and pipeline compilers to match your hardware structure.</p>
+                  <h2 className="text-sm font-bold text-white font-mono uppercase tracking-wide">Graphics Backend</h2>
+                  <p className="text-xs text-graphite-400">Choose how Windows graphics calls are translated to macOS.</p>
+                </div>
+
+                {/* Graphics Backend Selector */}
+                <div className="glass-panel p-4 rounded-2xl border-graphite-800 space-y-3">
+                  <label className="text-[10px] font-mono text-graphite-400 font-bold uppercase">Translation Backend</label>
+                  <select
+                    value={selectedBottle.graphics_backend}
+                    onChange={(e) => handleSetGraphicsBackend(e.target.value as 'auto' | 'dxvk' | 'd3dmetal')}
+                    className="glass-input py-2 w-full bg-graphite-800 cursor-pointer text-sm font-bold"
+                  >
+                    <option value="auto">Auto (Recommended)</option>
+                    <option value="dxvk">DXVK (Vulkan → Metal via MoltenVK)</option>
+                    <option value="d3dmetal">D3DMetal (DirectX → Metal, when available)</option>
+                  </select>
+                  <p className="text-[10px] text-graphite-500 leading-relaxed">
+                    Auto lets FusionCross pick the best backend for each application. DXVK routes Direct3D through Vulkan,
+                    then MoltenVK to Metal. D3DMetal translates DirectX 11 directly to Metal.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1178,6 +1260,25 @@ export const BottleManager: React.FC = () => {
           onCancel={() => setConfirmDialog(null)}
         />
       )}
+
+      {ctxMenu && (() => {
+        const bottle = bottles.find(b => b.id === ctxMenu.bottleId);
+        if (!bottle) return null;
+        const runningApp = getBottleRunningApp(bottle.id);
+        return (
+          <ContextMenu
+            x={ctxMenu.x}
+            y={ctxMenu.y}
+            onClose={() => setCtxMenu(null)}
+            items={[
+              { id: 'configure', label: 'Configure', icon: <Settings className="w-3.5 h-3.5" />, handler: () => handleCtxAction('configure', bottle.id) },
+              { id: 'launch', label: 'Install Application', icon: <Play className="w-3.5 h-3.5" />, handler: () => handleCtxAction('launch', bottle.id) },
+              { id: 'open', label: 'Open C:\\ in Finder', icon: <FolderOpen className="w-3.5 h-3.5" />, handler: () => handleCtxAction('open', bottle.id) },
+              { id: 'delete', label: 'Delete Bottle', icon: <Trash2 className="w-3.5 h-3.5" />, danger: true, handler: () => handleCtxAction('delete', bottle.id) },
+            ]}
+          />
+        );
+      })()}
     </div>
   );
 };

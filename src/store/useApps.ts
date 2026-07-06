@@ -27,6 +27,7 @@ export function useApps(setLogs: React.Dispatch<React.SetStateAction<string[]>>)
           bottle_id: bottleId,
           last_played: null,
           play_time_mins: 0,
+          launch_count: 0,
           favorite: false,
         },
       ]);

@@ -67,7 +67,7 @@ const AppContent: React.FC = () => {
         <ErrorBoundary>
         
         {/* macOS Window Controls Drag Placeholder */}
-        <div className="absolute top-0 inset-x-0 h-10 bg-transparent select-none cursor-default z-30 pointer-events-none" />
+        <div className="absolute top-0 inset-x-0 h-10 bg-transparent select-none cursor-default z-30 pointer-events-none titlebar-drag" />
         
         {activeTab === 'dashboard' && <Dashboard />}
         {activeTab === 'library' && <Library />}

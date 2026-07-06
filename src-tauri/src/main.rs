@@ -13,6 +13,11 @@ pub mod commands;
 
 use std::sync::{Arc, Mutex};
 use state::{AppState, load_state_from_disk_impl};
+use tauri::Manager;
+#[cfg(target_os = "macos")]
+use tauri::tray::{TrayIconBuilder, MouseButton, MouseButtonState, TrayIconEvent};
+#[cfg(target_os = "macos")]
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
 
 // ========================================================
 // APPLICATION BOOTSTRAP
@@ -69,6 +74,50 @@ fn main() {
       commands::open_folder_picker,
       commands::save_file_picker
     ])
+    .setup(|app| {
+      #[cfg(target_os = "macos")]
+      {
+        let show = MenuItemBuilder::with_id("show", "Show FusionCross").build(app)?;
+        let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
+        let menu = MenuBuilder::new(app)
+          .item(&show)
+          .item(&quit)
+          .build()?;
+
+        TrayIconBuilder::new()
+          .icon(app.default_window_icon().unwrap().clone())
+          .menu(&menu)
+          .on_menu_event(|app, event| {
+            match event.id().as_ref() {
+              "show" => {
+                if let Some(window) = app.get_webview_window("main") {
+                  let _ = window.show();
+                  let _ = window.set_focus();
+                }
+              }
+              "quit" => {
+                app.exit(0);
+              }
+              _ => {}
+            }
+          })
+          .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+              button: MouseButton::Left,
+              button_state: MouseButtonState::Up,
+              ..
+            } = event
+            {
+              if let Some(window) = tray.app_handle().get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
+              }
+            }
+          })
+          .build(app)?;
+      }
+      Ok(())
+    })
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

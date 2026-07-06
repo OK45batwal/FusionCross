@@ -68,24 +68,23 @@ Goal: Redesign FusionCross to match Whisky's clean macOS-native UI/UX and app ex
 - [x] **8.2** Replace table-based bottle list with card grid
 - [x] **8.3** Clean up Dashboard to be a simple overview
 
-### Phase 9: Bottle Cards & Quick Actions
-- [ ] **9.1** Visual bottle cards with status badges, size, Wine version
-- [ ] **9.2** Right-click / context menu: Configure, Launch, Open C:\, Delete
-- [ ] **9.3** Drag-and-drop .exe onto a bottle to install
+### Phase 9: Bottle Cards & Quick Actions (DONE)
+- [x] **9.1** Visual bottle cards with status badges, size, Wine version
+- [x] **9.2** Right-click / context menu: Configure, Launch, Open C:\, Delete
+- [x] **9.3** Drag-and-drop .exe onto a bottle to install
 
-### Phase 10: Library Redesign
-- [ ] **10.1** App cards with icons, not table rows
-- [ ] **10.2** Search/filter bar
-- [ ] **10.3** Launch count, last played, play time badges
+### Phase 10: Library Redesign (DONE)
+- [x] **10.1** App cards with icons, not table rows
+- [x] **10.2** Search/filter bar
+- [x] **10.3** Launch count, last played, play time badges
 
-### Phase 11: Simplify Configuration
-- [ ] **11.1** Replace technical settings screens with simple per-bottle toggles
-- [ ] **11.2** Graphics backend: Auto / DXVK / D3DMetal (when available)
-- [ ] **11.3** Wine version: pick from installed runtimes
-- [ ] **11.4** Hide advanced options behind an "Advanced" expander
+### Phase 11: Simplify Configuration (DONE)
+- [x] **11.1** Replace technical settings screens with simple per-bottle toggles
+- [x] **11.2** Graphics backend: Auto / DXVK / D3DMetal (when available)
+- [x] **11.3** Wine version: pick from installed runtimes
+- [x] **11.4** Hide advanced options behind an "Advanced" expander
 
-### Phase 12: macOS Native Polish
-- [ ] **12.1** System font stack, proper titlebar integration
-- [ ] **12.2** Smooth transitions, native scroll behavior
-- [ ] **12.3** Touch Bar / Shortcuts integration
-- [ ] **12.4** Menu bar extra for quick launch
+### Phase 12: macOS Native Polish (DONE)
+- [x] **12.1** System font stack, proper titlebar integration
+- [x] **12.2** Smooth transitions, native scroll behavior
+- [x] **12.4** Menu bar extra for quick launch

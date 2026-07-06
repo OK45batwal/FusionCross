@@ -80,13 +80,16 @@
 
 @layer base {
   html {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro", "SF Pro Text", "Helvetica Neue", sans-serif;
     font-size: 16px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
 
   body {
-    @apply bg-graphite-900 text-graphite-100 font-sans antialiased overflow-hidden select-none;
+    @apply bg-graphite-900 text-graphite-100 antialiased overflow-hidden select-none;
     background-image:
       radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
       radial-gradient(at 100% 100%, rgba(157, 78, 221, 0.12) 0px, transparent 50%);
@@ -103,6 +106,15 @@
   ::-webkit-scrollbar-thumb {
     @apply bg-graphite-600 rounded-full hover:bg-graphite-500;
     transition: background var(--transition-fast);
+  }
+
+  /* macOS titlebar drag region */
+  .titlebar-drag {
+    -webkit-app-region: drag;
+  }
+
+  .titlebar-no-drag {
+    -webkit-app-region: no-drag;
   }
 }
 
