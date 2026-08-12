@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+@theme {
+  --color-graphite-950: #080a0d;
+  --color-graphite-900: #0c0e12;
+  --color-graphite-850: #101419;
+  --color-graphite-800: #141820;
+  --color-graphite-750: #171c22;
+  --color-graphite-700: #1d232b;
+  --color-graphite-600: #262d35;
+  --color-graphite-500: #3a4350;
+  --color-graphite-400: #55616f;
+  --color-graphite-300: #7e8a99;
+  --color-graphite-200: #a9b3c0;
+  --color-graphite-100: #d8dee8;
+
+  --color-accent-500: #5b76f7;
+  --color-accent-400: #6d86ff;
+  --color-accent-300: #8b9dff;
+  --color-accent-mute: #8d96c9;
+
+  --color-ok: #2fd6a2;
+  --color-warn: #f0b429;
+  --color-err: #f25c5c;
+
+  --font-mono: "SFMono-Regular", "SF Mono", "Cascadia Code", "Fira Code", ui-monospace, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", system-ui, sans-serif;
+  background: var(--color-graphite-900);
+  color: var(--color-graphite-100);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  overflow: hidden;
+}
+
+/* thin scrollbars that fit the dark theme */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-graphite-600);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
