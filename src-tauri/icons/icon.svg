@@ -1,0 +1,14 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <circle cx="512" cy="512" r="480" fill="#080A0D"/>
+  <circle cx="512" cy="512" r="460" fill="none" stroke="#4F8DFF" stroke-width="24"/>
+  
+  <!-- FC Fusion Symbol -->
+  <path d="M300 300 L300 724 L724 300 L724 724" 
+        stroke="#4F8DFF" stroke-width="48" fill="none" 
+        stroke-linecap="round"/>
+        
+  <!-- Fusion Connection -->
+  <path d="M300 512 L724 512" 
+        stroke="#4F8DFF" stroke-width="32" opacity="0.2"/>
+</svg>
