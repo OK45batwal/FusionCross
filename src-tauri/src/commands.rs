@@ -1,5 +1,4 @@
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
@@ -15,10 +14,8 @@ use crate::diagnostics::{self, FixIntent};
 use crate::installer::{self, InstallerAnalysis};
 use crate::manager::{dirs, FusionState, Jobs};
 use crate::process::{ProcessManager, RunningInfo};
-use crate::runtime::{self, catalog, CatalogEntry, engine_binary, install_from_archive};
-use crate::security::archives;
-use crate::wine::engine::RuntimeEngine;
-use crate::wine::engine::WineEngine;
+use crate::runtime::{self, catalog, CatalogEntry};
+use crate::wine::engine::{RuntimeEngine, WineEngine};
 use crate::wine::scanner::{self, DiscoveredExe};
 
 fn now_ts() -> String {
@@ -35,10 +32,6 @@ fn wine_binary_for(app: &AppHandle, runtime_id: &str) -> String {
         .and_then(|r| runtime::engine_binary(Path::new(&r.path)))
         .unwrap_or_else(|| PathBuf::from("wine"));
     path.to_string_lossy().into_owned()
-}
-
-fn save(app: &AppHandle) -> Result<(), FusionError> {
-    app.state::<FusionState>().save(app)
 }
 
 /* ---------- read commands ---------- */
@@ -659,10 +652,4 @@ pub fn export_app_bundle(app: AppHandle, app_id: String) -> Result<String, Fusio
     let target_dir = PathBuf::from(home).join("Applications").join("FusionCross");
     let bundle_path = crate::exporter::create_mac_app_bundle(&application.name, &application.id, &target_dir)?;
     Ok(bundle_path.to_string_lossy().into_owned())
-}
-
-// Keep the unused-import warning honest about WineEngine's RuntimeEngine for probe.
-#[allow(dead_code)]
-fn _wine_engine_demo() -> Result<String, FusionError> {
-    Ok(WineEngine::stable().version()?)
 }
