@@ -9,6 +9,7 @@ mod process;
 mod runtime;
 mod snapshots;
 mod security;
+mod exporter;
 
 use tauri::Manager;
 
@@ -48,6 +49,7 @@ pub fn run() {
             commands::import_runtime,
             commands::remove_runtime,
             commands::set_safe_mode,
+            commands::export_app_bundle,
         ])
         .run(tauri::generate_context!())
         .expect("error while running FusionCross");

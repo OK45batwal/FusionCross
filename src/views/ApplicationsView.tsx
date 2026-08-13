@@ -12,8 +12,9 @@ import {
   Clock,
   CheckCircle2,
   X,
+  Share,
 } from "lucide-react";
-import { Application, Bottle, RunningInfo } from "../services/tauri";
+import { Application, Bottle, RunningInfo, exportAppBundle } from "../services/tauri";
 import { ViewId } from "../components/Sidebar";
 
 interface ApplicationsViewProps {
@@ -365,16 +366,32 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
             </div>
 
             {/* Modal Actions */}
-            <div className="flex items-center justify-between pt-2">
-              <button
-                onClick={() => {
-                  setSelectedApp(null);
-                  onNavigate("diagnostics");
-                }}
-                className="px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--border-color)] text-[var(--text-main)] text-[11px] font-mono flex items-center gap-1.5 border border-[var(--border-color)] cursor-pointer transition-colors"
-              >
-                <Activity className="w-3.5 h-3.5 text-amber-500" /> Diagnostics
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setSelectedApp(null);
+                    onNavigate("diagnostics");
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--border-color)] text-[var(--text-main)] text-[11px] font-mono flex items-center gap-1.5 border border-[var(--border-color)] cursor-pointer transition-colors"
+                >
+                  <Activity className="w-3.5 h-3.5 text-amber-500" /> Diagnostics
+                </button>
+
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await exportAppBundle(selectedApp.id);
+                      alert(`Exported macOS .app bundle to:\n${res}\n\nYou can now launch this app from Finder, Spotlight, or Dock!`);
+                    } catch (e) {
+                      alert(`Export failed: ${String(e)}`);
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--border-color)] text-[var(--text-main)] text-[11px] font-mono flex items-center gap-1.5 border border-[var(--border-color)] cursor-pointer transition-colors"
+                >
+                  <Share className="w-3.5 h-3.5 text-[var(--accent-primary)]" /> Export .app
+                </button>
+              </div>
 
               <div className="flex items-center gap-2">
                 <button

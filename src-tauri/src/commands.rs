@@ -644,6 +644,23 @@ pub fn set_safe_mode(app: AppHandle, enabled: bool) -> Result<(), FusionError> {
     st.save(&app)
 }
 
+#[tauri::command]
+pub fn export_app_bundle(app: AppHandle, app_id: String) -> Result<String, FusionError> {
+    let st = app.state::<FusionState>();
+    let application = st.with_state(|s| {
+        s.applications
+            .iter()
+            .find(|a| a.id == app_id)
+            .cloned()
+            .ok_or(FusionError::ApplicationNotFound)
+    })?;
+
+    let home = std::env::var("HOME").map_err(|_| FusionError::Unsupported)?;
+    let target_dir = PathBuf::from(home).join("Applications").join("FusionCross");
+    let bundle_path = crate::exporter::create_mac_app_bundle(&application.name, &application.id, &target_dir)?;
+    Ok(bundle_path.to_string_lossy().into_owned())
+}
+
 // Keep the unused-import warning honest about WineEngine's RuntimeEngine for probe.
 #[allow(dead_code)]
 fn _wine_engine_demo() -> Result<String, FusionError> {

@@ -195,3 +195,4 @@ export const importRuntime = (name: string, archivePath: string) =>
   invoke<Runtime>("import_runtime", { name, archivePath });
 export const removeRuntime = (runtimeId: string) => invoke<void>("remove_runtime", { runtimeId });
 export const setSafeMode = (enabled: boolean) => invoke<void>("set_safe_mode", { enabled });
+export const exportAppBundle = (appId: string) => invoke<string>("export_app_bundle", { appId });
