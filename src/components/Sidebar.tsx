@@ -69,21 +69,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   return (
-    <nav className="w-[230px] shrink-0 border-r border-graphite-600/60 flex flex-col bg-graphite-900 select-none">
+    <nav className="w-[230px] shrink-0 border-r border-[var(--border-color)] flex flex-col bg-[var(--bg-surface)] select-none transition-colors duration-300">
       {/* App Header */}
-      <div className="px-4 py-4 flex items-center justify-between border-b border-graphite-600/60">
+      <div className="px-4 py-4 flex items-center justify-between border-b border-[var(--border-color)]">
         <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => onNavigate("home")}>
-          <span className="w-7 h-7 rounded-lg bg-accent-500 flex items-center justify-center text-[13px] font-bold font-mono text-white shadow-sm shadow-accent-500/30">
+          <span className="w-7 h-7 rounded-lg bg-[var(--accent-primary)] flex items-center justify-center text-[13px] font-bold font-mono text-white shadow-sm shadow-[var(--accent-glow)]">
             F
           </span>
           <div>
-            <h1 className="font-mono text-[13px] font-bold tracking-[1.5px] text-graphite-100">FUSIONCROSS</h1>
-            <p className="text-[9px] font-mono text-graphite-300">v2.0 MVP · Mac Way</p>
+            <h1 className="font-mono text-[13px] font-bold tracking-[1.5px] text-[var(--text-main)]">FUSIONCROSS</h1>
+            <p className="text-[9px] font-mono text-[var(--text-muted)]">v2.0 MVP · Mac Way</p>
           </div>
         </div>
         {runningCount > 0 && (
-          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-ok/10 text-ok border border-ok/30 animate-pulse">
-            <span className="w-1.5 h-1.5 rounded-full bg-ok" />
+          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-[var(--color-ok-glow)] text-[var(--color-ok)] border border-[var(--color-ok)]/30 animate-pulse">
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-ok)]" />
             {runningCount}
           </span>
         )}
@@ -93,7 +93,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="px-3 pt-3 pb-1">
         <button
           onClick={() => onNavigate("installer")}
-          className="w-full py-2.5 px-3 rounded-md bg-accent-500 hover:bg-accent-400 active:scale-[0.98] text-white text-[11px] font-mono font-semibold flex items-center justify-center gap-2 transition-all shadow-md shadow-accent-500/20"
+          className="w-full py-2.5 px-3 rounded-xl bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] active:scale-[0.98] text-white text-[11px] font-mono font-bold flex items-center justify-center gap-2 transition-all shadow-md shadow-[var(--accent-glow)] cursor-pointer"
         >
           <Download className="w-4 h-4" /> INSTALL APP
         </button>
@@ -103,7 +103,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="flex-1 overflow-y-auto px-3 py-2 space-y-4">
         {navGroups.map((group) => (
           <div key={group.label}>
-            <p className="px-2 mb-1 text-[10px] font-mono tracking-[1.5px] text-graphite-400 font-semibold">
+            <p className="px-2 mb-1 text-[10px] font-mono tracking-[1.5px] text-[var(--text-muted)] font-bold">
               {group.label}
             </p>
             <div className="space-y-0.5">
@@ -114,13 +114,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <button
                     key={item.id}
                     onClick={() => onNavigate(item.id)}
-                    className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[12px] font-medium transition-all ${
+                    className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[12px] font-semibold transition-all cursor-pointer ${
                       isActive
-                        ? "text-graphite-100 bg-graphite-800 border border-graphite-600/70 shadow-sm"
-                        : "text-graphite-300 hover:text-graphite-100 hover:bg-graphite-800/40"
+                        ? "text-[var(--text-main)] bg-[var(--bg-elevated)] border border-[var(--border-color)] shadow-sm"
+                        : "text-[var(--text-secondary)] hover:text-[var(--text-main)] hover:bg-[var(--bg-elevated)]/50"
                     }`}
                   >
-                    <Icon className={`w-4 h-4 ${isActive ? "text-accent-400" : "text-graphite-400"}`} />
+                    <Icon className={`w-4 h-4 ${isActive ? "text-[var(--accent-primary)]" : "text-[var(--text-muted)]"}`} />
                     <span>{item.label}</span>
                   </button>
                 );
@@ -131,29 +131,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Bottom Rail Controls */}
-      <div className="px-3 py-3 border-t border-graphite-600/60 space-y-1">
+      <div className="px-3 py-3 border-t border-[var(--border-color)] space-y-1">
         <button
           onClick={onOpenCommandPalette}
-          className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-[12px] text-graphite-300 hover:text-graphite-100 hover:bg-graphite-800/50 transition-colors"
+          className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-main)] hover:bg-[var(--bg-elevated)]/50 transition-colors cursor-pointer"
         >
           <div className="flex items-center gap-2">
-            <Terminal className="w-3.5 h-3.5 text-graphite-400" />
+            <Terminal className="w-3.5 h-3.5 text-[var(--text-muted)]" />
             <span>Command Palette</span>
           </div>
-          <kbd className="px-1.5 py-0.5 text-[9px] font-mono bg-graphite-800 border border-graphite-600 text-graphite-300 rounded">
+          <kbd className="px-1.5 py-0.5 text-[9px] font-mono bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[var(--text-secondary)] rounded">
             ⌘K
           </kbd>
         </button>
 
         <button
           onClick={() => onNavigate("settings")}
-          className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[12px] transition-colors ${
+          className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[12px] transition-colors cursor-pointer ${
             currentView === "settings"
-              ? "text-graphite-100 bg-graphite-800 border border-graphite-600/70"
-              : "text-graphite-300 hover:text-graphite-100 hover:bg-graphite-800/50"
+              ? "text-[var(--text-main)] bg-[var(--bg-elevated)] border border-[var(--border-color)]"
+              : "text-[var(--text-secondary)] hover:text-[var(--text-main)] hover:bg-[var(--bg-elevated)]/50"
           }`}
         >
-          <Settings className="w-3.5 h-3.5 text-graphite-400" />
+          <Settings className="w-3.5 h-3.5 text-[var(--text-muted)]" />
           <span>Settings</span>
         </button>
       </div>
