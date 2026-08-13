@@ -81,6 +81,12 @@ impl std::fmt::Display for FusionError {
 
 impl std::error::Error for FusionError {}
 
+impl From<crate::core::templates::TemplateError> for FusionError {
+    fn from(_: crate::core::templates::TemplateError) -> Self {
+        FusionError::BottleNotFound
+    }
+}
+
 impl Serialize for FusionError {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         #[derive(Serialize)]

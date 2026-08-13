@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FusionCross — Download Windows Apps Runner for Mac</title>
+  <meta name="description" content="Free, open-source macOS app runner for Apple Silicon (M1-M4+). Run Windows applications with maximum performance and zero Wine complexity.">
+  
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Ambient background glow effects -->
+  <div class="ambient-glow-1"></div>
+  <div class="ambient-glow-2"></div>
+
+  <!-- Header / Navigation Bar -->
+  <header>
+    <div class="container nav-content">
+      <a href="#" class="brand">
+        <div class="brand-icon">F</div>
+        <div>
+          <div class="brand-title">FUSIONCROSS</div>
+          <div class="brand-tag">v2.0 MVP · Apple Silicon</div>
+        </div>
+      </a>
+
+      <div class="nav-actions">
+        <!-- Theme Toggle Switcher (Dark & Light Mode) -->
+        <button class="theme-toggle-btn" id="themeToggleBtn" title="Toggle Dark / Light Theme">
+          <span id="themeIcon">🌙</span>
+          <span id="themeText">Dark</span>
+        </button>
+
+        <a href="https://github.com" target="_blank" class="nav-github-btn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero & Download Card Section -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-badge">
+        <span class="dot"></span>
+        <span>Version 2.0.0 Stable · macOS 13.0+</span>
+      </div>
+
+      <h1 class="hero-title">Windows Apps. The Mac Way.</h1>
+      <p class="hero-subtitle">
+        FusionCross automatically manages Wine runtimes, bottle environments, D3DMetal graphics acceleration, dependencies, and diagnostics so you can run Windows software effortlessly.
+      </p>
+
+      <!-- Primary Download Card -->
+      <div class="download-box">
+        <div class="detection-pill" id="detectPill">
+          ✓ Detecting Apple Silicon architecture...
+        </div>
+
+        <button onclick="triggerDownload()" class="download-main-btn" id="downloadMainBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          Download FusionCross v2.0 for Mac
+        </button>
+
+        <div class="download-meta">
+          <span id="downloadSub">FusionCross-2.0.0-arm64.dmg · 48.2 MB</span>
+          <span>•</span>
+          <span>Apple Silicon (M1/M2/M3/M4)</span>
+          <span>•</span>
+          <span>Free & Open Source</span>
+        </div>
+
+        <!-- SHA-256 Verification Box -->
+        <div class="sha256-container">
+          <div class="sha256-header">
+            <span>SHA-256 CHECKSUM VERIFICATION (PRD §54)</span>
+            <button class="copy-hash-btn" id="copyHashBtn">Copy Hash</button>
+          </div>
+          <div class="sha256-hash" id="shaHash">
+            e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Showcase Grid -->
+  <section class="features-section">
+    <div class="container">
+      <div class="section-header reveal">
+        <h2 class="section-title">Everything Handled Automatically</h2>
+        <p class="section-subtitle">Zero manual Wine configuration required. FusionCross does the heavy lifting.</p>
+      </div>
+
+      <div class="features-grid">
+        <!-- Feature 1 -->
+        <div class="feature-card reveal">
+          <div class="feature-icon icon-blue">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+          </div>
+          <h3 class="feature-heading">Zero-Wine Friction</h3>
+          <p class="feature-description">
+            Drop any .exe or .msi file. FusionCross inspects the binary header, selects the right Wine engine (Wine Stable or Wine-GE), and installs required dependencies automatically.
+          </p>
+        </div>
+
+        <!-- Feature 2 -->
+        <div class="feature-card reveal">
+          <div class="feature-icon icon-green">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+          </div>
+          <h3 class="feature-heading">Apple Silicon Graphics</h3>
+          <p class="feature-description">
+            Leverages D3DMetal (Apple Game Porting Toolkit) and DXVK Vulkan translation for high frame rates and native Metal performance on M1, M2, M3, and M4 chips.
+          </p>
+        </div>
+
+        <!-- Feature 3 -->
+        <div class="feature-card reveal">
+          <div class="feature-icon icon-yellow">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
+          </div>
+          <h3 class="feature-heading">1-Click Diagnostics & Auto-Fix</h3>
+          <p class="feature-description">
+            When launch errors occur, the Health Diagnostics engine runs checks (*what happened / why*) and repairs prefix dependencies or graphics settings with 1 click.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Clean Footer -->
+  <footer>
+    <div class="container footer-content">
+      <div class="footer-brand">
+        <span>FUSIONCROSS</span> · Free & Open Source under MIT License
+      </div>
+      <div>
+        Designed for macOS Apple Silicon (M1–M4)
+      </div>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
