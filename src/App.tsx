@@ -24,10 +24,11 @@ import {
   SystemInfo,
   FusionErrorPayload,
 } from "./services/tauri";
-import { Moon, Sun, Monitor, Globe } from "lucide-react";
+import { Moon, Sun, Monitor, Globe, Code2 } from "lucide-react";
 
 export function App() {
-  const [currentView, setCurrentView] = useState<ViewId>("home");
+  // Default to "website" so visiting localhost:1420 displays the Download & Feature website
+  const [currentView, setCurrentView] = useState<ViewId>("website");
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     const saved = localStorage.getItem("fusioncross-theme");
     return (saved as "dark" | "light") || "dark";
@@ -114,6 +115,77 @@ export function App() {
     setTheme((prev: "dark" | "light") => (prev === "dark" ? "light" : "dark"));
   };
 
+  // Dedicated Website Mode (No App sidebar clutter)
+  if (currentView === "website") {
+    return (
+      <div className="min-h-screen flex flex-col bg-[var(--bg-main)] text-[var(--text-main)] transition-colors duration-300">
+        {/* Website Header */}
+        <header className="sticky top-0 z-50 border-b border-[var(--border-color)] bg-[var(--bg-glass)] backdrop-blur-xl transition-all">
+          <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
+            <a href="#" className="flex items-center gap-3 text-decoration-none group">
+              <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-[var(--accent-primary)] to-[#3b52d4] flex items-center justify-center font-mono font-bold text-[16px] text-white shadow-md shadow-[var(--accent-glow)] group-hover:scale-105 transition-transform">
+                F
+              </span>
+              <div>
+                <span className="font-mono font-bold text-[16px] tracking-wider text-[var(--text-main)] block">
+                  FUSIONCROSS
+                </span>
+                <span className="font-mono text-[10px] text-[var(--text-muted)] block">
+                  v2.0 MVP · Apple Silicon
+                </span>
+              </div>
+            </a>
+
+            <div className="flex items-center gap-3">
+              {/* Desktop App Workspace Switcher */}
+              <button
+                onClick={() => setCurrentView("home")}
+                className="px-3 py-1.5 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--border-color)] border border-[var(--border-color)] text-[var(--text-main)] font-mono text-[12px] font-semibold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+              >
+                <Monitor className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                <span>Open Desktop Workspace</span>
+              </button>
+
+              {/* Theme Toggle Button */}
+              <button
+                onClick={toggleTheme}
+                className="px-3 py-1.5 rounded-full border border-[var(--border-color)] bg-[var(--bg-elevated)] text-[var(--text-main)] font-mono text-[12px] font-semibold flex items-center gap-2 hover:border-[var(--border-hover)] transition-all shadow-sm cursor-pointer"
+                title="Toggle Dark / Light Theme"
+              >
+                {theme === "dark" ? (
+                  <>
+                    <Moon className="w-3.5 h-3.5 text-accent-400" />
+                    <span>Dark</span>
+                  </>
+                ) : (
+                  <>
+                    <Sun className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Light</span>
+                  </>
+                )}
+              </button>
+
+              {/* GitHub Link */}
+              <a
+                href="https://github.com"
+                target="_blank"
+                rel="noreferrer"
+                className="px-4 py-1.5 rounded-xl bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white font-mono text-[12px] font-bold flex items-center gap-2 shadow-md shadow-[var(--accent-glow)] transition-all text-decoration-none"
+              >
+                <Code2 className="w-4 h-4" />
+                <span>GitHub</span>
+              </a>
+            </div>
+          </div>
+        </header>
+
+        {/* Website Landing Page View */}
+        <WebsitePortalView onOpenAppWorkbench={() => setCurrentView("home")} />
+      </div>
+    );
+  }
+
+  // Desktop Application Mode (With Sidebar & Workbenches)
   return (
     <div className="flex h-screen w-screen bg-[var(--bg-main)] text-[var(--text-main)] font-sans select-none overflow-hidden transition-colors duration-300">
       {/* Left Navigation Sidebar */}
@@ -146,17 +218,13 @@ export function App() {
               </span>
             )}
 
-            {/* View Web Portal Shortcut Button */}
+            {/* View Download Website Button */}
             <button
               onClick={() => setCurrentView("website")}
-              className={`px-2.5 py-1 rounded-md border text-[11px] font-mono font-semibold flex items-center gap-1.5 transition-all ${
-                currentView === "website"
-                  ? "bg-[var(--accent-primary)] text-white border-[var(--accent-primary)] shadow-sm"
-                  : "bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-color)] hover:border-[var(--border-hover)]"
-              }`}
+              className="px-2.5 py-1 rounded-md border text-[11px] font-mono font-semibold flex items-center gap-1.5 transition-all bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-color)] hover:border-[var(--border-hover)] hover:text-[var(--text-main)]"
             >
-              <Globe className="w-3.5 h-3.5" />
-              <span>Website Portal</span>
+              <Globe className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+              <span>View Download Website</span>
             </button>
 
             {/* Dark / Light Mode Toggle Button */}
@@ -174,7 +242,7 @@ export function App() {
 
             <button
               onClick={refreshState}
-              className="text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
+              className="text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors cursor-pointer"
             >
               ↻ Refresh
             </button>
@@ -183,7 +251,7 @@ export function App() {
 
         {/* Global Error Alert Banner */}
         {globalError && (
-          <div className="px-6 py-2 bg-err/10 border-b border-err/30 text-err font-mono text-[11px] flex items-center justify-between">
+          <div className="px-6 py-2 bg-red-500/10 border-b border-red-500/30 text-red-500 font-mono text-[11px] flex items-center justify-between">
             <span>⚠ {globalError}</span>
             <button onClick={() => setGlobalError(null)} className="hover:underline">
               Dismiss
@@ -283,8 +351,6 @@ export function App() {
               onRefreshState={refreshState}
             />
           )}
-
-          {currentView === "website" && <WebsitePortalView />}
         </div>
       </main>
 
