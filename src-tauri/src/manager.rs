@@ -25,6 +25,7 @@ pub fn dirs(app: &AppHandle) -> Dirs {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code, unused)]
 pub struct Dirs {
     #[allow(dead_code)]
     pub base: PathBuf,
@@ -37,7 +38,12 @@ pub struct Dirs {
 
 impl Dirs {
     fn ensure(&self) -> Result<(), FusionError> {
-        for d in [&self.bottles, &self.runtimes, &self.snapshots, &self.downloads] {
+        for d in [
+            &self.bottles,
+            &self.runtimes,
+            &self.snapshots,
+            &self.downloads,
+        ] {
             std::fs::create_dir_all(d).map_err(|_| FusionError::PermissionDenied)?;
         }
         Ok(())
@@ -60,7 +66,10 @@ impl FusionState {
         Self(Mutex::new(state))
     }
 
-    pub fn with_state<R>(&self, f: impl FnOnce(&mut AppState) -> Result<R, FusionError>) -> Result<R, FusionError> {
+    pub fn with_state<R>(
+        &self,
+        f: impl FnOnce(&mut AppState) -> Result<R, FusionError>,
+    ) -> Result<R, FusionError> {
         let mut guard = self.0.lock().map_err(|_| FusionError::Unsupported)?;
         f(&mut guard)
     }
@@ -79,12 +88,11 @@ impl FusionState {
 /// Long-running jobs (installs, runtime downloads) run on a thread and report
 /// back here; the frontend polls while they spin.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "state", content = "message")]
-#[allow(non_camel_case_types)]
+#[serde(tag = "state", content = "message", rename_all = "lowercase")]
 pub enum JobStatus {
-    running,
-    done,
-    failed,
+    Running,
+    Done,
+    Failed,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -102,21 +110,26 @@ impl Jobs {
         let id = crate::core::ids::new_id();
         self.0.lock().unwrap().insert(
             id.clone(),
-            Job { id: id.clone(), title, status: JobStatus::running, message: "working…".into() },
+            Job {
+                id: id.clone(),
+                title,
+                status: JobStatus::Running,
+                message: "working…".into(),
+            },
         );
         id
     }
 
     pub fn finish(&self, id: &str, message: String) {
         if let Some(j) = self.0.lock().unwrap().get_mut(id) {
-            j.status = JobStatus::done;
+            j.status = JobStatus::Done;
             j.message = message;
         }
     }
 
     pub fn fail(&self, id: &str, message: String) {
         if let Some(j) = self.0.lock().unwrap().get_mut(id) {
-            j.status = JobStatus::failed;
+            j.status = JobStatus::Failed;
             j.message = message;
         }
     }

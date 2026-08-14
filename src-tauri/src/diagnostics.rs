@@ -34,7 +34,7 @@ impl FixIntent {
         }
     }
 
-    #[allow(dead_code)]
+    #[allow(dead_code, unused)]
     pub fn label(&self) -> String {
         match self {
             FixIntent::InstallRuntime => "Install a Wine runtime".into(),
@@ -70,7 +70,10 @@ pub fn run_app_diagnostics(state: &AppState, app_id: &str) -> Vec<DiagnosticChec
         }
     };
     let bottle = state.bottles.iter().find(|b| b.id == app.bottle_id);
-    let runtime = state.runtimes.iter().find(|r| r.id == bottle.map(|b| b.runtime.as_str()).unwrap_or(""));
+    let runtime = state
+        .runtimes
+        .iter()
+        .find(|r| r.id == bottle.map(|b| b.runtime.as_str()).unwrap_or(""));
 
     // Bottle
     checks.push(DiagnosticCheck {
@@ -88,19 +91,45 @@ pub fn run_app_diagnostics(state: &AppState, app_id: &str) -> Vec<DiagnosticChec
         label: "Runtime",
         status: if runtime_ok { "ok" } else { "fail" },
         detail: bottle
-            .map(|b| format!("{} — {}", b.runtime, if runtime_ok { "available" } else { "missing" }))
+            .map(|b| {
+                format!(
+                    "{} — {}",
+                    b.runtime,
+                    if runtime_ok { "available" } else { "missing" }
+                )
+            })
             .unwrap_or_else(|| "no bottle → no runtime".into()),
-        fix: if runtime_ok { None } else { Some(FixIntent::InstallRuntime.id()) },
+        fix: if runtime_ok {
+            None
+        } else {
+            Some(FixIntent::InstallRuntime.id())
+        },
     });
 
     // Prefix initialized
-    let prefix_ok = bottle.map(|b| std::path::Path::new(&b.path).join("drive_c").join("windows").exists()).unwrap_or(false);
+    let prefix_ok = bottle
+        .map(|b| {
+            std::path::Path::new(&b.path)
+                .join("drive_c")
+                .join("windows")
+                .exists()
+        })
+        .unwrap_or(false);
     checks.push(DiagnosticCheck {
         id: "prefix",
         label: "Prefix",
         status: if prefix_ok { "ok" } else { "warn" },
-        detail: if prefix_ok { "drive_c initialized" } else { "prefix not initialized (first launch will create it)" }.into(),
-        fix: if prefix_ok { None } else { Some(FixIntent::InitPrefix.id()) },
+        detail: if prefix_ok {
+            "drive_c initialized"
+        } else {
+            "prefix not initialized (first launch will create it)"
+        }
+        .into(),
+        fix: if prefix_ok {
+            None
+        } else {
+            Some(FixIntent::InitPrefix.id())
+        },
     });
 
     // Executable
@@ -109,14 +138,21 @@ pub fn run_app_diagnostics(state: &AppState, app_id: &str) -> Vec<DiagnosticChec
         id: "executable",
         label: "Executable",
         status: if exe_ok { "ok" } else { "fail" },
-        detail: if exe_ok { app.executable_path.clone() } else { "Executable file is missing.".into() },
+        detail: if exe_ok {
+            app.executable_path.clone()
+        } else {
+            "Executable file is missing.".into()
+        },
         fix: None,
     });
 
     // Dependencies
     let deps = bottle.map(|b| b.dependencies.clone()).unwrap_or_default();
     if !deps.is_empty() {
-        let wt = std::process::Command::new("winetricks").arg("--version").output().is_ok();
+        let wt = std::process::Command::new("winetricks")
+            .arg("--version")
+            .output()
+            .is_ok();
         checks.push(DiagnosticCheck {
             id: "dependencies",
             label: "Dependencies",
@@ -146,11 +182,18 @@ pub fn run_app_diagnostics(state: &AppState, app_id: &str) -> Vec<DiagnosticChec
 }
 
 fn device_bottle(id: &str) -> String {
-    if id.is_empty() { "no bottle assigned".into() } else { format!("bottle {id}") }
+    if id.is_empty() {
+        "no bottle assigned".into()
+    } else {
+        format!("bottle {id}")
+    }
 }
 
 fn wine_on_path() -> bool {
-    std::process::Command::new("wine").arg("--version").output().is_ok()
+    std::process::Command::new("wine")
+        .arg("--version")
+        .output()
+        .is_ok()
 }
 
 #[cfg(test)]

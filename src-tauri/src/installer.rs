@@ -36,8 +36,8 @@ pub fn analyze_installer(path: &Path) -> Result<InstallerAnalysis, FusionError> 
         .map(|s| prettify(&s.to_string_lossy()))
         .unwrap_or_else(|| file_name.clone());
 
-    let is_windows_installer = matches!(ext.as_str(), "exe" | "msi")
-        && (data.starts_with(b"MZ") || ext == "msi");
+    let is_windows_installer =
+        matches!(ext.as_str(), "exe" | "msi") && (data.starts_with(b"MZ") || ext == "msi");
     let arch = if ext == "msi" || !data.starts_with(b"MZ") {
         unknown_or_msi(&data, ext.as_str())
     } else {
@@ -78,8 +78,7 @@ fn pe_arch(data: &[u8]) -> &'static str {
     if data.len() < 0x40 {
         return "unknown";
     }
-    let e_lfanew =
-        u32::from_le_bytes([data[0x3C], data[0x3D], data[0x3E], data[0x3F]]) as usize;
+    let e_lfanew = u32::from_le_bytes([data[0x3C], data[0x3D], data[0x3E], data[0x3F]]) as usize;
     let pe = e_lfanew + 4; // skip "PE\0\0"
     if e_lfanew + 8 > data.len() || &data[e_lfanew..e_lfanew + 4] != b"PE\0\0" {
         return "unknown";

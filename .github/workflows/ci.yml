@@ -11,11 +11,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system deps
-        run: |
-          brew install --quiet wine-stable || true
-          mkdir -p .github
-
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy

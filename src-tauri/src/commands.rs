@@ -19,18 +19,20 @@ use crate::wine::engine::{RuntimeEngine, WineEngine};
 use crate::wine::scanner::{self, DiscoveredExe};
 
 fn now_ts() -> String {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs().to_string()).unwrap_or_default()
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs().to_string())
+        .unwrap_or_default()
 }
 
 fn wine_binary_for(app: &AppHandle, runtime_id: &str) -> String {
     let st = app.state::<FusionState>();
-    let path = st
-        .0
-        .lock()
-        .ok()
-        .and_then(|g| g.runtimes.iter().find(|r| r.id == runtime_id).cloned())
-        .and_then(|r| runtime::engine_binary(Path::new(&r.path)))
-        .unwrap_or_else(|| PathBuf::from("wine"));
+    let path =
+        st.0.lock()
+            .ok()
+            .and_then(|g| g.runtimes.iter().find(|r| r.id == runtime_id).cloned())
+            .and_then(|r| runtime::engine_binary(Path::new(&r.path)))
+            .unwrap_or_else(|| PathBuf::from("wine"));
     path.to_string_lossy().into_owned()
 }
 
@@ -38,7 +40,11 @@ fn wine_binary_for(app: &AppHandle, runtime_id: &str) -> String {
 
 #[tauri::command]
 pub fn get_state(state: State<'_, FusionState>) -> Result<AppState, FusionError> {
-    Ok(state.0.lock().map_err(|_| FusionError::Unsupported)?.clone())
+    Ok(state
+        .0
+        .lock()
+        .map_err(|_| FusionError::Unsupported)?
+        .clone())
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -63,7 +69,10 @@ pub fn get_system_info() -> Result<SystemInfo, FusionError> {
 pub fn probe_runtime(engine: &str) -> Result<runtime::RuntimeStatus, FusionError> {
     let e = WineEngine::new(engine);
     let version = e.version().unwrap_or_else(|_| "not found".into());
-    Ok(runtime::RuntimeStatus { name: e.name().to_string(), version })
+    Ok(runtime::RuntimeStatus {
+        name: e.name().to_string(),
+        version,
+    })
 }
 
 #[tauri::command]
@@ -86,6 +95,7 @@ pub fn get_templates() -> Result<Vec<serde_json::Value>, FusionError> {
 }
 
 #[tauri::command]
+#[allow(dead_code, unused)]
 pub fn get_runtimes(app: AppHandle) -> Result<Vec<serde_json::Value>, FusionError> {
     let st = app.state::<FusionState>();
     let state = st.0.lock().map_err(|_| FusionError::Unsupported)?;
@@ -111,7 +121,11 @@ pub fn get_runtimes(app: AppHandle) -> Result<Vec<serde_json::Value>, FusionErro
 /* ---------- bottles ---------- */
 
 #[tauri::command]
-pub fn create_bottle(app: AppHandle, name: String, template_type: String) -> Result<Bottle, FusionError> {
+pub fn create_bottle(
+    app: AppHandle,
+    name: String,
+    template_type: String,
+) -> Result<Bottle, FusionError> {
     let template = templates::bottle_template(&template_type)?;
     let id = new_id();
     let d = dirs(&app);
@@ -129,9 +143,21 @@ pub fn create_bottle(app: AppHandle, name: String, template_type: String) -> Res
         path: path.to_string_lossy().into_owned(),
         created_at: now_ts(),
         last_used_at: None,
-        environment: template.environment.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
-        dll_overrides: template.dll_overrides.iter().map(|s| s.to_string()).collect(),
-        dependencies: template.dependencies.iter().map(|s| s.to_string()).collect(),
+        environment: template
+            .environment
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect(),
+        dll_overrides: template
+            .dll_overrides
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+        dependencies: template
+            .dependencies
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
     };
 
     {
@@ -163,7 +189,9 @@ pub fn create_bottle(app: AppHandle, name: String, template_type: String) -> Res
 
 fn initialize_bottle_prefix(app: &AppHandle, bottle_id: &str) -> Result<String, FusionError> {
     let st = app.state::<FusionState>();
-    let bottle = st.with_state(|s| Ok(s.bottles.iter().find(|b| b.id == bottle_id).cloned()))?.ok_or(FusionError::BottleNotFound)?;
+    let bottle = st
+        .with_state(|s| Ok(s.bottles.iter().find(|b| b.id == bottle_id).cloned()))?
+        .ok_or(FusionError::BottleNotFound)?;
     let binary = wine_binary_for(app, &bottle.runtime);
     let prefix = Path::new(&bottle.path);
     crate::wine::prefix::init_prefix(&binary, prefix)?;
@@ -172,6 +200,7 @@ fn initialize_bottle_prefix(app: &AppHandle, bottle_id: &str) -> Result<String, 
 }
 
 #[tauri::command]
+#[allow(dead_code, unused)]
 pub fn repair_bottle(app: AppHandle, bottle_id: String) -> Result<String, FusionError> {
     initialize_bottle_prefix(&app, &bottle_id)
 }
@@ -180,7 +209,13 @@ pub fn repair_bottle(app: AppHandle, bottle_id: String) -> Result<String, Fusion
 pub fn delete_bottle(app: AppHandle, bottle_id: String) -> Result<(), FusionError> {
     let d = dirs(&app);
     let st = app.state::<FusionState>();
-    let bottle = st.with_state(|s| s.bottles.iter().find(|b| b.id == bottle_id).cloned().ok_or(FusionError::BottleNotFound))?;
+    let bottle = st.with_state(|s| {
+        s.bottles
+            .iter()
+            .find(|b| b.id == bottle_id)
+            .cloned()
+            .ok_or(FusionError::BottleNotFound)
+    })?;
     paths::safe_remove_all(&d.bottles, Path::new(&bottle.path))?;
     st.with_state(|s| {
         s.bottles.retain(|b| b.id != bottle_id);
@@ -193,10 +228,20 @@ pub fn delete_bottle(app: AppHandle, bottle_id: String) -> Result<(), FusionErro
 }
 
 #[tauri::command]
-pub fn clone_bottle(app: AppHandle, bottle_id: String, new_name: String) -> Result<Bottle, FusionError> {
+pub fn clone_bottle(
+    app: AppHandle,
+    bottle_id: String,
+    new_name: String,
+) -> Result<Bottle, FusionError> {
     let d = dirs(&app);
     let st = app.state::<FusionState>();
-    let source = st.with_state(|s| s.bottles.iter().find(|b| b.id == bottle_id).cloned().ok_or(FusionError::BottleNotFound))?;
+    let source = st.with_state(|s| {
+        s.bottles
+            .iter()
+            .find(|b| b.id == bottle_id)
+            .cloned()
+            .ok_or(FusionError::BottleNotFound)
+    })?;
     let id = new_id();
     let new_path = d.bottles.join(&id);
     paths::safe_copy_all(&d.bottles, Path::new(&source.path), &new_path)?;
@@ -206,7 +251,10 @@ pub fn clone_bottle(app: AppHandle, bottle_id: String, new_name: String) -> Resu
         name: new_name,
         ..source.clone()
     };
-    let clone = Bottle { path: new_path.to_string_lossy().into_owned(), ..clone };
+    let clone = Bottle {
+        path: new_path.to_string_lossy().into_owned(),
+        ..clone
+    };
     st.with_state(|s| {
         s.bottles.push(clone.clone());
         Ok(())
@@ -227,12 +275,26 @@ pub fn update_bottle(
 ) -> Result<(), FusionError> {
     let st = app.state::<FusionState>();
     st.with_state(|s| {
-        let b = s.bottles.iter_mut().find(|b| b.id == bottle_id).ok_or(FusionError::BottleNotFound)?;
-        if let Some(v) = windows_version { b.windows_version = v; }
-        if let Some(g) = graphics { b.graphics = g; }
-        if let Some(d) = dxvk_enabled { b.dxvk_enabled = d; }
-        if let Some(e) = environment { b.environment = e; }
-        if let Some(o) = dll_overrides { b.dll_overrides = o; }
+        let b = s
+            .bottles
+            .iter_mut()
+            .find(|b| b.id == bottle_id)
+            .ok_or(FusionError::BottleNotFound)?;
+        if let Some(v) = windows_version {
+            b.windows_version = v;
+        }
+        if let Some(g) = graphics {
+            b.graphics = g;
+        }
+        if let Some(d) = dxvk_enabled {
+            b.dxvk_enabled = d;
+        }
+        if let Some(e) = environment {
+            b.environment = e;
+        }
+        if let Some(o) = dll_overrides {
+            b.dll_overrides = o;
+        }
         Ok(())
     })?;
     st.save(&app)
@@ -248,7 +310,13 @@ pub fn analyze_installer(path: String) -> Result<InstallerAnalysis, FusionError>
 #[tauri::command]
 pub fn scan_bottle(app: AppHandle, bottle_id: String) -> Result<Vec<DiscoveredExe>, FusionError> {
     let st = app.state::<FusionState>();
-    let bottle = st.with_state(|s| s.bottles.iter().find(|b| b.id == bottle_id).cloned().ok_or(FusionError::BottleNotFound))?;
+    let bottle = st.with_state(|s| {
+        s.bottles
+            .iter()
+            .find(|b| b.id == bottle_id)
+            .cloned()
+            .ok_or(FusionError::BottleNotFound)
+    })?;
     Ok(scanner::scan_prefix(Path::new(&bottle.path)))
 }
 
@@ -263,7 +331,10 @@ pub fn register_application(
     let st = app.state::<FusionState>();
     let rec = compatibility::recommend(&name);
     let application = st.with_state(|s| {
-        if s.applications.iter().any(|a| a.bottle_id == bottle_id && a.executable_path == executable_path) {
+        if s.applications
+            .iter()
+            .any(|a| a.bottle_id == bottle_id && a.executable_path == executable_path)
+        {
             return Err(FusionError::InvalidExecutable); // duplicate
         }
         let app = Application {
@@ -276,7 +347,7 @@ pub fn register_application(
             launch_count: 0,
             play_time_mins: 0,
             last_played: None,
-            compatibility: Some(rec.compatibility.clone()),
+            compatibility: Some(rec.compatibility),
             profile: Some(rec.profile.to_string()),
         };
         s.applications.push(app.clone());
@@ -287,7 +358,11 @@ pub fn register_application(
 }
 
 #[tauri::command]
-pub fn run_installer(app: AppHandle, installer_path: String, bottle_id: String) -> Result<String, FusionError> {
+pub fn run_installer(
+    app: AppHandle,
+    installer_path: String,
+    bottle_id: String,
+) -> Result<String, FusionError> {
     // Stage the installer into the prefix's installers folder.
     let analysis = installer::analyze_installer(Path::new(&installer_path))?;
     let jobs = app.state::<Jobs>();
@@ -306,9 +381,20 @@ pub fn run_installer(app: AppHandle, installer_path: String, bottle_id: String) 
     Ok(job)
 }
 
-fn install_job(app: &AppHandle, bottle_id: &str, installer_path: &str, file_name: &str) -> Result<String, FusionError> {
+fn install_job(
+    app: &AppHandle,
+    bottle_id: &str,
+    installer_path: &str,
+    file_name: &str,
+) -> Result<String, FusionError> {
     let st = app.state::<FusionState>();
-    let bottle = st.with_state(|s| s.bottles.iter().find(|b| b.id == bottle_id).cloned().ok_or(FusionError::BottleNotFound))?;
+    let bottle = st.with_state(|s| {
+        s.bottles
+            .iter()
+            .find(|b| b.id == bottle_id)
+            .cloned()
+            .ok_or(FusionError::BottleNotFound)
+    })?;
     let binary = wine_binary_for(app, &bottle.runtime);
     let prefix = Path::new(&bottle.path);
 
@@ -333,7 +419,7 @@ fn install_job(app: &AppHandle, bottle_id: &str, installer_path: &str, file_name
         return Err(FusionError::InstallationFailed);
     }
     // sleeper in case the installer exits before scanning
-    let _ = () ;
+    let _ = ();
 
     // Discover whatever the installer laid down.
     let found = scanner::scan_prefix(prefix);
@@ -341,7 +427,10 @@ fn install_job(app: &AppHandle, bottle_id: &str, installer_path: &str, file_name
     st.with_state(|s| {
         for exe in &found {
             // dupe by executable path inside this bottle
-            if s.applications.iter().any(|a| a.bottle_id == bottle_id && a.executable_path == exe.rel_path) {
+            if s.applications
+                .iter()
+                .any(|a| a.bottle_id == bottle_id && a.executable_path == exe.rel_path)
+            {
                 continue;
             }
             s.applications.push(Application {
@@ -362,7 +451,9 @@ fn install_job(app: &AppHandle, bottle_id: &str, installer_path: &str, file_name
         Ok(())
     })?;
     st.save(app)?;
-    Ok(format!("Installed. Discovered {registered} application(s)."))
+    Ok(format!(
+        "Installed. Discovered {registered} application(s)."
+    ))
 }
 
 #[tauri::command]
@@ -402,8 +493,16 @@ pub fn launch_application(app: AppHandle, app_id: String) -> Result<RunningInfo,
     }
 
     let safe = settings_bool(&app, "safe_mode");
-    let override_env = if safe { vec![] } else { bottle.environment.clone() };
-    let dll_overrides = if safe { String::new() } else { bottle.dll_overrides.join(";") };
+    let override_env = if safe {
+        vec![]
+    } else {
+        bottle.environment.clone()
+    };
+    let dll_overrides = if safe {
+        String::new()
+    } else {
+        bottle.dll_overrides.join(";")
+    };
 
     let info = pm.spawn(
         &app_id,
@@ -446,7 +545,11 @@ pub fn list_running(app: AppHandle) -> Result<Vec<RunningInfo>, FusionError> {
 pub fn toggle_favorite(app: AppHandle, app_id: String) -> Result<(), FusionError> {
     let st = app.state::<FusionState>();
     st.with_state(|s| {
-        let a = s.applications.iter_mut().find(|a| a.id == app_id).ok_or(FusionError::ApplicationNotFound)?;
+        let a = s
+            .applications
+            .iter_mut()
+            .find(|a| a.id == app_id)
+            .ok_or(FusionError::ApplicationNotFound)?;
         a.favorite = !a.favorite;
         Ok(())
     })?;
@@ -458,7 +561,12 @@ fn settings_bool(app: &AppHandle, key: &str) -> bool {
         .0
         .lock()
         .ok()
-        .and_then(|g| g.settings.iter().find(|(k, _)| k == key).map(|(_, v)| v == "on"))
+        .and_then(|g| {
+            g.settings
+                .iter()
+                .find(|(k, _)| k == key)
+                .map(|(_, v)| v == "on")
+        })
         .unwrap_or(false)
 }
 
@@ -470,8 +578,16 @@ pub fn get_recommendation(name: String) -> Result<Recommendation, FusionError> {
 }
 
 #[tauri::command]
-pub fn run_diagnostics(app: AppHandle, app_id: String) -> Result<Vec<diagnostics::DiagnosticCheck>, FusionError> {
-    let state = app.state::<FusionState>().0.lock().map_err(|_| FusionError::Unsupported)?.clone();
+pub fn run_diagnostics(
+    app: AppHandle,
+    app_id: String,
+) -> Result<Vec<diagnostics::DiagnosticCheck>, FusionError> {
+    let state = app
+        .state::<FusionState>()
+        .0
+        .lock()
+        .map_err(|_| FusionError::Unsupported)?
+        .clone();
     Ok(diagnostics::run_app_diagnostics(&state, &app_id))
 }
 
@@ -514,11 +630,22 @@ pub fn apply_fix(app: AppHandle, fix_id: String, app_id: String) -> Result<Strin
 /* ---------- snapshots ---------- */
 
 #[tauri::command]
-pub fn create_snapshot(app: AppHandle, bottle_id: String, name: String) -> Result<Snapshot, FusionError> {
+pub fn create_snapshot(
+    app: AppHandle,
+    bottle_id: String,
+    name: String,
+) -> Result<Snapshot, FusionError> {
     let d = dirs(&app);
     let st = app.state::<FusionState>();
-    let bottle = st.with_state(|s| s.bottles.iter().find(|b| b.id == bottle_id).cloned().ok_or(FusionError::BottleNotFound))?;
-    let (archive_path, size) = crate::snapshots::create_snapshot(&d.bottles, &d.snapshots, &bottle)?;
+    let bottle = st.with_state(|s| {
+        s.bottles
+            .iter()
+            .find(|b| b.id == bottle_id)
+            .cloned()
+            .ok_or(FusionError::BottleNotFound)
+    })?;
+    let (archive_path, size) =
+        crate::snapshots::create_snapshot(&d.bottles, &d.snapshots, &bottle)?;
     let snapshot = Snapshot {
         id: new_id(),
         bottle_id,
@@ -540,8 +667,18 @@ pub fn restore_snapshot(app: AppHandle, snapshot_id: String) -> Result<(), Fusio
     let d = dirs(&app);
     let st = app.state::<FusionState>();
     let (bottle, snap) = st.with_state(|s| {
-        let snap = s.snapshots.iter().find(|x| x.id == snapshot_id).cloned().ok_or(FusionError::Unsupported)?;
-        let b = s.bottles.iter().find(|b| b.id == snap.bottle_id).cloned().ok_or(FusionError::BottleNotFound)?;
+        let snap = s
+            .snapshots
+            .iter()
+            .find(|x| x.id == snapshot_id)
+            .cloned()
+            .ok_or(FusionError::Unsupported)?;
+        let b = s
+            .bottles
+            .iter()
+            .find(|b| b.id == snap.bottle_id)
+            .cloned()
+            .ok_or(FusionError::BottleNotFound)?;
         Ok((b, snap))
     })?;
     crate::snapshots::restore_snapshot(&d.snapshots, Path::new(&snap.path), &bottle)?;
@@ -552,7 +689,13 @@ pub fn restore_snapshot(app: AppHandle, snapshot_id: String) -> Result<(), Fusio
 pub fn delete_snapshot(app: AppHandle, snapshot_id: String) -> Result<(), FusionError> {
     let d = dirs(&app);
     let st = app.state::<FusionState>();
-    let snap = st.with_state(|s| s.snapshots.iter().find(|x| x.id == snapshot_id).cloned().ok_or(FusionError::Unsupported))?;
+    let snap = st.with_state(|s| {
+        s.snapshots
+            .iter()
+            .find(|x| x.id == snapshot_id)
+            .cloned()
+            .ok_or(FusionError::Unsupported)
+    })?;
     crate::snapshots::delete_snapshot(&d.snapshots, Path::new(&snap.path))?;
     st.with_state(|s| {
         s.snapshots.retain(|x| x.id != snapshot_id);
@@ -565,7 +708,11 @@ pub fn delete_snapshot(app: AppHandle, snapshot_id: String) -> Result<(), Fusion
 /* ---------- runtimes ---------- */
 
 #[tauri::command]
-pub fn import_runtime(app: AppHandle, name: String, archive_path: String) -> Result<Runtime, FusionError> {
+pub fn import_runtime(
+    app: AppHandle,
+    name: String,
+    archive_path: String,
+) -> Result<Runtime, FusionError> {
     let d = dirs(&app);
     let source = Path::new(&archive_path);
     if !source.is_file() {
@@ -573,7 +720,10 @@ pub fn import_runtime(app: AppHandle, name: String, archive_path: String) -> Res
     }
     // Stage into our own downloads dir before touching anything.
     let staged = d.downloads.join(format!("{}.pkg", new_id()));
-    let mut ext = source.extension().map(|e| e.to_string_lossy().into_owned()).unwrap_or_default();
+    let mut ext = source
+        .extension()
+        .map(|e| e.to_string_lossy().into_owned())
+        .unwrap_or_default();
     if ext.is_empty() {
         ext = "tar.xz".into();
     }
@@ -609,7 +759,13 @@ pub fn import_runtime(app: AppHandle, name: String, archive_path: String) -> Res
 pub fn remove_runtime(app: AppHandle, runtime_id: String) -> Result<(), FusionError> {
     let d = dirs(&app);
     let st = app.state::<FusionState>();
-    let rt = st.with_state(|s| s.runtimes.iter().find(|r| r.id == runtime_id).cloned().ok_or(FusionError::RuntimeNotFound))?;
+    let rt = st.with_state(|s| {
+        s.runtimes
+            .iter()
+            .find(|r| r.id == runtime_id)
+            .cloned()
+            .ok_or(FusionError::RuntimeNotFound)
+    })?;
     if rt.downloaded && !rt.path.is_empty() {
         paths::safe_remove_all(&d.runtimes, Path::new(&rt.path))?;
     }
@@ -630,7 +786,10 @@ pub fn set_safe_mode(app: AppHandle, enabled: bool) -> Result<(), FusionError> {
         if let Some(slot) = s.settings.iter_mut().find(|(k, _)| k == "safe_mode") {
             slot.1 = if enabled { "on" } else { "off" }.into();
         } else {
-            s.settings.push(("safe_mode".into(), if enabled { "on" } else { "off" }.into()));
+            s.settings.push((
+                "safe_mode".into(),
+                if enabled { "on" } else { "off" }.into(),
+            ));
         }
         Ok(())
     })?;
@@ -650,6 +809,7 @@ pub fn export_app_bundle(app: AppHandle, app_id: String) -> Result<String, Fusio
 
     let home = std::env::var("HOME").map_err(|_| FusionError::Unsupported)?;
     let target_dir = PathBuf::from(home).join("Applications").join("FusionCross");
-    let bundle_path = crate::exporter::create_mac_app_bundle(&application.name, &application.id, &target_dir)?;
+    let bundle_path =
+        crate::exporter::create_mac_app_bundle(&application.name, &application.id, &target_dir)?;
     Ok(bundle_path.to_string_lossy().into_owned())
 }

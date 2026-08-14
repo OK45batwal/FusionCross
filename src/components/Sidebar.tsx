@@ -73,9 +73,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* App Header */}
       <div className="px-4 py-4 flex items-center justify-between border-b border-[var(--border-color)]">
         <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => onNavigate("home")}>
-          <span className="w-7 h-7 rounded-lg bg-[var(--accent-primary)] flex items-center justify-center text-[13px] font-bold font-mono text-white shadow-sm shadow-[var(--accent-glow)]">
-            F
-          </span>
+          <img src="/logo.png" alt="FusionCross Logo" className="w-7 h-7 rounded-lg shadow-sm object-cover" />
           <div>
             <h1 className="font-mono text-[13px] font-bold tracking-[1.5px] text-[var(--text-main)]">FUSIONCROSS</h1>
             <p className="text-[9px] font-mono text-[var(--text-muted)]">v2.0 MVP · Mac Way</p>

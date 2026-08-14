@@ -1,51 +1,75 @@
 # FusionCross
 
-Run Windows applications on macOS — through isolated Wine bottles.
+**Run Windows applications on macOS — the Mac way.**
 
-A free, open Windows compatibility platform for Apple Silicon Macs, built with **Tauri 2 + React + TypeScript + Rust**, and Wine underneath.
+FusionCross is a free, open-source Windows compatibility layer for Apple Silicon Macs. It manages Wine runtimes, isolated bottle environments, Apple D3DMetal graphics acceleration, dependency resolution, and health diagnostics so you can run Windows software natively — no VirtualBox, no Parallels subscription, no Wine CLI wrangling.
 
-> **Status:** Foundation layer — secure core, versioned state, structured errors, runtime engine abstraction, and a three-pane shell. Apps, bottles, and the installer flow land next.
+Built with **Tauri 2 + React + TypeScript + Rust**, with Wine underneath.
+
+## Features
+
+- **One-click installer** — drop any `.exe` or `.msi`; FusionCross analyzes the binary header, picks the right Wine runtime (Stable / Wine-GE / Proton-GE), and resolves dependencies automatically.
+- **Isolated bottle environments** — templates for Gaming, Office, Adobe, and Development keep apps sandboxed and clean.
+- **D3DMetal & DXVK graphics** — Apple Game Porting Toolkit and DXVK Vulkan translation for high frame rates on M1–M4.
+- **Runtime manager** — probe, import, and manage Wine engines with SHA-256 verification.
+- **Compatibility database & recipes** — search tested applications and apply 1-click Crosstie-style setup recipes.
+- **Health diagnostics & auto-fix** — run checks, read *what happened / why / what can I do*, and repair prefixes with one click.
+- **Snapshots & restore** — roll back a bottle to any saved state.
+- **Native `.app` export** — ship any installed Windows app as a Finder/Dock/Spotlight-launchable macOS app.
+- **Command palette (⌘K)** — launch apps and navigate from anywhere.
+- **Dark / Light themes** — persisted system-aware theming.
 
 ## Getting started
 
-```bash
-npm install
-npm run tauri dev        # desktop app with live reload
-```
-
-Requirements: macOS 12+, [Homebrew](https://brew.sh), Wine:
+Requirements: **macOS 13+ on Apple Silicon**, [Homebrew](https://brew.sh).
 
 ```bash
+# 1. Install Wine
 brew install --cask --no-quarantine wine-stable
+
+# 2. Install JS dependencies
+npm install
+
+# 3. Run the desktop app with live reload
+npm run tauri dev
 ```
 
 ## Development
 
 ```bash
-npm run dev                # UI only (Vite)
-npm run build              # typecheck + production frontend build
-npm run tauri build        # release .app/.dmg
-npm run lint               # ESLint
-npm run check              # TypeScript typecheck
+npm run dev          # UI only (Vite, http://localhost:1420)
+npm run build        # typecheck + production frontend build
+npm run lint         # ESLint
+npm run check        # TypeScript typecheck
+npm run tauri build  # release .app / .dmg
+npm run website      # serve the standalone marketing site (website/)
 cargo test --manifest-path src-tauri/Cargo.toml   # Rust backend tests
 ```
 
-CI (`.github/workflows/ci.yml`) runs rustfmt, clippy, Rust tests, ESLint, typecheck, frontend build, and a Tauri debug build on every push.
+The website lives in `website/` — a self-contained static site (served with `npm run website` or any static host) that doubles as the in-app download/catalog view.
+
+CI (`.github/workflows/ci.yml`) runs rustfmt, clippy (`-D warnings`), Rust tests, ESLint, typecheck, a frontend build, and a debug Tauri build on every push.
 
 ## Architecture
 
 ```
-src/                 React frontend (services, components, pages)
+src/                 React frontend (components, views, IPC service)
 src-tauri/src/       Rust backend
-├── core/            errors (structured), ids, versioned state + migrations
-├── wine/            RuntimeEngine trait + Wine probe (PRD §32)
-├── manager.rs       process-wide state holder (backend is source of truth)
-└── commands.rs      domain IPC commands (get_state, get_system_info, probe_runtime)
+├── commands.rs      domain IPC commands (single invocation surface)
+├── manager.rs       process-wide state holder — backend is the source of truth
+├── core/            structured errors, ids, versioned state + migrations
+├── wine/            RuntimeEngine trait + Wine probe/prefix/scanner
+├── process/         app launch & monitoring
+├── runtime/         runtime engine abstraction
+├── diagnostics.rs   health checks + auto-fix
+├── exporter.rs      macOS .app bundle export
+├── snapshots.rs     bottle snapshots
+└── security/        archive extraction & verification
 ```
 
 ### Structured errors
 
-Backend errors never cross IPC as bare strings — always `{ code, message, action }` (PRD §51), so the UI can offer a concrete fix:
+Backend errors never cross IPC as bare strings — always `{ code, message, action }`, so the UI can offer a concrete fix:
 
 ```json
 { "code": "RUNTIME_NOT_FOUND", "message": "A compatible runtime is missing.", "action": "INSTALL_RUNTIME" }
@@ -53,19 +77,22 @@ Backend errors never cross IPC as bare strings — always `{ code, message, acti
 
 ### Versioned state
 
-`state.json` carries `schema_version`; every future change appends a migration step (PRD §52). Unknown/future schemas are rejected; corrupt files degrade to defaults rather than crashing.
+`state.json` carries `schema_version`; every future change appends a migration step. Unknown/future schemas are rejected; corrupt files degrade to defaults rather than crashing.
 
-## Product direction
+## Design system
 
-FusionCross 2.0 is defined in the [PRD](docs/PRD.md): smart installer, automatic compatibility, runtime manager, diagnostics + auto-fix, snapshots, and a compatibility database website. Built layer by layer, each one verified and committed.
+A single token-driven design language is shared across the app and the marketing site:
 
-## Roadmap
+- Dark-first, light-secondary theme switched via `data-theme` and persisted to `localStorage`.
+- Graphite neutral ramp + a single indigo accent + mint/amber/red status colors.
+- Defined once in `src/index.css` (Tailwind v4 `@theme`) and mirrored in `website/styles.css`.
 
-- [x] Foundation: errors, versioned state, engine trait, shell
-- [ ] Bottle templates + creation
-- [ ] Application library + library grid
-- [ ] Smart installer (analyze → recommend → install → detect)
-- [ ] Diagnostics + auto-fix
-- [ ] Runtime manager (download, verify SHA-256, extract)
-- [ ] Snapshots, advanced config, command palette
-- [ ] Website: download, docs, compatibility database
+## Documentation
+
+- [Product requirements (PRD)](docs/PRD.md)
+- [System implementation plan](docs/SYSTEM_IMPLEMENTATION_PLAN.md)
+- [CrossOver parity roadmap](docs/CROSSOVER_PARITY_ROADMAP.md)
+
+## License
+
+MIT — free and open source, no subscriptions, no telemetry by default, no unsigned binaries.

@@ -15,7 +15,7 @@ pub struct RuntimeStatus {
 /// A known remote runtime (PRD §31). `sha256` pinned per release; empty means
 /// "not publishable yet" — downloads of it are refused until a checksum exists.
 #[derive(Debug, Clone, Serialize)]
-#[allow(dead_code)]
+#[allow(dead_code, unused)]
 pub struct CatalogEntry {
     pub id: String,
     pub name: String,
@@ -26,7 +26,7 @@ pub struct CatalogEntry {
     pub note: &'static str,
 }
 
-#[allow(dead_code)]
+#[allow(dead_code, unused)]
 pub fn catalog() -> Vec<CatalogEntry> {
     vec![
         CatalogEntry {
@@ -82,13 +82,13 @@ pub fn probe_runtime_version(runtime_path: &Path) -> Result<String, FusionError>
 }
 
 /// Sanity-check an extracted runtime before registering (PRD §55).
-#[allow(dead_code)]
+#[allow(dead_code, unused)]
 pub fn validate_runtime(runtime_path: &Path) -> Result<(), FusionError> {
     probe_runtime_version(runtime_path).map(|_| ())
 }
 
 /// Download a remote runtime, verify its SHA-256 then extract it. Uses curl only.
-#[allow(dead_code)]
+#[allow(dead_code, unused)]
 pub fn download_runtime(
     url: &str,
     sha256: &str,
@@ -115,10 +115,7 @@ pub fn download_runtime(
 
 /// Install a runtime from an already-sourced archive (download cache or user
 /// import). Validates + extracts + probes, returns its resolved version.
-pub fn install_from_archive(
-    archive: &Path,
-    dest_dir: &Path,
-) -> Result<String, FusionError> {
+pub fn install_from_archive(archive: &Path, dest_dir: &Path) -> Result<String, FusionError> {
     if archives::detect_kind(archive).is_none() {
         return Err(FusionError::ArchiveValidationFailed);
     }
@@ -141,7 +138,9 @@ mod tests {
     fn catalog_entries_are_named() {
         let entries = catalog();
         assert_eq!(entries.len(), 3);
-        assert!(entries.iter().all(|e| !e.id.is_empty() && !e.name.is_empty()));
+        assert!(entries
+            .iter()
+            .all(|e| !e.id.is_empty() && !e.name.is_empty()));
     }
 
     #[test]
@@ -152,15 +151,18 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
 
         {
-            let enc =
-                flate2::write::GzEncoder::new(std::fs::File::create(&archive).unwrap(), flate2::Compression::default());
+            let enc = flate2::write::GzEncoder::new(
+                std::fs::File::create(&archive).unwrap(),
+                flate2::Compression::default(),
+            );
             let mut b = tar::Builder::new(enc);
             let script = b"#!/bin/sh\necho 'wine-9.0 (FusionCross)'\n".as_ref();
             let mut h = tar::Header::new_gnu();
             h.set_size(script.len() as u64);
             h.set_mode(0o755);
             h.set_cksum();
-            b.append_data(&mut h, "bin/wine", &mut std::io::Cursor::new(script)).unwrap();
+            b.append_data(&mut h, "bin/wine", &mut std::io::Cursor::new(script))
+                .unwrap();
             b.finish().unwrap();
         }
 

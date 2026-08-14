@@ -1,6 +1,6 @@
+use crate::core::errors::FusionError;
 use std::fs;
 use std::path::{Path, PathBuf};
-use crate::core::errors::FusionError;
 
 /// Generates a native macOS `.app` bundle under `~/Applications/FusionCross/<App Name>.app`
 /// allowing Windows applications to be launched directly from Finder, Spotlight, or Dock.
@@ -9,7 +9,7 @@ pub fn create_mac_app_bundle(
     app_id: &str,
     target_dir: &Path,
 ) -> Result<PathBuf, FusionError> {
-    let safe_name = app_name.replace('/', "-").replace('\\', "-");
+    let safe_name = app_name.replace(['/', '\\'], "-");
     let bundle_dir = target_dir.join(format!("{}.app", safe_name));
     let contents_dir = bundle_dir.join("Contents");
     let macos_dir = contents_dir.join("MacOS");
@@ -59,8 +59,7 @@ open -a FusionCross --args --launch "$APP_ID"
     );
 
     let launcher_path = macos_dir.join("launcher");
-    fs::write(&launcher_path, launcher_script)
-        .map_err(|_| FusionError::InstallationFailed)?;
+    fs::write(&launcher_path, launcher_script).map_err(|_| FusionError::InstallationFailed)?;
 
     #[cfg(unix)]
     {
@@ -69,8 +68,7 @@ open -a FusionCross --args --launch "$APP_ID"
             .map_err(|_| FusionError::InstallationFailed)?
             .permissions();
         perms.set_mode(0o755);
-        fs::set_permissions(&launcher_path, perms)
-            .map_err(|_| FusionError::InstallationFailed)?;
+        fs::set_permissions(&launcher_path, perms).map_err(|_| FusionError::InstallationFailed)?;
     }
 
     Ok(bundle_dir)

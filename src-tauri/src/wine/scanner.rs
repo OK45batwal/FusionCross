@@ -11,7 +11,12 @@ pub struct DiscoveredExe {
 }
 
 const SKIP_TOP_DIRS: [&str; 6] = [
-    "windows", "ProgramData", "users", "perflogs", "Program Files (x86)/WindowsKits", "Windows Kits",
+    "windows",
+    "ProgramData",
+    "users",
+    "perflogs",
+    "Program Files (x86)/WindowsKits",
+    "Windows Kits",
 ];
 
 /// Find installable executables under a prefix's `drive_c`. Bounded recursion
@@ -73,7 +78,11 @@ fn collect(
             .map(|s| prettify(&s.to_string_lossy()))
             .unwrap_or_else(|| "Unknown".into());
         let category = guess_category(&path);
-        out.push(DiscoveredExe { name, rel_path: rel, category });
+        out.push(DiscoveredExe {
+            name,
+            rel_path: rel,
+            category,
+        });
     }
 }
 

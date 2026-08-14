@@ -65,6 +65,7 @@ export function App() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async polling, setState only fires after await
     refreshState();
     const interval = setInterval(refreshState, 4000);
     return () => clearInterval(interval);

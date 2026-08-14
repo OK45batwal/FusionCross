@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
   Download,
   CheckCircle2,
@@ -19,45 +19,11 @@ interface WebsitePortalViewProps {
 }
 
 export const WebsitePortalView: React.FC<WebsitePortalViewProps> = ({ onOpenAppWorkbench }) => {
-  const [archText, setArchText] = useState<string>("Detecting Apple Silicon architecture...");
-  const [downloadSub, setDownloadSub] = useState<string>("FusionCross-2.0.0-arm64.dmg · 48.2 MB · macOS 13.0+");
+  const isMac = typeof navigator !== "undefined" && /Macintosh|Mac OS X/i.test(navigator.userAgent);
+  const archText = isMac ? "✓ Apple Silicon Mac Detected (M1–M4 ARM64)" : "ℹ Designed for macOS Apple Silicon (M1–M4)";
+  const downloadSub = "FusionCross-2.0.0-arm64.dmg · 48.2 MB · macOS 13.0+";
   const [copied, setCopied] = useState<boolean>(false);
   const [downloading, setDownloading] = useState<boolean>(false);
-
-  // System & GPU Architecture Detection
-  useEffect(() => {
-    const ua = navigator.userAgent;
-    const isMac = /Macintosh|Mac OS X/i.test(ua);
-    let isAppleSilicon = true;
-
-    try {
-      const canvas = document.createElement("canvas");
-      const gl = (canvas.getContext("webgl") || canvas.getContext("experimental-webgl")) as WebGLRenderingContext | null;
-      if (gl) {
-        const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
-        if (debugInfo) {
-          const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
-          if (renderer && (renderer.includes("Apple") || renderer.includes("M1") || renderer.includes("M2") || renderer.includes("M3") || renderer.includes("M4"))) {
-            isAppleSilicon = true;
-          }
-        }
-      }
-    } catch {
-      // fallback
-    }
-
-    if (isMac) {
-      if (isAppleSilicon) {
-        setArchText("✓ Apple Silicon Mac Detected (M1–M4 ARM64)");
-        setDownloadSub("FusionCross-2.0.0-arm64.dmg · 48.2 MB · macOS 13.0+");
-      } else {
-        setArchText("✓ Intel Mac Detected (x86_64 Rosetta 2)");
-        setDownloadSub("FusionCross-2.0.0-x86_64.dmg · 49.5 MB · macOS 13.0+");
-      }
-    } else {
-      setArchText("ℹ Designed for macOS Apple Silicon (M1–M4)");
-    }
-  }, []);
 
   const handleCopySha = () => {
     const sha = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
@@ -241,6 +207,59 @@ export const WebsitePortalView: React.FC<WebsitePortalViewProps> = ({ onOpenAppW
                 MIT licensed software backed by GitHub releases. No telemetry by default, no subscriptions, no paid tier, and no mysterious unsigned binaries.
               </p>
             </div>
+          </div>
+        </section>
+
+        {/* Crosstie Recipe Software Catalog */}
+        <section className="space-y-6 pt-6 border-t border-[var(--border-color)]">
+          <div className="text-center space-y-2">
+            <div className="inline-block px-3 py-1 rounded-full bg-[var(--accent-glow)] text-[var(--accent-primary)] font-mono text-[11px] font-bold tracking-wider uppercase">
+              Crosstie Recipe Engine
+            </div>
+            <h2 className="text-2xl md:text-3xl font-extrabold text-[var(--text-main)] tracking-tight">
+              Software Compatibility Catalog
+            </h2>
+            <p className="text-sm text-[var(--text-secondary)] max-w-lg mx-auto">
+              1-Click automated installation recipes for popular Windows software and games.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[
+              { title: "Steam for Windows", cat: "Games · Store", rating: "Platinum", icon: "🎮", desc: "Run DirectX 11/12 games with Apple D3DMetal hardware acceleration." },
+              { title: "EA App & Origin", cat: "Games · Store", rating: "Gold", icon: "⚡", desc: "Play EA titles with automatic VC++ runtime dependencies." },
+              { title: "GOG Galaxy 2.0", cat: "Games · Store", rating: "Platinum", icon: "🌌", desc: "DRM-free games launcher with cloud saves & achievements." },
+              { title: "Epic Games Launcher", cat: "Games · Store", rating: "Gold", icon: "🚀", desc: "Run Fortnite, Unreal Engine projects, and weekly free games." },
+              { title: "Microsoft Office 365", cat: "Productivity", rating: "Gold", icon: "📊", desc: "Word, Excel, PowerPoint, & Access with native font rendering." },
+              { title: "Notepad++", cat: "Utilities · Code", rating: "Platinum", icon: "📝", desc: "Fast text & code editor with plugin manager support." },
+              { title: "FL Studio 21", cat: "Creative · Audio", rating: "Platinum", icon: "🎹", desc: "DAW with low-latency CoreAudio bridging." },
+              { title: "Cyberpunk 2077", cat: "Games · AAA", rating: "Platinum", icon: "🤖", desc: "Ray-tracing & D3DMetal v2 accelerated gaming." },
+              { title: "AutoCAD 2024", cat: "Creative · CAD", rating: "Gold", icon: "📐", desc: "2D/3D CAD design software with .NET Framework 4.8." },
+            ].map((item, i) => (
+              <div key={i} className="rounded-2xl border border-[var(--border-color)] bg-[var(--bg-surface)] p-5 flex flex-col justify-between hover:border-[var(--border-hover)] hover:-translate-y-1 transition-all">
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl p-2 rounded-xl bg-[var(--bg-elevated)]">{item.icon}</span>
+                      <div>
+                        <h4 className="text-sm font-bold text-[var(--text-main)]">{item.title}</h4>
+                        <span className="text-[10px] font-mono text-[var(--text-muted)]">{item.cat}</span>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-[var(--color-ok-glow)] text-[var(--color-ok)] border border-[var(--color-ok)]/30">
+                      ★ {item.rating}
+                    </span>
+                  </div>
+                  <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{item.desc}</p>
+                </div>
+                <button
+                  onClick={() => alert(`1-Click Crosstie Recipe started for ${item.title}!\n\nFusionCross is creating the optimal bottle environment and installing dependencies.`)}
+                  className="mt-4 w-full py-2 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--accent-primary)] hover:text-white border border-[var(--border-color)] text-xs font-mono font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" /> Install via FusionCross
+                </button>
+              </div>
+            ))}
           </div>
         </section>
       </div>

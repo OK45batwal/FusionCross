@@ -56,7 +56,6 @@ export const BottlesView: React.FC<BottlesViewProps> = ({
       setShowCreateModal(false);
       setNewBottleName("");
       onRefreshState();
-      setSelectedBottle;
       setNotice(`Created bottle environment "${b.name}".`);
     } catch (e) {
       setError((e as FusionErrorPayload).message || "Failed to create bottle.");

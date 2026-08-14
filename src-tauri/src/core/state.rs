@@ -51,7 +51,7 @@ pub struct Bottle {
 }
 
 impl Bottle {
-    #[allow(dead_code)]
+    #[allow(dead_code, unused)]
     pub fn data_dir(&self) -> String {
         // Whatever lives under prefix/drive_c is user data; never written by us.
         self.path.clone()
@@ -154,30 +154,39 @@ fn migrate(value: &mut serde_json::Value) -> Result<(), String> {
                             for key in ["version", "path", "url", "sha256"] {
                                 o.entry(key).or_insert_with(|| serde_json::json!(""));
                             }
-                            o.entry("size_bytes").or_insert_with(|| serde_json::json!(0));
+                            o.entry("size_bytes")
+                                .or_insert_with(|| serde_json::json!(0));
                         }
                     }
                 }
                 if let Some(bottles) = obj.get_mut("bottles").and_then(|b| b.as_array_mut()) {
                     for bo in bottles.iter_mut() {
                         if let Some(o) = bo.as_object_mut() {
-                            o.entry("graphics").or_insert_with(|| serde_json::json!("automatic"));
-                            o.entry("dxvk_enabled").or_insert_with(|| serde_json::json!(false));
-                            o.entry("environment").or_insert_with(|| serde_json::json!([]));
-                            o.entry("dll_overrides").or_insert_with(|| serde_json::json!([]));
-                            o.entry("dependencies").or_insert_with(|| serde_json::json!([]));
+                            o.entry("graphics")
+                                .or_insert_with(|| serde_json::json!("automatic"));
+                            o.entry("dxvk_enabled")
+                                .or_insert_with(|| serde_json::json!(false));
+                            o.entry("environment")
+                                .or_insert_with(|| serde_json::json!([]));
+                            o.entry("dll_overrides")
+                                .or_insert_with(|| serde_json::json!([]));
+                            o.entry("dependencies")
+                                .or_insert_with(|| serde_json::json!([]));
                         }
                     }
                 }
                 if let Some(apps) = obj.get_mut("applications").and_then(|a| a.as_array_mut()) {
                     for ap in apps.iter_mut() {
                         if let Some(o) = ap.as_object_mut() {
-                            o.entry("compatibility").or_insert_with(|| serde_json::json!(null));
-                            o.entry("profile").or_insert_with(|| serde_json::json!(null));
+                            o.entry("compatibility")
+                                .or_insert_with(|| serde_json::json!(null));
+                            o.entry("profile")
+                                .or_insert_with(|| serde_json::json!(null));
                         }
                     }
                 }
-                obj.entry("snapshots").or_insert_with(|| serde_json::json!([]));
+                obj.entry("snapshots")
+                    .or_insert_with(|| serde_json::json!([]));
                 obj.entry("settings")
                     .or_insert_with(|| serde_json::json!([["safe_mode", "off"]]));
                 obj.insert("schema_version".into(), serde_json::json!(2));

@@ -5,16 +5,17 @@ use crate::core::errors::FusionError;
 
 /// Verify a file's SHA-256 against an expected digest using the platform
 /// `shasum` binary. Non-matches are a hard error (PRD §54).
-#[allow(dead_code)]
+#[allow(dead_code, unused)]
 pub fn verify_sha256(path: &Path, expected: &str) -> Result<(), FusionError> {
     let out = std::process::Command::new("shasum")
-        .arg("-a").arg("256")
+        .arg("-a")
+        .arg("256")
         .arg(path)
         .output()
         .map_err(|_| FusionError::RuntimeVerificationFailed)?;
     let stdout = String::from_utf8_lossy(&out.stdout);
     let got = stdout.split_whitespace().next().unwrap_or_default();
-    if got.eq_ignore_ascii_case(&expected.trim()) && !expected.trim().is_empty() {
+    if got.eq_ignore_ascii_case(expected.trim()) && !expected.trim().is_empty() {
         Ok(())
     } else {
         Err(FusionError::RuntimeVerificationFailed)
@@ -67,7 +68,11 @@ mod decoder {
     }
 }
 
-fn extract_tar(reader: Box<dyn Read + Send>, archive: &Path, dest: &Path) -> Result<(), FusionError> {
+fn extract_tar(
+    reader: Box<dyn Read + Send>,
+    archive: &Path,
+    dest: &Path,
+) -> Result<(), FusionError> {
     let mut ar = tar::Archive::new(reader);
     let dest_canon = dest.canonicalize().unwrap_or_else(|_| dest.to_path_buf());
     for entry in ar
@@ -75,13 +80,22 @@ fn extract_tar(reader: Box<dyn Read + Send>, archive: &Path, dest: &Path) -> Res
         .map_err(|_| FusionError::ArchiveValidationFailed)?
     {
         let mut entry = entry.map_err(|_| FusionError::ArchiveValidationFailed)?;
-        let path = entry.path().map_err(|_| FusionError::ArchiveValidationFailed)?.into_owned();
-        if path.is_absolute() || path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+        let path = entry
+            .path()
+            .map_err(|_| FusionError::ArchiveValidationFailed)?
+            .into_owned();
+        if path.is_absolute()
+            || path
+                .components()
+                .any(|c| matches!(c, std::path::Component::ParentDir))
+        {
             return Err(FusionError::ArchiveValidationFailed);
         }
         // skip any symlink entries outright
         use tar::EntryType;
-        if entry.header().entry_type() != EntryType::Regular && entry.header().entry_type() != EntryType::Directory {
+        if entry.header().entry_type() != EntryType::Regular
+            && entry.header().entry_type() != EntryType::Directory
+        {
             continue;
         }
         let target: PathBuf = dest_canon.join(&path);
@@ -90,13 +104,17 @@ fn extract_tar(reader: Box<dyn Read + Send>, archive: &Path, dest: &Path) -> Res
         }
         match entry.header().entry_type() {
             EntryType::Directory => {
-                std::fs::create_dir_all(&target).map_err(|_| FusionError::ArchiveValidationFailed)?;
+                std::fs::create_dir_all(&target)
+                    .map_err(|_| FusionError::ArchiveValidationFailed)?;
             }
             _ => {
                 if let Some(parent) = target.parent() {
-                    std::fs::create_dir_all(parent).map_err(|_| FusionError::ArchiveValidationFailed)?;
+                    std::fs::create_dir_all(parent)
+                        .map_err(|_| FusionError::ArchiveValidationFailed)?;
                 }
-                entry.unpack(&target).map_err(|_| FusionError::ArchiveValidationFailed)?;
+                entry
+                    .unpack(&target)
+                    .map_err(|_| FusionError::ArchiveValidationFailed)?;
             }
         }
     }
@@ -130,10 +148,22 @@ mod tests {
 
     #[test]
     fn detects_kinds() {
-        assert_eq!(detect_kind(Path::new("/x/wine.tar.xz")), Some(ArchiveKind::TarXz));
-        assert_eq!(detect_kind(Path::new("/x/wine.tar.gz")), Some(ArchiveKind::TarGz));
-        assert_eq!(detect_kind(Path::new("/x/wine.tgz")), Some(ArchiveKind::TarGz));
-        assert_eq!(detect_kind(Path::new("/x/wine.zip")), Some(ArchiveKind::Zip));
+        assert_eq!(
+            detect_kind(Path::new("/x/wine.tar.xz")),
+            Some(ArchiveKind::TarXz)
+        );
+        assert_eq!(
+            detect_kind(Path::new("/x/wine.tar.gz")),
+            Some(ArchiveKind::TarGz)
+        );
+        assert_eq!(
+            detect_kind(Path::new("/x/wine.tgz")),
+            Some(ArchiveKind::TarGz)
+        );
+        assert_eq!(
+            detect_kind(Path::new("/x/wine.zip")),
+            Some(ArchiveKind::Zip)
+        );
         assert_eq!(detect_kind(Path::new("/x/wine.txt")), None);
     }
 

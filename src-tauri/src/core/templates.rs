@@ -16,12 +16,18 @@ pub struct TemplateConfig {
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
+#[allow(dead_code, unused)]
 pub enum TemplateError {
-    UnknownTemplate(String),
+    UnknownTemplate(#[allow(dead_code)] String),
 }
 
-pub const TEMPLATE_TYPES: [&str; 5] = ["gaming", "dxvk-optimized", "productivity", "legacy", "custom"];
+pub const TEMPLATE_TYPES: [&str; 5] = [
+    "gaming",
+    "dxvk-optimized",
+    "productivity",
+    "legacy",
+    "custom",
+];
 
 pub fn bottle_template(prefix_type: &str) -> Result<TemplateConfig, TemplateError> {
     if !TEMPLATE_TYPES.contains(&prefix_type) {
@@ -51,8 +57,14 @@ pub fn bottle_template(prefix_type: &str) -> Result<TemplateConfig, TemplateErro
             dll_overrides: vec!["d3d9=n;b", "d3d10core=n;b", "d3d11=n;b"],
             registry: vec![
                 ("HKCU\\Software\\Wine\\DllOverrides\\d3d9", "native,builtin"),
-                ("HKCU\\Software\\Wine\\DllOverrides\\d3d10core", "native,builtin"),
-                ("HKCU\\Software\\Wine\\DllOverrides\\d3d11", "native,builtin"),
+                (
+                    "HKCU\\Software\\Wine\\DllOverrides\\d3d10core",
+                    "native,builtin",
+                ),
+                (
+                    "HKCU\\Software\\Wine\\DllOverrides\\d3d11",
+                    "native,builtin",
+                ),
             ],
             dependencies: vec!["corefonts", "dxvk"],
         },

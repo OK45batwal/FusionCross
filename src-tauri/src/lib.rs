@@ -1,15 +1,15 @@
 mod commands;
-mod core;
-mod manager;
-mod wine;
 mod compatibility;
+mod core;
 mod diagnostics;
+mod exporter;
 mod installer;
+mod manager;
 mod process;
 mod runtime;
-mod snapshots;
 mod security;
-mod exporter;
+mod snapshots;
+mod wine;
 
 use tauri::Manager;
 

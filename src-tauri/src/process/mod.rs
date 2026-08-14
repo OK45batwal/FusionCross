@@ -6,12 +6,17 @@ use serde::Serialize;
 
 use crate::core::errors::FusionError;
 
-#[allow(dead_code)]
+#[allow(dead_code, unused)]
 pub struct SessionRecord {
+    #[allow(dead_code)]
     pub app_id: String,
+    #[allow(dead_code)]
     pub bottle_id: String,
+    #[allow(dead_code)]
     pub name: String,
+    #[allow(dead_code)]
     pub duration_secs: u64,
+    #[allow(dead_code)]
     pub exit_code: Option<i32>,
 }
 
@@ -40,17 +45,24 @@ pub struct ProcessManager {
 }
 
 impl ProcessManager {
-    #[allow(dead_code)]
+    #[allow(dead_code, unused)]
     pub fn new(on_exit: Arc<dyn Fn(SessionRecord) + Send + Sync>) -> Self {
-        Self { sessions: Arc::new(Mutex::new(HashMap::new())), on_exit }
+        Self {
+            sessions: Arc::new(Mutex::new(HashMap::new())),
+            on_exit,
+        }
     }
 
     pub fn is_running(&self, app_id: &str) -> bool {
-        self.sessions.lock().map(|m| m.contains_key(app_id)).unwrap_or(false)
+        self.sessions
+            .lock()
+            .map(|m| m.contains_key(app_id))
+            .unwrap_or(false)
     }
 
     /// Spawn `wine <exe> [args]` in the bottle's prefix. The child leads its
     /// own process group; stats are recorded through `on_exit` when it finishes.
+    #[allow(clippy::too_many_arguments)]
     pub fn spawn(
         &self,
         app_id: &str,
@@ -66,7 +78,14 @@ impl ProcessManager {
         use std::os::unix::process::CommandExt;
         let mut cmd = std::process::Command::new(wine_binary);
         cmd.env("WINEPREFIX", prefix_path);
-        cmd.env("WINEDLLOVERRIDES", if dll_overrides.is_empty() { "mscoree,mshtml=" } else { dll_overrides });
+        cmd.env(
+            "WINEDLLOVERRIDES",
+            if dll_overrides.is_empty() {
+                "mscoree,mshtml="
+            } else {
+                dll_overrides
+            },
+        );
         for (k, v) in env {
             cmd.env(k, v);
         }
@@ -84,7 +103,10 @@ impl ProcessManager {
             bottle_id: bottle_id.to_string(),
             name: name.to_string(),
             pid,
-            started_at: started_at.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0),
+            started_at: started_at
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0),
             elapsed_secs: 0,
         };
 
@@ -92,7 +114,12 @@ impl ProcessManager {
             let mut sessions = self.sessions.lock().map_err(|_| FusionError::Unsupported)?;
             sessions.insert(
                 app_id.to_string(),
-                SessionState { child, name: name.to_string(), bottle_id: bottle_id.to_string(), started_at },
+                SessionState {
+                    child,
+                    name: name.to_string(),
+                    bottle_id: bottle_id.to_string(),
+                    started_at,
+                },
             );
         }
 
@@ -112,7 +139,9 @@ impl ProcessManager {
                     None => return,
                 }
             };
-            let duration = SystemTime::now().duration_since(started).unwrap_or(Duration::ZERO);
+            let duration = SystemTime::now()
+                .duration_since(started)
+                .unwrap_or(Duration::ZERO);
             on_exit(SessionRecord {
                 app_id: app_id_owned,
                 bottle_id,
@@ -154,8 +183,15 @@ impl ProcessManager {
                         bottle_id: s.bottle_id.clone(),
                         name: s.name.clone(),
                         pid: s.child.id(),
-                        started_at: s.started_at.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0),
-                        elapsed_secs: now.duration_since(s.started_at).map(|d| d.as_secs()).unwrap_or(0),
+                        started_at: s
+                            .started_at
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_secs())
+                            .unwrap_or(0),
+                        elapsed_secs: now
+                            .duration_since(s.started_at)
+                            .map(|d| d.as_secs())
+                            .unwrap_or(0),
                     })
                     .collect()
             })
