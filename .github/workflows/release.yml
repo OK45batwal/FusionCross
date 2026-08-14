@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install JS deps
+        run: npm ci
+
+      - name: Rust fmt
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+
+      - name: Rust clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Frontend build
+        run: npm run build
+
+      - name: Build release bundle (DMG)
+        run: npm run tauri build
+
+      - name: Compute DMG SHA-256
+        id: sha
+        run: |
+          DMG=$(ls src-tauri/target/release/bundle/dmg/*.dmg)
+          echo "dmg=$DMG" >> "$GITHUB_OUTPUT"
+          echo "sha=$(shasum -a 256 "$DMG" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$DMG")" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.sha.outputs.dmg }}
+          name: FusionCross ${{ github.ref_name }}
+          body: |
+            ## FusionCross ${{ github.ref_name }}
+
+            ### Verify your download
+
+            ```
+            shasum -a 256 FusionCross_2.0.0_aarch64.dmg
+            ${{ steps.sha.outputs.sha }}
+            ```
+
+            The website download and SHA-256 box must be updated to match
+            `${{ steps.sha.outputs.name }}` / `${{ steps.sha.outputs.sha }}` after every release.
