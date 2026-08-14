@@ -6,6 +6,7 @@ use serde::Serialize;
 
 use crate::core::errors::FusionError;
 
+#[allow(dead_code)]
 pub struct SessionRecord {
     pub app_id: String,
     pub bottle_id: String,
@@ -39,6 +40,7 @@ pub struct ProcessManager {
 }
 
 impl ProcessManager {
+    #[allow(dead_code)]
     pub fn new(on_exit: Arc<dyn Fn(SessionRecord) + Send + Sync>) -> Self {
         Self { sessions: Arc::new(Mutex::new(HashMap::new())), on_exit }
     }
@@ -125,7 +127,7 @@ impl ProcessManager {
     /// Stop an app by killing its whole process group.
     pub fn stop(&self, app_id: &str) -> Result<(), FusionError> {
         let pid = {
-            let mut m = self.sessions.lock().map_err(|_| FusionError::Unsupported)?;
+            let m = self.sessions.lock().map_err(|_| FusionError::Unsupported)?;
             m.get(app_id).map(|s| s.child.id())
         };
         match pid {

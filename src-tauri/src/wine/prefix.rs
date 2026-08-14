@@ -29,7 +29,7 @@ pub fn init_prefix(wine_binary: &str, prefix: &Path) -> Result<(), FusionError> 
 
 /// Apply winetricks verbs with sanitized arguments (no shell involved).
 /// Missing winetricks is tolerated — dependencies are best-effort.
-pub fn install_verbs(wine_binary: &str, prefix: &Path, verbs: &[String]) -> Result<(), FusionError> {
+pub fn install_verbs(_wine_binary: &str, prefix: &Path, verbs: &[String]) -> Result<(), FusionError> {
     if verbs.is_empty() {
         return Ok(());
     }

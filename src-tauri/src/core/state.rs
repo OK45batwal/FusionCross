@@ -51,6 +51,7 @@ pub struct Bottle {
 }
 
 impl Bottle {
+    #[allow(dead_code)]
     pub fn data_dir(&self) -> String {
         // Whatever lives under prefix/drive_c is user data; never written by us.
         self.path.clone()

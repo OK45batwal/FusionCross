@@ -4,7 +4,7 @@ use serde::Serialize;
 
 use crate::core::errors::FusionError;
 use crate::security::archives;
-use crate::wine::engine::{parse_wine_version, RuntimeEngine, WineEngine};
+use crate::wine::engine::parse_wine_version;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct RuntimeStatus {
@@ -15,6 +15,7 @@ pub struct RuntimeStatus {
 /// A known remote runtime (PRD §31). `sha256` pinned per release; empty means
 /// "not publishable yet" — downloads of it are refused until a checksum exists.
 #[derive(Debug, Clone, Serialize)]
+#[allow(dead_code)]
 pub struct CatalogEntry {
     pub id: String,
     pub name: String,
@@ -25,6 +26,7 @@ pub struct CatalogEntry {
     pub note: &'static str,
 }
 
+#[allow(dead_code)]
 pub fn catalog() -> Vec<CatalogEntry> {
     vec![
         CatalogEntry {
@@ -80,11 +82,13 @@ pub fn probe_runtime_version(runtime_path: &Path) -> Result<String, FusionError>
 }
 
 /// Sanity-check an extracted runtime before registering (PRD §55).
+#[allow(dead_code)]
 pub fn validate_runtime(runtime_path: &Path) -> Result<(), FusionError> {
     probe_runtime_version(runtime_path).map(|_| ())
 }
 
 /// Download a remote runtime, verify its SHA-256 then extract it. Uses curl only.
+#[allow(dead_code)]
 pub fn download_runtime(
     url: &str,
     sha256: &str,

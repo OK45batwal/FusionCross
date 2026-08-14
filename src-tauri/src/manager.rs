@@ -26,6 +26,7 @@ pub fn dirs(app: &AppHandle) -> Dirs {
 
 #[derive(Debug, Clone)]
 pub struct Dirs {
+    #[allow(dead_code)]
     pub base: PathBuf,
     pub bottles: PathBuf,
     pub runtimes: PathBuf,
@@ -79,6 +80,7 @@ impl FusionState {
 /// back here; the frontend polls while they spin.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "state", content = "message")]
+#[allow(non_camel_case_types)]
 pub enum JobStatus {
     running,
     done,

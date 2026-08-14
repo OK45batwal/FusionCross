@@ -1,7 +1,5 @@
 use std::path::Path;
 
-use crate::core::errors::FusionError;
-
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct DiscoveredExe {
     /// Display name derived from the executable's file name

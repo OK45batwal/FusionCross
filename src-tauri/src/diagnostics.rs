@@ -34,6 +34,7 @@ impl FixIntent {
         }
     }
 
+    #[allow(dead_code)]
     pub fn label(&self) -> String {
         match self {
             FixIntent::InstallRuntime => "Install a Wine runtime".into(),

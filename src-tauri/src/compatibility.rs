@@ -124,6 +124,7 @@ pub fn recommend(app_name: &str) -> Recommendation {
 }
 
 /// Adjust a recommendation's score based on what is actually available.
+#[allow(dead_code)]
 pub fn adjusted_score(base: u32, runtime_available: bool, graphics: &str) -> u32 {
     let mut score = base;
     if !runtime_available {
@@ -137,6 +138,7 @@ pub fn adjusted_score(base: u32, runtime_available: bool, graphics: &str) -> u32
 }
 
 /// Persistable compatibility record for a registered application.
+#[allow(dead_code)]
 pub fn profile_for_app(app_id: &str, rec: &Recommendation) -> serde_json::Value {
     serde_json::json!({
         "app_id": app_id,

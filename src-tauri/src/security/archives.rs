@@ -5,6 +5,7 @@ use crate::core::errors::FusionError;
 
 /// Verify a file's SHA-256 against an expected digest using the platform
 /// `shasum` binary. Non-matches are a hard error (PRD §54).
+#[allow(dead_code)]
 pub fn verify_sha256(path: &Path, expected: &str) -> Result<(), FusionError> {
     let out = std::process::Command::new("shasum")
         .arg("-a").arg("256")
@@ -113,7 +114,7 @@ pub fn create_tar_gz(src_dir: &Path, out_file: &Path) -> Result<(), FusionError>
     builder
         .append_dir_all(".", src_dir)
         .map_err(|_| FusionError::PermissionDenied)?;
-    let mut encoder = builder
+    let encoder = builder
         .into_inner()
         .map_err(|_| FusionError::PermissionDenied)?;
     encoder
