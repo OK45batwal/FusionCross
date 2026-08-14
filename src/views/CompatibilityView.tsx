@@ -1,61 +1,30 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Cpu, Sparkles } from "lucide-react";
 import { getRecommendation, Recommendation } from "../services/tauri";
+
+const KNOWN_APPS = [
+  "Adobe Photoshop 2024",
+  "Steam Client",
+  "Microsoft Office 2021",
+  "Autodesk AutoCAD",
+  "Notepad++",
+  "GIMP Windows Build",
+];
 
 export const CompatibilityView: React.FC = () => {
   const [testAppName, setTestAppName] = useState("");
   const [testedRecommendation, setTestedRecommendation] = useState<Recommendation | null>(null);
+  const [profiles, setProfiles] = useState<{ name: string; rec: Recommendation }[]>([]);
 
-  const knownProfiles = [
-    {
-      name: "Adobe Photoshop 2024",
-      score: 88,
-      runtime: "Wine-GE",
-      graphics: "D3DMetal",
-      deps: ["vcrun2022", "corefonts"],
-      status: "Good",
-    },
-    {
-      name: "Steam Client",
-      score: 90,
-      runtime: "Wine Stable",
-      graphics: "DXVK",
-      deps: ["corefonts"],
-      status: "Excellent",
-    },
-    {
-      name: "Microsoft Office 2021",
-      score: 84,
-      runtime: "Wine Stable",
-      graphics: "WineD3D",
-      deps: ["corefonts"],
-      status: "Good",
-    },
-    {
-      name: "Autodesk AutoCAD",
-      score: 72,
-      runtime: "Wine Stable",
-      graphics: "DXVK",
-      deps: ["vcrun2019"],
-      status: "Mostly Working",
-    },
-    {
-      name: "Notepad++",
-      score: 95,
-      runtime: "Wine Stable",
-      graphics: "WineD3D",
-      deps: [],
-      status: "Excellent",
-    },
-    {
-      name: "GIMP Windows Build",
-      score: 90,
-      runtime: "Wine Stable",
-      graphics: "WineD3D",
-      deps: ["corefonts"],
-      status: "Excellent",
-    },
-  ];
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(KNOWN_APPS.map(async (name) => ({ name, rec: await getRecommendation(name) })))
+      .then((res) => !cancelled && setProfiles(res))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleTestRecommendation = async () => {
     if (!testAppName.trim()) return;
@@ -140,32 +109,34 @@ export const CompatibilityView: React.FC = () => {
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {knownProfiles.map((p) => (
+          {profiles.map(({ name, rec }) => (
             <div
-              key={p.name}
+              key={name}
               className="rounded-xl border border-graphite-600 bg-graphite-900 p-4 space-y-3 flex flex-col justify-between"
             >
               <div>
                 <div className="flex items-start justify-between gap-2">
-                  <h3 className="text-[14px] font-bold text-graphite-100">{p.name}</h3>
+                  <h3 className="text-[14px] font-bold text-graphite-100">{name}</h3>
                   <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-ok/10 text-ok border border-ok/30">
-                    {p.score}%
+                    {rec.compatibility}%
                   </span>
                 </div>
-                <p className="text-[11px] font-mono text-graphite-400 mt-1">Status: {p.status}</p>
+                <p className="text-[11px] font-mono text-graphite-400 mt-1">
+                  Profile: {rec.profile}
+                </p>
               </div>
 
               <div className="pt-3 border-t border-graphite-700/60 font-mono text-[11px] space-y-1">
                 <p className="text-graphite-300">
                   <span className="text-graphite-400">Runtime: </span>
-                  {p.runtime}
+                  {rec.runtime_hint}
                 </p>
                 <p className="text-graphite-300">
                   <span className="text-graphite-400">Graphics: </span>
-                  <span className="text-accent-400">{p.graphics}</span>
+                  <span className="text-accent-400">{rec.graphics}</span>
                 </p>
                 <p className="text-graphite-400 text-[10px]">
-                  Deps: {p.deps.join(", ") || "None"}
+                  Deps: {rec.dependencies.join(", ") || "None"}
                 </p>
               </div>
             </div>

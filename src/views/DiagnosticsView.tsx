@@ -64,7 +64,7 @@ export const DiagnosticsView: React.FC<DiagnosticsViewProps> = ({
     }
   };
 
-  const failedCount = checks.filter((c: DiagnosticCheck) => !c.passed).length;
+  const failedCount = checks.filter((c: DiagnosticCheck) => c.status !== "ok").length;
 
   return (
     <div className="flex-1 overflow-y-auto p-6 max-w-5xl mx-auto space-y-6">
@@ -100,7 +100,7 @@ export const DiagnosticsView: React.FC<DiagnosticsViewProps> = ({
 
         <button
           disabled={!selectedAppId || runningChecks}
-          onClick={handleRunDiagnostics}
+          onClick={handleRunChecks}
           className="px-5 py-2.5 rounded-lg bg-warn hover:bg-warn/90 text-black font-mono text-[12px] font-bold flex items-center gap-2 disabled:opacity-50"
         >
           {runningChecks ? (
@@ -143,22 +143,22 @@ export const DiagnosticsView: React.FC<DiagnosticsViewProps> = ({
           <div className="space-y-3">
             {checks.map((check: DiagnosticCheck) => (
               <div
-                key={check.name}
+                key={check.id}
                 className={`rounded-xl border p-4 transition-all ${
-                  check.passed
+                  check.status === "ok"
                     ? "bg-graphite-900 border-graphite-700/60"
                     : "bg-warn/5 border-warn/40"
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
-                    {check.passed ? (
+                    {check.status === "ok" ? (
                       <CheckCircle2 className="w-5 h-5 text-ok shrink-0 mt-0.5" />
                     ) : (
                       <AlertTriangle className="w-5 h-5 text-warn shrink-0 mt-0.5" />
                     )}
                     <div className="space-y-1 font-mono text-[12px]">
-                      <h3 className="font-bold text-graphite-100 text-[13px]">{check.name}</h3>
+                      <h3 className="font-bold text-graphite-100 text-[13px]">{check.label}</h3>
 
                       {/* Enforce PRD §78 3-part layout */}
                       <div className="space-y-1 pt-1">
@@ -168,26 +168,26 @@ export const DiagnosticsView: React.FC<DiagnosticsViewProps> = ({
                         </p>
                         <p className="text-graphite-300">
                           <span className="text-graphite-400 font-semibold">Status: </span>
-                          {check.passed ? (
+                          {check.status === "ok" ? (
                             <span className="text-ok font-bold">Passed cleanly</span>
                           ) : (
                             <span className="text-warn font-bold">Action required</span>
                           )}
                         </p>
 
-                        {!check.passed && check.suggested_fix && (
+                        {check.status !== "ok" && check.fix && (
                           <div className="pt-2">
                             <span className="text-graphite-400 font-semibold block mb-1">
                               What can I do:
                             </span>
                             <div className="p-3 rounded-lg bg-graphite-950 border border-graphite-700 flex items-center justify-between gap-3">
-                              <span className="text-accent-400">{check.suggested_fix}</span>
+                              <span className="text-accent-400">{check.fix}</span>
                               <button
-                                disabled={fixing === check.suggested_fix}
-                                onClick={() => handleApplyFix(check.suggested_fix!)}
+                                disabled={fixing === check.fix}
+                                onClick={() => handleApplyFix(check.fix!)}
                                 className="px-3 py-1.5 rounded bg-accent-500 hover:bg-accent-400 disabled:opacity-50 text-white font-bold text-[11px] flex items-center gap-1.5 shrink-0"
                               >
-                                {fixing === check.suggested_fix ? (
+                                {fixing === check.fix ? (
                                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
                                 ) : (
                                   <Wrench className="w-3.5 h-3.5" />
@@ -208,8 +208,4 @@ export const DiagnosticsView: React.FC<DiagnosticsViewProps> = ({
       )}
     </div>
   );
-
-  function handleRunDiagnostics() {
-    handleRunChecks();
-  }
 };

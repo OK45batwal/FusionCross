@@ -82,7 +82,7 @@ export const InstallerWizardView: React.FC<InstallerWizardViewProps> = ({
       if (createNewBottle || !bottleId) {
         const created = await createBottle(
           newBottleName || "New Bottle",
-          recommendation?.profile === "photoshop" ? "adobe" : "gaming"
+          recommendation?.profile === "photoshop" ? "productivity" : "gaming"
         );
         bottleId = created.id;
       }

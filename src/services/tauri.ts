@@ -134,10 +134,11 @@ export interface Recommendation {
 }
 
 export interface DiagnosticCheck {
-  name: string;
-  passed: boolean;
+  id: string;
+  label: string;
+  status: "ok" | "warn" | "fail" | string;
   detail: string;
-  suggested_fix: string | null;
+  fix: string | null;
 }
 
 export const getSystemInfo = () => invoke<SystemInfo>("get_system_info");

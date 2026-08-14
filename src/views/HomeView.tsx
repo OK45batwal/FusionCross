@@ -136,7 +136,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               </div>
               <h3 className="text-[15px] font-bold text-graphite-100">Create Environment</h3>
               <p className="text-[12px] text-graphite-300">
-                Create an isolated bottle prefix from Gaming, Office, Adobe, or Development templates.
+                Create an isolated bottle prefix from Gaming, DXVK-Optimized, Productivity, Legacy, or Custom templates.
               </p>
             </div>
             <div className="mt-4 flex items-center gap-1 text-[12px] font-mono font-semibold text-ok">
