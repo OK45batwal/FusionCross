@@ -446,12 +446,31 @@ header {
   filter: grayscale(0);
 }
 
+.prove-logo-fusioncross {
+  height: 40px;
+  border-radius: 8px;
+  opacity: 1;
+  filter: none;
+}
+
+.prove-separator {
+  width: 1px;
+  height: 28px;
+  background: var(--border-color);
+}
+
 @media (max-width: 768px) {
   .prove-logos {
     gap: 16px 28px;
   }
   .prove-logo {
     height: 22px;
+  }
+  .prove-logo-fusioncross {
+    height: 34px;
+  }
+  .prove-separator {
+    height: 24px;
   }
 }
 
