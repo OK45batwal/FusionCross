@@ -25,15 +25,19 @@ fn now_ts() -> String {
         .unwrap_or_default()
 }
 
-fn wine_binary_for(app: &AppHandle, runtime_id: &str) -> String {
+fn wine_binary_for(app: &AppHandle, runtime_id: &str) -> Result<String, FusionError> {
     let st = app.state::<FusionState>();
-    let path =
+    let rt =
         st.0.lock()
-            .ok()
-            .and_then(|g| g.runtimes.iter().find(|r| r.id == runtime_id).cloned())
-            .and_then(|r| runtime::engine_binary(Path::new(&r.path)))
-            .unwrap_or_else(|| PathBuf::from("wine"));
-    path.to_string_lossy().into_owned()
+            .map_err(|_| FusionError::Unsupported)?
+            .runtimes
+            .iter()
+            .find(|r| r.id == runtime_id)
+            .cloned()
+            .ok_or(FusionError::RuntimeNotFound)?;
+    runtime::engine_binary(Path::new(&rt.path))
+        .map(|p| p.to_string_lossy().into_owned())
+        .ok_or(FusionError::RuntimeNotFound)
 }
 
 /* ---------- read commands ---------- */
@@ -95,7 +99,6 @@ pub fn get_templates() -> Result<Vec<serde_json::Value>, FusionError> {
 }
 
 #[tauri::command]
-#[allow(dead_code, unused)]
 pub fn get_runtimes(app: AppHandle) -> Result<Vec<serde_json::Value>, FusionError> {
     let st = app.state::<FusionState>();
     let state = st.0.lock().map_err(|_| FusionError::Unsupported)?;
@@ -192,7 +195,7 @@ fn initialize_bottle_prefix(app: &AppHandle, bottle_id: &str) -> Result<String, 
     let bottle = st
         .with_state(|s| Ok(s.bottles.iter().find(|b| b.id == bottle_id).cloned()))?
         .ok_or(FusionError::BottleNotFound)?;
-    let binary = wine_binary_for(app, &bottle.runtime);
+    let binary = wine_binary_for(app, &bottle.runtime)?;
     let prefix = Path::new(&bottle.path);
     crate::wine::prefix::init_prefix(&binary, prefix)?;
     crate::wine::prefix::install_verbs(&binary, prefix, &bottle.dependencies)?;
@@ -200,7 +203,6 @@ fn initialize_bottle_prefix(app: &AppHandle, bottle_id: &str) -> Result<String, 
 }
 
 #[tauri::command]
-#[allow(dead_code, unused)]
 pub fn repair_bottle(app: AppHandle, bottle_id: String) -> Result<String, FusionError> {
     initialize_bottle_prefix(&app, &bottle_id)
 }
@@ -395,7 +397,7 @@ fn install_job(
             .cloned()
             .ok_or(FusionError::BottleNotFound)
     })?;
-    let binary = wine_binary_for(app, &bottle.runtime);
+    let binary = wine_binary_for(app, &bottle.runtime)?;
     let prefix = Path::new(&bottle.path);
 
     initialize_bottle_prefix(app, bottle_id)?;
@@ -418,8 +420,6 @@ fn install_job(
     if !status.success() {
         return Err(FusionError::InstallationFailed);
     }
-    // sleeper in case the installer exits before scanning
-    let _ = ();
 
     // Discover whatever the installer laid down.
     let found = scanner::scan_prefix(prefix);
@@ -486,7 +486,7 @@ pub fn launch_application(app: AppHandle, app_id: String) -> Result<RunningInfo,
     if pm.is_running(&app_id) {
         return Err(FusionError::LaunchFailed);
     }
-    let binary = wine_binary_for(&app, &bottle.runtime);
+    let binary = wine_binary_for(&app, &bottle.runtime)?;
     let prefix = Path::new(&bottle.path);
     if !crate::wine::prefix::prefix_prepared(prefix) {
         crate::wine::prefix::init_prefix(&binary, prefix)?;
@@ -601,14 +601,14 @@ pub fn apply_fix(app: AppHandle, fix_id: String, app_id: String) -> Result<Strin
         FixIntent::InitPrefix => {
             let st = app.state::<FusionState>();
             let bottle = st.with_state(|s| s.applications.iter().find(|a| a.id == app_id).and_then(|a| s.bottles.iter().find(|b| b.id == a.bottle_id)).cloned().ok_or(FusionError::BottleNotFound))?;
-                    let binary = wine_binary_for(&app, &bottle.runtime);
+                    let binary = wine_binary_for(&app, &bottle.runtime)?;
             crate::wine::prefix::init_prefix(&binary, Path::new(&bottle.path))?;
             Ok("Prefix initialized.".into())
         }
         FixIntent::InstallDependency(verb) => {
             let st = app.state::<FusionState>();
             let bottle = st.with_state(|s| s.applications.iter().find(|a| a.id == app_id).and_then(|a| s.bottles.iter().find(|b| b.id == a.bottle_id)).cloned().ok_or(FusionError::BottleNotFound))?;
-                    let binary = wine_binary_for(&app, &bottle.runtime);
+                    let binary = wine_binary_for(&app, &bottle.runtime)?;
             crate::wine::prefix::install_verbs(&binary, Path::new(&bottle.path), &[verb.to_string()])?;
             Ok(format!("Installed {verb}."))
         }

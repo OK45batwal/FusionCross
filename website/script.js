@@ -209,10 +209,10 @@ function esc(s) {
 function installCrosstieRecipe(id, title) {
   const isTauri = !!window.__TAURI_INTERNALS__;
   if (isTauri) {
-    alert(`Triggering 1-Click Crosstie Recipe for: ${title}\n\nFusionCross will automatically create the optimized bottle and install dependencies.`);
-  } else {
-    alert(`To install ${title} with 1-click Crosstie Recipe:\n\n1. Open FusionCross desktop app on your Mac.\n2. Go to Website & Catalog view.\n3. Click "Install via FusionCross".`);
+    return; // in-app: handled by WebsitePortalView (Phase 3)
   }
+  // In a plain browser there is no recipe engine; send them to the app.
+  window.location.href = "https://github.com/OK45batwal/FusionCross";
 }
 
 /* Theme Switcher (Dark & Light Mode) */
@@ -260,7 +260,7 @@ function detectArchitecture() {
   if (detectPill) {
     if (isMac) {
       detectPill.innerHTML = `✓ Apple Silicon Mac Detected (M1–M4 ARM64)`;
-      if (downloadSub) downloadSub.innerText = "FusionCross-2.0.0-arm64.dmg · 48.2 MB · macOS 13.0+";
+      if (downloadSub) downloadSub.innerText = "FusionCross_2.0.0_aarch64.dmg · 4.6 MB · macOS 13.0+";
     } else {
       detectPill.innerHTML = `ℹ Designed for macOS (Apple Silicon M1–M4)`;
     }
@@ -303,17 +303,4 @@ function initScrollReveals() {
   );
 
   reveals.forEach((el) => observer.observe(el));
-}
-
-/* Download Execution Trigger */
-function triggerDownload() {
-  const btn = document.getElementById("downloadMainBtn");
-  if (btn) {
-    const origText = btn.innerHTML;
-    btn.innerHTML = `<span style="display:inline-block; animation: spin 1s infinite linear;">↻</span> Starting Download...`;
-    setTimeout(() => {
-      btn.innerHTML = origText;
-      alert("Downloading FusionCross-2.0.0-arm64.dmg (48.2 MB)\n\nVerify SHA-256 Checksum:\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
-    }, 1000);
-  }
 }
