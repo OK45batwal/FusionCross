@@ -72,6 +72,7 @@ pub fn run() {
             commands::restore_snapshot,
             commands::delete_snapshot,
             commands::import_runtime,
+            commands::download_runtime,
             commands::remove_runtime,
             commands::set_safe_mode,
             commands::export_app_bundle,

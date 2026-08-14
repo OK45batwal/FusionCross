@@ -1,15 +1,18 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Boxes,
   RefreshCw,
   Plus,
   Trash2,
   Upload,
+  Download,
 } from "lucide-react";
 import {
   importRuntime,
   probeRuntime,
   removeRuntime,
+  downloadRuntime,
+  listJobs,
   Runtime,
   FusionErrorPayload,
 } from "../services/tauri";
@@ -29,6 +32,57 @@ export const RuntimeManagerView: React.FC<RuntimeManagerViewProps> = ({
   const [importPath, setImportPath] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    let stopped = false;
+    const tick = async () => {
+      try {
+        const jobs = await listJobs();
+        for (const id of Object.keys(downloading)) {
+          const job = jobs.find((j) => j.id === id);
+          if (!job || job.status === "Done") {
+            if (!stopped) {
+              setDownloading((prev) => {
+                const next = { ...prev };
+                delete next[id];
+                return next;
+              });
+              setNotice(`Runtime ${job?.status === "Done" ? "installed" : "finished"}.`);
+              onRefreshState();
+            }
+          } else if (job.status === "Failed") {
+            if (!stopped) {
+              setDownloading((prev) => {
+                const next = { ...prev };
+                delete next[id];
+                return next;
+              });
+              setError(`Runtime download failed: ${job.message || "unknown error"}.`);
+            }
+          }
+        }
+      } catch {
+        // still polling; transient
+      }
+    };
+    const interval = setInterval(tick, 1500);
+    return () => {
+      stopped = true;
+      clearInterval(interval);
+    };
+  }, [downloading, onRefreshState]);
+
+  const handleDownload = async (r: Runtime) => {
+    setError(null);
+    setNotice(null);
+    try {
+      const jobId = await downloadRuntime(r.id);
+      setDownloading((prev) => ({ ...prev, [jobId]: true }));
+    } catch (e) {
+      setError((e as FusionErrorPayload).message || "Runtime download failed.");
+    }
+  };
 
   const handleProbe = async (name: string) => {
     setProbing((prev: Record<string, boolean>) => ({ ...prev, [name]: true }));
@@ -170,6 +224,17 @@ export const RuntimeManagerView: React.FC<RuntimeManagerViewProps> = ({
                 <span className={r.downloaded ? "text-ok" : "text-warn"}>
                   {r.downloaded ? "● Installed" : "○ Available"}
                 </span>
+
+                {!r.downloaded && r.url && (
+                  <button
+                    onClick={() => handleDownload(r)}
+                    disabled={Object.values(downloading).some(Boolean)}
+                    className="p-1.5 rounded text-accent-400 hover:bg-accent-500/10 disabled:opacity-50"
+                    title="Download & install runtime"
+                  >
+                    <Download className="w-4 h-4" />
+                  </button>
+                )}
 
                 {r.downloaded && r.path && (
                   <button

@@ -16,6 +16,7 @@ import {
   createBottle,
   getRecommendation,
   runInstaller,
+  listJobs,
   Bottle,
   InstallerAnalysis,
   Recommendation,
@@ -86,9 +87,41 @@ export const InstallerWizardView: React.FC<InstallerWizardViewProps> = ({
         bottleId = created.id;
       }
 
-      await runInstaller(filePath, bottleId);
-      setInstallLog("Installer exited cleanly. Executable registered into library.");
-      onRefreshState();
+      const jobId = await runInstaller(filePath, bottleId);
+      setInstallLog("Installer running in Wine prefix. Polling for completion...");
+
+      // Poll the background job; only declare success when it actually finishes.
+      let outcome = "";
+      let failed = "";
+      for (let attempt = 0; attempt < 200; attempt++) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const jobs = await listJobs();
+        const job = jobs.find((j) => j.id === jobId);
+        if (!job) continue;
+        if (job.status === "Done") {
+          outcome = job.message || "Installer exited; application registered.";
+          break;
+        }
+        if (job.status === "Failed") {
+          failed = job.message || "Installation failed inside Wine prefix.";
+          break;
+        }
+        setInstallLog(job.message || "Installing...");
+      }
+
+      if (failed) {
+        setError(failed);
+        setStep(3);
+        return;
+      }
+      if (!outcome) {
+        setError("Installation timed out while polling the background job.");
+        setStep(3);
+        return;
+      }
+
+      await onRefreshState();
+      setInstallLog(outcome);
       setStep(4);
     } catch (e) {
       const err = e as FusionErrorPayload;
@@ -362,7 +395,7 @@ export const InstallerWizardView: React.FC<InstallerWizardViewProps> = ({
           <div>
             <h2 className="text-[20px] font-bold text-graphite-100">Installation Completed!</h2>
             <p className="text-[13px] text-graphite-300 mt-1">
-              The application was installed and registered into your FusionCross library.
+              {installLog}
             </p>
           </div>
 

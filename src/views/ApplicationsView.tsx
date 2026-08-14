@@ -42,6 +42,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [selectedApp, setSelectedApp] = useState<Application | null>(null);
+  const [exportStatus, setExportStatus] = useState<{ ok: boolean; text: string } | null>(null);
 
   const categories = ["all", "games", "productivity", "utilities", "applications"];
 
@@ -380,11 +381,12 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
 
                 <button
                   onClick={async () => {
+                    setExportStatus(null);
                     try {
                       const res = await exportAppBundle(selectedApp.id);
-                      alert(`Exported macOS .app bundle to:\n${res}\n\nYou can now launch this app from Finder, Spotlight, or Dock!`);
+                      setExportStatus({ ok: true, text: `Exported to: ${res}` });
                     } catch (e) {
-                      alert(`Export failed: ${String(e)}`);
+                      setExportStatus({ ok: false, text: `Export failed: ${String(e)}` });
                     }
                   }}
                   className="px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--border-color)] text-[var(--text-main)] text-[11px] font-mono flex items-center gap-1.5 border border-[var(--border-color)] cursor-pointer transition-colors"
@@ -392,6 +394,19 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                   <Share className="w-3.5 h-3.5 text-[var(--accent-primary)]" /> Export .app
                 </button>
               </div>
+
+              {exportStatus && (
+                <div
+                  className={`px-3 py-2 rounded-lg border font-mono text-[11px] ${
+                    exportStatus.ok
+                      ? "border-[var(--color-ok)]/40 bg-[var(--color-ok-glow)] text-[var(--color-ok)]"
+                      : "border-red-500/40 bg-red-500/10 text-red-500"
+                  }`}
+                >
+                  {exportStatus.ok ? "✓ " : "⚠ "}
+                  {exportStatus.text}
+                </div>
+              )}
 
               <div className="flex items-center gap-2">
                 <button

@@ -7,16 +7,25 @@ interface SettingsViewProps {
   onRefreshState: () => void;
 }
 
+const UI_MODE_KEY = "fusioncross-ui-mode";
+
 export const SettingsView: React.FC<SettingsViewProps> = ({
   settings,
   onRefreshState,
 }) => {
-  const [beginnerMode, setBeginnerMode] = useState<boolean>(true);
+  const [beginnerMode, setBeginnerMode] = useState<boolean>(() => {
+    return localStorage.getItem(UI_MODE_KEY) !== "advanced";
+  });
   const isSafeModeOn = settings.some(([k, v]) => k === "safe_mode" && v === "on");
 
   const handleToggleSafeMode = async (enabled: boolean) => {
     await setSafeMode(enabled);
     onRefreshState();
+  };
+
+  const setMode = (beginner: boolean) => {
+    setBeginnerMode(beginner);
+    localStorage.setItem(UI_MODE_KEY, beginner ? "beginner" : "advanced");
   };
 
   return (
@@ -44,7 +53,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
           <div className="flex items-center rounded-lg bg-graphite-850 p-1 border border-graphite-700 font-mono text-[11px]">
             <button
-              onClick={() => setBeginnerMode(true)}
+              onClick={() => setMode(true)}
               className={`px-3 py-1.5 rounded-md font-semibold transition-colors ${
                 beginnerMode ? "bg-accent-500 text-white shadow-sm" : "text-graphite-400"
               }`}
@@ -52,7 +61,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               Beginner Mode (Default)
             </button>
             <button
-              onClick={() => setBeginnerMode(false)}
+              onClick={() => setMode(false)}
               className={`px-3 py-1.5 rounded-md font-semibold transition-colors ${
                 !beginnerMode ? "bg-accent-500 text-white shadow-sm" : "text-graphite-400"
               }`}

@@ -115,7 +115,8 @@ pub fn get_runtimes(app: AppHandle) -> Result<Vec<serde_json::Value>, FusionErro
             let installed = state.runtimes.iter().any(|r| r.id == c.id);
             serde_json::json!({
                 "id": c.id, "name": c.name, "category": c.category,
-                "version": c.version, "downloaded": installed, "path": "", "note": c.note
+                "version": c.version, "downloaded": installed, "path": "",
+                "url": c.url, "sha256": c.sha256, "note": c.note
             })
         }))
         .collect())
@@ -706,6 +707,59 @@ pub fn delete_snapshot(app: AppHandle, snapshot_id: String) -> Result<(), Fusion
 }
 
 /* ---------- runtimes ---------- */
+
+/// Download + verify + install a catalog runtime as a background job.
+#[tauri::command]
+pub fn download_runtime(app: AppHandle, runtime_id: String) -> Result<String, FusionError> {
+    let entry = catalog()
+        .into_iter()
+        .find(|c| c.id == runtime_id)
+        .ok_or(FusionError::RuntimeNotFound)?;
+    if entry.sha256.is_empty() {
+        return Err(FusionError::RuntimeVerificationFailed);
+    }
+
+    let jobs = app.state::<Jobs>();
+    let job = jobs.begin(format!("Downloading {}", entry.name));
+    let job_id = job.clone();
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        let d = dirs(&handle);
+        let id = entry.id.clone();
+        let name = entry.name.clone();
+        let category = entry.category.to_string();
+        let url = entry.url.to_string();
+        let sha = entry.sha256.to_string();
+        let dest_pkg = d.downloads.join(format!("{id}.tar.xz"));
+        let dest_dir = d.runtimes.join(&id);
+        let jobs = handle.state::<Jobs>();
+        let result = runtime::download_runtime(&url, &sha, &dest_pkg, &dest_dir);
+        match result {
+            Ok(()) => {
+                let version = runtime::probe_runtime_version(&dest_dir).unwrap_or_default();
+                let rt = handle.state::<FusionState>();
+                let _ = rt.with_state(|s| {
+                    s.runtimes.push(Runtime {
+                        id: id.clone(),
+                        name: name.clone(),
+                        category: category.clone(),
+                        downloaded: true,
+                        version: version.clone(),
+                        path: dest_dir.to_string_lossy().into_owned(),
+                        url: url.clone(),
+                        sha256: sha.clone(),
+                        size_bytes: 0,
+                    });
+                    Ok(())
+                });
+                let _ = rt.save(&handle);
+                jobs.finish(&job_id, format!("{name} installed (v{version})."));
+            }
+            Err(e) => jobs.fail(&job_id, format!("{name} — {e}")),
+        }
+    });
+    Ok(job)
+}
 
 #[tauri::command]
 pub fn import_runtime(

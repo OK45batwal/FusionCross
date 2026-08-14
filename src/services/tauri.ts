@@ -193,6 +193,8 @@ export const deleteSnapshot = (snapshotId: string) => invoke<void>("delete_snaps
 
 export const importRuntime = (name: string, archivePath: string) =>
   invoke<Runtime>("import_runtime", { name, archivePath });
+export const downloadRuntime = (runtimeId: string) =>
+  invoke<string>("download_runtime", { runtimeId });
 export const removeRuntime = (runtimeId: string) => invoke<void>("remove_runtime", { runtimeId });
 export const setSafeMode = (enabled: boolean) => invoke<void>("set_safe_mode", { enabled });
 export const exportAppBundle = (appId: string) => invoke<string>("export_app_bundle", { appId });

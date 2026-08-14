@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   Download,
   CheckCircle2,
@@ -18,30 +19,35 @@ interface WebsitePortalViewProps {
   onOpenAppWorkbench?: () => void;
 }
 
+const DMG_URL =
+  "https://github.com/OK45batwal/FusionCross/releases/latest/download/FusionCross_2.0.0_aarch64.dmg";
+const DMG_NAME = "FusionCross_2.0.0_aarch64.dmg · 4.6 MB";
+
 export const WebsitePortalView: React.FC<WebsitePortalViewProps> = ({ onOpenAppWorkbench }) => {
   const isMac = typeof navigator !== "undefined" && /Macintosh|Mac OS X/i.test(navigator.userAgent);
   const archText = isMac ? "✓ Apple Silicon Mac Detected (M1–M4 ARM64)" : "ℹ Designed for macOS Apple Silicon (M1–M4)";
-  const downloadSub = "FusionCross-2.0.0-arm64.dmg · 48.2 MB · macOS 13.0+";
+  const downloadSub = `${DMG_NAME} · macOS 13.0+`;
   const [copied, setCopied] = useState<boolean>(false);
   const [downloading, setDownloading] = useState<boolean>(false);
 
   const handleCopySha = () => {
-    const sha = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+    const sha =
+      "ff618ef2065dd1dafa8e339b5a4dbfedae574e29335ca0be23a9404d3c7777ed";
     navigator.clipboard.writeText(sha).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
   };
 
-  const handleTriggerDownload = () => {
+  const handleTriggerDownload = async () => {
     setDownloading(true);
-    setTimeout(() => {
+    try {
+      await openUrl(DMG_URL, "system");
+    } catch {
+      window.open(DMG_URL, "_blank");
+    } finally {
       setDownloading(false);
-      const link = document.createElement("a");
-      link.href = "https://github.com/fusioncross/fusioncross/releases/download/v2.0.0/FusionCross-2.0.0-arm64.dmg";
-      link.download = "FusionCross-2.0.0-arm64.dmg";
-      alert("Downloading FusionCross-2.0.0-arm64.dmg (48.2 MB)\n\nVerify SHA-256 Checksum:\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
-    }, 800);
+    }
   };
 
   return (
@@ -122,7 +128,7 @@ export const WebsitePortalView: React.FC<WebsitePortalViewProps> = ({ onOpenAppW
                 </button>
               </div>
               <p className="break-all font-semibold text-[var(--accent-primary)] selection:bg-[var(--accent-primary)] selection:text-white">
-                e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+                ff618ef2065dd1dafa8e339b5a4dbfedae574e29335ca0be23a9404d3c7777ed
               </p>
             </div>
 
@@ -253,10 +259,16 @@ export const WebsitePortalView: React.FC<WebsitePortalViewProps> = ({ onOpenAppW
                   <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{item.desc}</p>
                 </div>
                 <button
-                  onClick={() => alert(`1-Click Crosstie Recipe started for ${item.title}!\n\nFusionCross is creating the optimal bottle environment and installing dependencies.`)}
+                  onClick={() => {
+                    if (onOpenAppWorkbench) {
+                      onOpenAppWorkbench();
+                    } else {
+                      openUrl("https://github.com/OK45batwal/FusionCross", "system");
+                    }
+                  }}
                   className="mt-4 w-full py-2 rounded-xl bg-[var(--bg-elevated)] hover:bg-[var(--accent-primary)] hover:text-white border border-[var(--border-color)] text-xs font-mono font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
                 >
-                  <Download className="w-3.5 h-3.5" /> Install via FusionCross
+                  <Download className="w-3.5 h-3.5" /> Install in FusionCross
                 </button>
               </div>
             ))}
@@ -274,7 +286,7 @@ export const WebsitePortalView: React.FC<WebsitePortalViewProps> = ({ onOpenAppW
           </div>
           <div className="flex items-center gap-4">
             <span>Designed for macOS Apple Silicon (M1–M4)</span>
-            <a href="https://github.com" target="_blank" rel="noreferrer" className="text-[var(--accent-primary)] hover:underline flex items-center gap-1">
+            <a href="https://github.com/OK45batwal/FusionCross" target="_blank" rel="noreferrer" className="text-[var(--accent-primary)] hover:underline flex items-center gap-1">
               <Code2 className="w-3.5 h-3.5" /> GitHub
             </a>
           </div>

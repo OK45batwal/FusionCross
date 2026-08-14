@@ -123,7 +123,7 @@ export function App() {
         {/* Website Header */}
         <header className="sticky top-0 z-50 border-b border-[var(--border-color)] bg-[var(--bg-glass)] backdrop-blur-xl transition-all">
           <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
-            <a href="#" className="flex items-center gap-3 text-decoration-none group">
+            <a href="https://github.com/OK45batwal/FusionCross" className="flex items-center gap-3 text-decoration-none group">
               <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-[var(--accent-primary)] to-[#3b52d4] flex items-center justify-center font-mono font-bold text-[16px] text-white shadow-md shadow-[var(--accent-glow)] group-hover:scale-105 transition-transform">
                 F
               </span>
@@ -168,7 +168,7 @@ export function App() {
 
               {/* GitHub Link */}
               <a
-                href="https://github.com"
+                href="https://github.com/OK45batwal/FusionCross"
                 target="_blank"
                 rel="noreferrer"
                 className="px-4 py-1.5 rounded-xl bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white font-mono text-[12px] font-bold flex items-center gap-2 shadow-md shadow-[var(--accent-glow)] transition-all text-decoration-none"
