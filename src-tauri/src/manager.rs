@@ -103,6 +103,7 @@ pub struct Job {
     pub message: String,
 }
 
+#[derive(Default)]
 pub struct Jobs(pub Mutex<HashMap<String, Job>>);
 
 impl Jobs {

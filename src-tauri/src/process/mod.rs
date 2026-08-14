@@ -45,7 +45,6 @@ pub struct ProcessManager {
 }
 
 impl ProcessManager {
-    #[allow(dead_code, unused)]
     pub fn new(on_exit: Arc<dyn Fn(SessionRecord) + Send + Sync>) -> Self {
         Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),

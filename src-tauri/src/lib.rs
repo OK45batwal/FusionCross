@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 mod commands;
 mod compatibility;
 mod core;
@@ -14,12 +16,33 @@ mod wine;
 use tauri::Manager;
 
 /// FusionCross — Windows apps, the Mac way.
+///
+/// Accumulate play time back into state when a Wine session exits.
+fn record_session(app: &tauri::AppHandle, rec: process::SessionRecord) {
+    use tauri::Manager;
+    app.state::<manager::FusionState>()
+        .with_state(|s| {
+            if let Some(a) = s.applications.iter_mut().find(|a| a.id == rec.app_id) {
+                a.play_time_mins += rec.duration_secs.div_ceil(60);
+            }
+            Ok(())
+        })
+        .ok();
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let state = manager::FusionState::load(app.handle());
             app.manage(state);
+            let handle = app.handle().clone();
+            app.manage(process::ProcessManager::new(Arc::new(
+                move |rec: process::SessionRecord| {
+                    record_session(&handle, rec);
+                },
+            )));
+            app.manage(manager::Jobs(Default::default()));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
