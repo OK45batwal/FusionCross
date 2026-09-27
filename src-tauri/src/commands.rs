@@ -621,7 +621,70 @@ pub fn scan_bottle(app: AppHandle, bottle_id: String) -> Result<Vec<DiscoveredEx
             .cloned()
             .ok_or(FusionError::BottleNotFound)
     })?;
-    Ok(scanner::scan_prefix(Path::new(&bottle.path)))
+    let found = scanner::scan_prefix(Path::new(&bottle.path));
+    st.with_state(|s| {
+        for exe in &found {
+            let full_path = Path::new(&bottle.path).join(&exe.rel_path).to_string_lossy().into_owned();
+            if !s.applications.iter().any(|a| a.bottle_id == bottle_id && a.executable_path == full_path) {
+                let rec = compatibility::recommend(&exe.name);
+                s.applications.push(Application {
+                    id: new_id(),
+                    bottle_id: bottle_id.clone(),
+                    name: exe.name.clone(),
+                    executable_path: full_path,
+                    category: exe.category.clone(),
+                    favorite: false,
+                    launch_count: 0,
+                    play_time_mins: 0,
+                    last_played: None,
+                    compatibility: Some(rec.compatibility),
+                    profile: Some(rec.profile.to_string()),
+                });
+            }
+        }
+        Ok(())
+    })?;
+    st.save(&app)?;
+    Ok(found)
+}
+
+#[tauri::command]
+pub fn scan_all_bottles(app: AppHandle) -> Result<usize, FusionError> {
+    let st = app.state::<FusionState>();
+    let bottles = st.with_state(|s| Ok(s.bottles.clone()))?;
+    let mut total_added = 0;
+
+    for bottle in &bottles {
+        let found = scanner::scan_prefix(Path::new(&bottle.path));
+        st.with_state(|s| {
+            for exe in &found {
+                let full_path = Path::new(&bottle.path).join(&exe.rel_path).to_string_lossy().into_owned();
+                if !s.applications.iter().any(|a| a.bottle_id == bottle.id && (a.executable_path == full_path || a.name == exe.name)) {
+                    let rec = compatibility::recommend(&exe.name);
+                    s.applications.push(Application {
+                        id: new_id(),
+                        bottle_id: bottle.id.clone(),
+                        name: exe.name.clone(),
+                        executable_path: full_path,
+                        category: exe.category.clone(),
+                        favorite: false,
+                        launch_count: 0,
+                        play_time_mins: 0,
+                        last_played: None,
+                        compatibility: Some(rec.compatibility),
+                        profile: Some(rec.profile.to_string()),
+                    });
+                    total_added += 1;
+                }
+            }
+            Ok(())
+        })?;
+    }
+
+    if total_added > 0 {
+        st.save(&app)?;
+    }
+    Ok(total_added)
 }
 
 #[tauri::command]
@@ -635,11 +698,14 @@ pub fn register_application(
     let st = app.state::<FusionState>();
     let rec = compatibility::recommend(&name);
     let application = st.with_state(|s| {
-        if s.applications
-            .iter()
-            .any(|a| a.bottle_id == bottle_id && a.executable_path == executable_path)
+        if let Some(existing) = s
+            .applications
+            .iter_mut()
+            .find(|a| a.bottle_id == bottle_id && (a.executable_path == executable_path || a.name == name))
         {
-            return Err(FusionError::InvalidExecutable); // duplicate
+            existing.executable_path = executable_path;
+            existing.name = name;
+            return Ok(existing.clone());
         }
         let app = Application {
             id: new_id(),

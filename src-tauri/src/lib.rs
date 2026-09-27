@@ -64,6 +64,7 @@ pub fn run() {
             commands::install_bottle_verb,
             commands::analyze_installer,
             commands::scan_bottle,
+            commands::scan_all_bottles,
             commands::register_application,
             commands::run_installer,
             commands::list_jobs,

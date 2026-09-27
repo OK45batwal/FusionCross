@@ -190,6 +190,7 @@ export const repairBottle = (bottleId: string) => invoke<string>("repair_bottle"
 
 export const analyzeInstaller = (path: string) => invoke<InstallerAnalysis>("analyze_installer", { path });
 export const scanBottle = (bottleId: string) => invoke<DiscoveredExe[]>("scan_bottle", { bottleId });
+export const scanAllBottles = () => invoke<number>("scan_all_bottles");
 export const registerApplication = (
   bottleId: string,
   name: string,

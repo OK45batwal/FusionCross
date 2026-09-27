@@ -10,22 +10,59 @@ pub struct DiscoveredExe {
     pub category: String,
 }
 
-const SKIP_TOP_DIRS: [&str; 6] = [
+const SKIP_TOP_DIRS: [&str; 14] = [
     "windows",
     "ProgramData",
     "users",
     "perflogs",
-    "Program Files (x86)/WindowsKits",
+    "dosdevices",
+    "Common Files",
+    "cef",
+    "hardwareupdater",
+    "Redist",
+    "Engine",
+    "DirectX",
+    "_CommonRedist",
+    "WindowsKits",
     "Windows Kits",
+];
+
+const IGNORED_EXE_STEMS: [&str; 21] = [
+    "uninstall",
+    "unins000",
+    "steamwebhelper",
+    "steamservice",
+    "steamerrorreporter",
+    "steamerrorreporter64",
+    "gameoverlayui",
+    "gameoverlayui64",
+    "writeminidump",
+    "crashpad_handler",
+    "dxsetup",
+    "vulkandriverquery",
+    "vulkandriverquery64",
+    "gldriverquery",
+    "gldriverquery64",
+    "secure_desktop_capture",
+    "fossilize-replay",
+    "fossilize-replay64",
+    "x86launcher",
+    "x64launcher",
+    "steamxboxutil",
 ];
 
 /// Find installable executables under a prefix's `drive_c`. Bounded recursion
 /// (depth + entry budget) so the scan never blocks the machine (PRD §76).
 pub fn scan_prefix(prefix: &Path) -> Vec<DiscoveredExe> {
+    let drive_c = if prefix.join("drive_c").is_dir() {
+        prefix.join("drive_c")
+    } else {
+        prefix.to_path_buf()
+    };
     let mut out: Vec<DiscoveredExe> = Vec::new();
     let mut visited: std::collections::HashSet<std::path::PathBuf> = Default::default();
     let mut budget = 4000;
-    collect(prefix, prefix, &mut out, &mut visited, 0, &mut budget);
+    collect(prefix, &drive_c, &mut out, &mut visited, 0, &mut budget);
     out
 }
 
@@ -46,6 +83,9 @@ fn collect(
     };
     for entry in entries.flatten() {
         let path = entry.path();
+        if path.is_symlink() {
+            continue;
+        }
         if path.is_dir() {
             if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
                 if SKIP_TOP_DIRS.iter().any(|s| name.eq_ignore_ascii_case(s)) {
@@ -67,6 +107,14 @@ fn collect(
         if ext != "exe" && ext != "msi" {
             continue;
         }
+        let stem_lower = path
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_ascii_lowercase())
+            .unwrap_or_default();
+        if IGNORED_EXE_STEMS.iter().any(|s| stem_lower == *s || stem_lower.starts_with("unins")) {
+            continue;
+        }
+
         *budget -= 1;
         let rel = path
             .strip_prefix(base)

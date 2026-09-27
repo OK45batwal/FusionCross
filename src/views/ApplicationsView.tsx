@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Search,
   LayoutGrid,
@@ -13,8 +13,9 @@ import {
   CheckCircle2,
   X,
   Share,
+  RefreshCw,
 } from "lucide-react";
-import { Application, Bottle, RunningInfo, exportAppBundle } from "../services/tauri";
+import { Application, Bottle, RunningInfo, exportAppBundle, scanAllBottles } from "../services/tauri";
 import { ViewId } from "../components/Sidebar";
 
 interface ApplicationsViewProps {
@@ -26,6 +27,7 @@ interface ApplicationsViewProps {
   onToggleFavorite: (appId: string) => void;
   onNavigate: (view: ViewId) => void;
   filterMode?: "all" | "favorites" | "recent";
+  onRefreshState?: () => Promise<void> | void;
 }
 
 export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
@@ -37,12 +39,43 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
   onToggleFavorite,
   onNavigate,
   filterMode = "all",
+  onRefreshState,
 }) => {
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [selectedApp, setSelectedApp] = useState<Application | null>(null);
   const [exportStatus, setExportStatus] = useState<{ ok: boolean; text: string } | null>(null);
+  const [scanning, setScanning] = useState(false);
+
+  const handleScanAll = async () => {
+    setScanning(true);
+    try {
+      await scanAllBottles();
+      if (onRefreshState) await onRefreshState();
+    } catch {
+      // scan error handled gracefully
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+    if (applications.length === 0 && bottles.length > 0) {
+      scanAllBottles()
+        .then(() => {
+          if (active && onRefreshState) {
+            onRefreshState();
+          }
+        })
+        .catch(() => {});
+    }
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bottles.length, applications.length]);
 
   const categories = ["all", "games", "productivity", "utilities", "applications"];
 
@@ -124,6 +157,16 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
           </div>
 
           <button
+            onClick={handleScanAll}
+            disabled={scanning}
+            className="px-2.5 py-1.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--border-color)] border border-[var(--border-color)] text-[var(--text-main)] text-[11px] font-mono flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+            title="Scan all bottle C: drives for installed Windows applications"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-[var(--accent-primary)] ${scanning ? "animate-spin" : ""}`} />
+            <span>{scanning ? "Scanning..." : "Scan Bottles"}</span>
+          </button>
+
+          <button
             onClick={() => onNavigate("installer")}
             className="px-3 py-1.5 rounded-lg bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-[11px] font-mono font-bold flex items-center gap-1.5 shadow-sm cursor-pointer transition-all"
           >
@@ -142,15 +185,25 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
             <div>
               <h3 className="text-[16px] font-bold text-[var(--text-main)]">No applications found</h3>
               <p className="text-[12px] text-[var(--text-secondary)] mt-1 max-w-sm">
-                Install a Windows application using the smart installer wizard or adjust your search filter.
+                Install a Windows application using the smart installer wizard or scan your bottles.
               </p>
             </div>
-            <button
-              onClick={() => onNavigate("installer")}
-              className="px-4 py-2 rounded-lg bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-[12px] font-mono font-bold shadow-md cursor-pointer transition-all"
-            >
-              Launch Smart Installer
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => onNavigate("installer")}
+                className="px-4 py-2 rounded-lg bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-[12px] font-mono font-bold shadow-md cursor-pointer transition-all"
+              >
+                Launch Smart Installer
+              </button>
+              <button
+                onClick={handleScanAll}
+                disabled={scanning}
+                className="px-4 py-2 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--border-color)] border border-[var(--border-color)] text-[var(--text-main)] text-[12px] font-mono font-bold shadow-xs cursor-pointer transition-all flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${scanning ? "animate-spin" : ""}`} />
+                <span>{scanning ? "Scanning..." : "Scan Bottles"}</span>
+              </button>
+            </div>
           </div>
         ) : viewMode === "grid" ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">

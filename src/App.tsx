@@ -265,6 +265,7 @@ export function App() {
               onToggleFavorite={handleToggleFavorite}
               onNavigate={(v) => setCurrentView(v)}
               filterMode="all"
+              onRefreshState={refreshState}
             />
           )}
 
@@ -278,6 +279,7 @@ export function App() {
               onToggleFavorite={handleToggleFavorite}
               onNavigate={(v) => setCurrentView(v)}
               filterMode="favorites"
+              onRefreshState={refreshState}
             />
           )}
 

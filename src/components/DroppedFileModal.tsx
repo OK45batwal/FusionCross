@@ -5,6 +5,7 @@ import {
   InstallerAnalysis,
   runCommandInBottle,
   registerApplication,
+  scanBottle,
   createBottle,
   FusionErrorPayload,
 } from "../services/tauri";
@@ -99,9 +100,25 @@ export function DroppedFileModal({
     setExecuting(true);
     setError(null);
     try {
-      // Execute installer inside bottle
+      // 1. Automatically register the program into the Applications Library
+      const appName = fileName.replace(/\.(exe|msi|bat|cmd)$/i, "");
+      await registerApplication(bottleId, appName, filePath, "applications");
+      await onRefresh();
+
+      // 2. Execute installer inside bottle
       await runCommandInBottle(bottleId, filePath, []);
-      setActionSuccess(`Launched ${fileName} in bottle "${targetBottle?.name || 'Steam'}"!`);
+      setActionSuccess(`Launched ${fileName} in bottle "${targetBottle?.name || 'Default'}" & added to Applications!`);
+      
+      // 3. Scan bottle prefix after delay for any newly extracted binaries (e.g. Steam.exe)
+      setTimeout(async () => {
+        try {
+          await scanBottle(bottleId);
+          await onRefresh();
+        } catch {
+          // ignore scan error
+        }
+      }, 3500);
+
       await onRefresh();
       onSelectBottle(bottleId);
       setTimeout(() => {

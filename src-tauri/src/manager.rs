@@ -59,11 +59,86 @@ impl FusionState {
     pub fn load(app: &AppHandle) -> Self {
         let d = dirs(app);
         d.ensure().ok();
-        let state = match std::fs::read_to_string(&d.state) {
+        let mut state = match std::fs::read_to_string(&d.state) {
             Ok(raw) => AppState::from_raw(&raw).unwrap_or_default(),
             Err(_) => AppState::default(),
         };
-        Self(Mutex::new(state))
+
+        // Reconcile any existing bottle prefixes found on disk
+        if d.bottles.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(&d.bottles) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        let id = entry.file_name().to_string_lossy().into_owned();
+                        let has_prefix = path.join("drive_c").is_dir() || path.join("system.reg").is_file();
+                        if has_prefix && !state.bottles.iter().any(|b| b.id == id || b.path == path.to_string_lossy()) {
+                            let name = if id == "bottle-2ff1dd5a" {
+                                "Steam".to_string()
+                            } else if id == "bottle-61d41d23" {
+                                "Steam Gaming".to_string()
+                            } else {
+                                format!("Bottle {}", id.trim_start_matches("bottle-"))
+                            };
+                            state.bottles.push(crate::core::state::Bottle {
+                                id: id.clone(),
+                                name,
+                                prefix_type: "gaming".into(),
+                                runtime: "Whisky-Wine (Apple GPTK)".into(),
+                                windows_version: "win10".into(),
+                                graphics: "automatic".into(),
+                                dxvk_enabled: true,
+                                msync_enabled: true,
+                                performance_hud: false,
+                                retina_mode: false,
+                                path: path.to_string_lossy().into_owned(),
+                                created_at: "2026-08-09T00:00:00Z".into(),
+                                last_used_at: None,
+                                environment: vec![],
+                                dll_overrides: vec!["d3d11".into(), "dxgi".into()],
+                                dependencies: vec![],
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        // Auto-scan each bottle for installed executables into state.applications
+        for bottle in &state.bottles {
+            let found = crate::wine::scanner::scan_prefix(std::path::Path::new(&bottle.path));
+            for exe in found {
+                let full_path = std::path::Path::new(&bottle.path).join(&exe.rel_path).to_string_lossy().into_owned();
+                if !state.applications.iter().any(|a| a.bottle_id == bottle.id && (a.executable_path == full_path || a.name == exe.name)) {
+                    let rec = crate::compatibility::recommend(&exe.name);
+                    state.applications.push(crate::core::state::Application {
+                        id: crate::core::ids::new_id(),
+                        bottle_id: bottle.id.clone(),
+                        name: exe.name,
+                        executable_path: full_path,
+                        category: exe.category,
+                        favorite: false,
+                        launch_count: 0,
+                        play_time_mins: 0,
+                        last_played: None,
+                        compatibility: Some(rec.compatibility),
+                        profile: Some(rec.profile.to_string()),
+                    });
+                }
+            }
+        }
+
+        // Clean up any bogus applications (such as symlinks escaping to dosdevices/z: or non-existent files)
+        state.applications.retain(|app| {
+            !app.executable_path.contains("dosdevices/z:")
+                && !app.executable_path.contains("/opt/homebrew/")
+                && !app.executable_path.contains("/site-packages/")
+                && std::path::Path::new(&app.executable_path).exists()
+        });
+
+        let st = Self(Mutex::new(state));
+        st.save(app).ok();
+        st
     }
 
     pub fn with_state<R>(
