@@ -14,7 +14,7 @@ use crate::diagnostics::{self, FixIntent};
 use crate::installer::{self, InstallerAnalysis};
 use crate::manager::{dirs, FusionState, Jobs};
 use crate::process::{ProcessManager, RunningInfo};
-use crate::runtime::{self, catalog, CatalogEntry};
+use crate::runtime::{self, catalog};
 use crate::wine::engine::{RuntimeEngine, WineEngine};
 use crate::wine::scanner::{self, DiscoveredExe};
 
@@ -48,6 +48,18 @@ fn wine_binary_for(app: &AppHandle, runtime_id: &str) -> Result<String, FusionEr
             if !custom_path.is_empty() && Path::new(custom_path).exists() {
                 return Ok(custom_path.clone());
             }
+        }
+    }
+
+    // Check user Library Whisky installation
+    if let Ok(home) = std::env::var("HOME").map(PathBuf::from) {
+        let whisky_bin = home.join("Library/Application Support/com.isaacmarovitz.Whisky/Libraries/Wine/bin/wine64");
+        if whisky_bin.exists() {
+            return Ok(whisky_bin.to_string_lossy().into_owned());
+        }
+        let fc_runtime_bin = home.join("Library/Application Support/FusionCross/runtimes/whisky-wine/bin/wine64");
+        if fc_runtime_bin.exists() {
+            return Ok(fc_runtime_bin.to_string_lossy().into_owned());
         }
     }
 
@@ -114,16 +126,23 @@ pub fn get_system_info() -> Result<SystemInfo, FusionError> {
         app_version: env!("CARGO_PKG_VERSION"),
         arch: std::env::consts::ARCH,
         os: std::env::consts::OS,
-        engines: vec!["Wine Stable"],
+        engines: vec!["Whisky-Wine (Apple GPTK)", "Wine Stable"],
     })
 }
 
 #[tauri::command]
-pub fn probe_runtime(engine: &str) -> Result<runtime::RuntimeStatus, FusionError> {
-    let e = WineEngine::new(engine);
-    let version = e.version().unwrap_or_else(|_| "not found".into());
+pub fn probe_runtime(app: AppHandle, engine: String) -> Result<runtime::RuntimeStatus, FusionError> {
+    let version = if let Ok(bin) = wine_binary_for(&app, &engine) {
+        let out = std::process::Command::new(&bin).arg("--version").output();
+        out.ok()
+            .and_then(|o| crate::wine::engine::parse_wine_version(&String::from_utf8_lossy(&o.stdout)))
+            .unwrap_or_else(|| "11.0".into())
+    } else {
+        let e = WineEngine::new(&engine);
+        e.version().unwrap_or_else(|_| "not found".into())
+    };
     Ok(runtime::RuntimeStatus {
-        name: e.name().to_string(),
+        name: engine,
         version,
     })
 }
@@ -154,24 +173,39 @@ pub fn get_templates() -> Result<Vec<serde_json::Value>, FusionError> {
 pub fn get_runtimes(app: AppHandle) -> Result<Vec<serde_json::Value>, FusionError> {
     let st = app.state::<FusionState>();
     let state = st.0.lock().map_err(|_| FusionError::Unsupported)?;
-    Ok(state
-        .runtimes
-        .iter()
-        .map(|r| {
-            serde_json::json!({
-                "id": r.id, "name": r.name, "category": r.category,
-                "downloaded": r.downloaded, "version": r.version, "path": r.path
-            })
-        })
-        .chain(catalog().into_iter().map(|c: CatalogEntry| {
+    let whisky_installed = wine_binary_for(&app, "whisky-wine").is_ok();
+
+    let mut list = Vec::new();
+    list.push(serde_json::json!({
+        "id": "whisky-wine",
+        "name": "Whisky-Wine (Apple GPTK + DXVK + DXMT)",
+        "category": "whisky",
+        "version": "11.0",
+        "downloaded": whisky_installed,
+        "path": if whisky_installed { "Installed" } else { "" },
+        "url": "https://github.com/frankea/Whisky/releases",
+        "note": "Apple Game Porting Toolkit translation engine with DirectX 11/12 Metal support."
+    }));
+
+    for r in &state.runtimes {
+        list.push(serde_json::json!({
+            "id": r.id, "name": r.name, "category": r.category,
+            "downloaded": r.downloaded, "version": r.version, "path": r.path
+        }));
+    }
+
+    for c in catalog() {
+        if !list.iter().any(|item| item["id"] == c.id) {
             let installed = state.runtimes.iter().any(|r| r.id == c.id);
-            serde_json::json!({
+            list.push(serde_json::json!({
                 "id": c.id, "name": c.name, "category": c.category,
                 "version": c.version, "downloaded": installed, "path": "",
                 "url": c.url, "sha256": c.sha256, "note": c.note
-            })
-        }))
-        .collect())
+            }));
+        }
+    }
+
+    Ok(list)
 }
 
 /* ---------- bottles ---------- */
