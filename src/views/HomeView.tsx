@@ -72,7 +72,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               </h2>
             </div>
             <button
-              onClick={() => onNavigate("applications")}
+              onClick={() => onNavigate("all_apps")}
               className="text-[11px] font-mono text-graphite-300 hover:text-graphite-100 flex items-center gap-1"
             >
               View in Library <ArrowRight className="w-3 h-3" />
@@ -127,7 +127,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
 
           <div
-            onClick={() => onNavigate("bottles")}
+            onClick={() => onNavigate("bottle")}
             className="group rounded-xl border border-graphite-600 bg-graphite-900 hover:bg-graphite-850 hover:border-ok/50 p-5 transition-all cursor-pointer shadow-sm flex flex-col justify-between"
           >
             <div className="space-y-2">
@@ -172,7 +172,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <Clock className="w-3.5 h-3.5 text-accent-400" /> Recent Applications
             </h2>
             <button
-              onClick={() => onNavigate("applications")}
+              onClick={() => onNavigate("all_apps")}
               className="text-[11px] font-mono text-accent-400 hover:underline"
             >
               View All ({applications.length})

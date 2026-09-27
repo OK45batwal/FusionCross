@@ -27,6 +27,9 @@ export interface Bottle {
   windows_version: string;
   graphics: string;
   dxvk_enabled: boolean;
+  msync_enabled: boolean;
+  performance_hud: boolean;
+  retina_mode: boolean;
   path: string;
   created_at: string;
   last_used_at: string | null;
@@ -87,6 +90,9 @@ export interface BottleTemplate {
   windows_version: string;
   graphics: string;
   dxvk_enabled: boolean;
+  msync_enabled: boolean;
+  performance_hud: boolean;
+  retina_mode: boolean;
   dependencies: string[];
 }
 
@@ -159,10 +165,27 @@ export const updateBottle = (
     windows_version?: string;
     graphics?: string;
     dxvk_enabled?: boolean;
+    msync_enabled?: boolean;
+    performance_hud?: boolean;
+    retina_mode?: boolean;
     environment?: [string, string][];
     dll_overrides?: string[];
   }
 ) => invoke<void>("update_bottle", { bottleId, ...params });
+export const killBottleProcesses = (bottleId: string) =>
+  invoke<void>("kill_bottle_processes", { bottleId });
+export const launchWineTool = (bottleId: string, tool: string) =>
+  invoke<number>("launch_wine_tool", { bottleId, tool });
+export const installBottleVerb = (bottleId: string, verb: string) =>
+  invoke<string>("install_bottle_verb", { bottleId, verb });
+export const openBottleCDrive = (bottleId: string) =>
+  invoke<void>("open_bottle_c_drive", { bottleId });
+export const revealInFinder = (path: string) => invoke<void>("reveal_in_finder", { path });
+export const runCommandInBottle = (
+  bottleId: string,
+  command: string,
+  args: string[] = []
+) => invoke<void>("run_command_in_bottle", { bottleId, command, args });
 export const repairBottle = (bottleId: string) => invoke<string>("repair_bottle", { bottleId });
 
 export const analyzeInstaller = (path: string) => invoke<InstallerAnalysis>("analyze_installer", { path });

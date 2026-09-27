@@ -92,6 +92,9 @@ pub fn get_templates() -> Result<Vec<serde_json::Value>, FusionError> {
                 "windows_version": c.windows_version,
                 "graphics": c.graphics,
                 "dxvk_enabled": c.dxvk_enabled,
+                "msync_enabled": c.msync_enabled,
+                "performance_hud": c.performance_hud,
+                "retina_mode": c.retina_mode,
                 "dependencies": c.dependencies,
             })
         })
@@ -144,6 +147,9 @@ pub fn create_bottle(
         windows_version: template.windows_version.to_string(),
         graphics: template.graphics.to_string(),
         dxvk_enabled: template.dxvk_enabled,
+        msync_enabled: template.msync_enabled,
+        performance_hud: template.performance_hud,
+        retina_mode: template.retina_mode,
         path: path.to_string_lossy().into_owned(),
         created_at: now_ts(),
         last_used_at: None,
@@ -238,12 +244,20 @@ pub fn clone_bottle(
 ) -> Result<Bottle, FusionError> {
     let d = dirs(&app);
     let st = app.state::<FusionState>();
-    let source = st.with_state(|s| {
-        s.bottles
+    let (source, apps_to_clone) = st.with_state(|s| {
+        let b = s
+            .bottles
             .iter()
             .find(|b| b.id == bottle_id)
             .cloned()
-            .ok_or(FusionError::BottleNotFound)
+            .ok_or(FusionError::BottleNotFound)?;
+        let apps = s
+            .applications
+            .iter()
+            .filter(|a| a.bottle_id == bottle_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        Ok((b, apps))
     })?;
     let id = new_id();
     let new_path = d.bottles.join(&id);
@@ -252,14 +266,29 @@ pub fn clone_bottle(
     let clone = Bottle {
         id: id.clone(),
         name: new_name,
-        ..source.clone()
-    };
-    let clone = Bottle {
         path: new_path.to_string_lossy().into_owned(),
-        ..clone
+        ..source.clone()
     };
     st.with_state(|s| {
         s.bottles.push(clone.clone());
+        let source_prefix = &source.path;
+        let new_prefix_str = new_path.to_string_lossy();
+        for app_rec in apps_to_clone {
+            let rel_exe = app_rec
+                .executable_path
+                .strip_prefix(source_prefix)
+                .unwrap_or(&app_rec.executable_path);
+            let updated_exe = format!("{new_prefix_str}{rel_exe}");
+            s.applications.push(Application {
+                id: new_id(),
+                bottle_id: id.clone(),
+                executable_path: updated_exe,
+                launch_count: 0,
+                play_time_mins: 0,
+                last_played: None,
+                ..app_rec
+            });
+        }
         Ok(())
     })?;
     st.save(&app)?;
@@ -267,12 +296,88 @@ pub fn clone_bottle(
 }
 
 #[tauri::command]
+pub fn open_bottle_c_drive(app: AppHandle, bottle_id: String) -> Result<(), FusionError> {
+    let st = app.state::<FusionState>();
+    let bottle = st.with_state(|s| {
+        s.bottles
+            .iter()
+            .find(|b| b.id == bottle_id)
+            .cloned()
+            .ok_or(FusionError::BottleNotFound)
+    })?;
+    let drive_c = Path::new(&bottle.path).join("drive_c");
+    std::fs::create_dir_all(&drive_c).map_err(|_| FusionError::PermissionDenied)?;
+    std::process::Command::new("open")
+        .arg(&drive_c)
+        .spawn()
+        .map_err(|_| FusionError::LaunchFailed)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn reveal_in_finder(path: String) -> Result<(), FusionError> {
+    let p = Path::new(&path);
+    if p.exists() {
+        std::process::Command::new("open")
+            .arg("-R")
+            .arg(&path)
+            .spawn()
+            .map_err(|_| FusionError::LaunchFailed)?;
+        Ok(())
+    } else {
+        Err(FusionError::InvalidExecutable)
+    }
+}
+
+#[tauri::command]
+pub fn run_command_in_bottle(
+    app: AppHandle,
+    bottle_id: String,
+    command: String,
+    args: Vec<String>,
+) -> Result<(), FusionError> {
+    let st = app.state::<FusionState>();
+    let bottle = st.with_state(|s| {
+        s.bottles
+            .iter()
+            .find(|b| b.id == bottle_id)
+            .cloned()
+            .ok_or(FusionError::BottleNotFound)
+    })?;
+    let binary = wine_binary_for(&app, &bottle.runtime)?;
+    let prefix = Path::new(&bottle.path);
+    if !crate::wine::prefix::prefix_prepared(prefix) {
+        crate::wine::prefix::init_prefix(&binary, prefix)?;
+    }
+
+    let mut cmd = std::process::Command::new(&binary);
+    cmd.env("WINEPREFIX", prefix);
+    if bottle.msync_enabled {
+        cmd.env("WINEMSYNC", "1");
+        cmd.env("WINE_MSYNC", "1");
+    }
+    if !bottle.dll_overrides.is_empty() {
+        cmd.env("WINEDLLOVERRIDES", bottle.dll_overrides.join(";"));
+    }
+    cmd.arg(&command);
+    for arg in args {
+        cmd.arg(arg);
+    }
+    cmd.spawn().map_err(|_| FusionError::LaunchFailed)?;
+    Ok(())
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub fn update_bottle(
     app: AppHandle,
     bottle_id: String,
     windows_version: Option<String>,
     graphics: Option<String>,
     dxvk_enabled: Option<bool>,
+    msync_enabled: Option<bool>,
+    performance_hud: Option<bool>,
+    retina_mode: Option<bool>,
     environment: Option<Vec<(String, String)>>,
     dll_overrides: Option<Vec<String>>,
 ) -> Result<(), FusionError> {
@@ -292,6 +397,15 @@ pub fn update_bottle(
         if let Some(d) = dxvk_enabled {
             b.dxvk_enabled = d;
         }
+        if let Some(m) = msync_enabled {
+            b.msync_enabled = m;
+        }
+        if let Some(p) = performance_hud {
+            b.performance_hud = p;
+        }
+        if let Some(r) = retina_mode {
+            b.retina_mode = r;
+        }
         if let Some(e) = environment {
             b.environment = e;
         }
@@ -301,6 +415,110 @@ pub fn update_bottle(
         Ok(())
     })?;
     st.save(&app)
+}
+
+#[tauri::command]
+pub fn kill_bottle_processes(app: AppHandle, bottle_id: String) -> Result<(), FusionError> {
+    let st = app.state::<FusionState>();
+    let (bottle, app_ids) = st.with_state(|s| {
+        let b = s
+            .bottles
+            .iter()
+            .find(|b| b.id == bottle_id)
+            .cloned()
+            .ok_or(FusionError::BottleNotFound)?;
+        let running_ids: Vec<String> = s
+            .applications
+            .iter()
+            .filter(|a| a.bottle_id == bottle_id)
+            .map(|a| a.id.clone())
+            .collect();
+        Ok((b, running_ids))
+    })?;
+
+    let pm = app.state::<ProcessManager>();
+    for aid in app_ids {
+        if pm.is_running(&aid) {
+            pm.stop(&aid).ok();
+        }
+    }
+
+    let binary = wine_binary_for(&app, &bottle.runtime)?;
+    crate::wine::prefix::kill_wineserver(&binary, Path::new(&bottle.path))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn launch_wine_tool(
+    app: AppHandle,
+    bottle_id: String,
+    tool: String,
+) -> Result<u32, FusionError> {
+    let st = app.state::<FusionState>();
+    let bottle = st.with_state(|s| {
+        s.bottles
+            .iter()
+            .find(|b| b.id == bottle_id)
+            .cloned()
+            .ok_or(FusionError::BottleNotFound)
+    })?;
+    let binary = wine_binary_for(&app, &bottle.runtime)?;
+    let prefix = Path::new(&bottle.path);
+    if !crate::wine::prefix::prefix_prepared(prefix) {
+        crate::wine::prefix::init_prefix(&binary, prefix)?;
+    }
+    crate::wine::prefix::launch_wine_tool(&binary, prefix, &tool)
+}
+
+#[tauri::command]
+pub fn install_bottle_verb(
+    app: AppHandle,
+    bottle_id: String,
+    verb: String,
+) -> Result<String, FusionError> {
+    let st = app.state::<FusionState>();
+    let bottle = st.with_state(|s| {
+        s.bottles
+            .iter()
+            .find(|b| b.id == bottle_id)
+            .cloned()
+            .ok_or(FusionError::BottleNotFound)
+    })?;
+    let binary = wine_binary_for(&app, &bottle.runtime)?;
+    let prefix = PathBuf::from(&bottle.path);
+
+    let jobs = app.state::<Jobs>();
+    let job = jobs.begin(format!("Installing {verb} into {}", bottle.name));
+    let job_id = job.clone();
+    let handle = app.clone();
+    let verb_clone = verb.clone();
+    let bottle_id_clone = bottle_id.clone();
+
+    std::thread::spawn(move || {
+        let jobs = handle.state::<Jobs>();
+        match crate::wine::prefix::install_verbs(
+            &binary,
+            &prefix,
+            std::slice::from_ref(&verb_clone),
+        ) {
+            Ok(()) => {
+                let st = handle.state::<FusionState>();
+                let _ = st.with_state(|s| {
+                    if let Some(b) = s.bottles.iter_mut().find(|b| b.id == bottle_id_clone) {
+                        if !b.dependencies.contains(&verb_clone) {
+                            b.dependencies.push(verb_clone.clone());
+                        }
+                    }
+                    Ok(())
+                });
+                let _ = st.save(&handle);
+                jobs.finish(&job_id, format!("Installed {verb_clone} successfully."));
+            }
+            Err(e) => jobs.fail(&job_id, format!("Failed installing {verb_clone}: {e}")),
+        }
+    });
+
+    Ok(job)
 }
 
 /* ---------- installer + discovery ---------- */
@@ -494,15 +712,61 @@ pub fn launch_application(app: AppHandle, app_id: String) -> Result<RunningInfo,
     }
 
     let safe = settings_bool(&app, "safe_mode");
-    let override_env = if safe {
+    let mut override_env = if safe {
         vec![]
     } else {
         bottle.environment.clone()
     };
+
+    if !safe {
+        // MSync: Mach semaphore fast synchronization on macOS (PRD / CrossOver parity)
+        if bottle.msync_enabled {
+            override_env.push(("WINEMSYNC".into(), "1".into()));
+            override_env.push(("WINE_MSYNC".into(), "1".into()));
+            override_env.push(("WINEESYNC".into(), "0".into()));
+            override_env.push(("WINEFSYNC".into(), "0".into()));
+        } else {
+            override_env.push(("WINEMSYNC".into(), "0".into()));
+            override_env.push(("WINEESYNC".into(), "0".into()));
+        }
+
+        // Performance HUD: Apple Metal HUD + DXVK HUD
+        if bottle.performance_hud {
+            override_env.push(("MTL_HUD_ENABLED".into(), "1".into()));
+            override_env.push((
+                "DXVK_HUD".into(),
+                "fps,frametimes,gputemp,memory,version".into(),
+            ));
+        }
+
+        // Retina mode: High-DPI display scaling
+        if bottle.retina_mode {
+            override_env.push(("WINE_DPI".into(), "192".into()));
+            override_env.push(("ENABLE_RETINA".into(), "1".into()));
+        }
+    }
+
     let dll_overrides = if safe {
         String::new()
     } else {
-        bottle.dll_overrides.join(";")
+        let mut overrides = bottle.dll_overrides.clone();
+        match bottle.graphics.as_str() {
+            "d3dmetal" => {
+                overrides.push("d3d11,d3d12,dxgi=n,b".into());
+            }
+            "dxvk" => {
+                overrides.push("d3d9,d3d10core,d3d11,dxgi=n,b".into());
+            }
+            "dxmt" => {
+                overrides.push("d3d11=n,b".into());
+            }
+            "wined3d" => {
+                overrides.push("d3d9,d3d10core,d3d11,d3d12,dxgi=b".into());
+            }
+            _ => {}
+        }
+        overrides.push("mscoree,mshtml=".into());
+        overrides.join(";")
     };
 
     let info = pm.spawn(
@@ -624,6 +888,20 @@ pub fn apply_fix(app: AppHandle, fix_id: String, app_id: String) -> Result<Strin
             })?;
             st.save(&app)?;
             Ok("Switched graphics to WineD3D.".into())
+        }
+        FixIntent::EnableMsync => {
+            let st = app.state::<FusionState>();
+            st.with_state(|s| {
+                let app2 = s.applications.iter().find(|a| a.id == app_id).cloned().ok_or(FusionError::ApplicationNotFound)?;
+                let b = s.bottles.iter_mut().find(|b| b.id == app2.bottle_id).ok_or(FusionError::BottleNotFound)?;
+                b.msync_enabled = true;
+                Ok(())
+            })?;
+            st.save(&app)?;
+            Ok("Enabled MSync fast synchronization for this bottle.".into())
+        }
+        FixIntent::InstallRosetta => {
+            Ok("Run this command in Terminal to install Apple Rosetta 2:\n\n  /usr/sbin/softwareupdate --install-rosetta --agree-to-license\n\nThen restart FusionCross.".into())
         }
     }
 }

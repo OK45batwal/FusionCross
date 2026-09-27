@@ -181,7 +181,21 @@ export const DiagnosticsView: React.FC<DiagnosticsViewProps> = ({
                               What can I do:
                             </span>
                             <div className="p-3 rounded-lg bg-graphite-950 border border-graphite-700 flex items-center justify-between gap-3">
-                              <span className="text-accent-400">{check.fix}</span>
+                              <span className="text-accent-300 font-bold">
+                                {check.fix === "enable_msync"
+                                  ? "Enable MSync Fast Synchronization"
+                                  : check.fix === "install_rosetta"
+                                  ? "Install Apple Rosetta 2 Runtime"
+                                  : check.fix === "switch_graphics"
+                                  ? "Switch to WineD3D (OpenGL)"
+                                  : check.fix === "init_prefix"
+                                  ? "Initialize bottle prefix files"
+                                  : check.fix === "install_runtime"
+                                  ? "Install Wine runtime"
+                                  : check.fix?.startsWith("install_dep:")
+                                  ? `Install ${check.fix.replace("install_dep:", "")}`
+                                  : check.fix}
+                              </span>
                               <button
                                 disabled={fixing === check.fix}
                                 onClick={() => handleApplyFix(check.fix!)}

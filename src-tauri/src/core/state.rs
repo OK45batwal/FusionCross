@@ -1,6 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-pub const CURRENT_SCHEMA_VERSION: u32 = 2;
+pub const CURRENT_SCHEMA_VERSION: u32 = 3;
+
+fn default_true() -> bool {
+    true
+}
 
 /// Versioned application metadata (PRD §52).
 ///
@@ -39,6 +43,12 @@ pub struct Bottle {
     pub windows_version: String,
     pub graphics: String,
     pub dxvk_enabled: bool,
+    #[serde(default = "default_true")]
+    pub msync_enabled: bool,
+    #[serde(default)]
+    pub performance_hud: bool,
+    #[serde(default)]
+    pub retina_mode: bool,
     pub path: String,
     pub created_at: String,
     pub last_used_at: Option<String>,
@@ -191,6 +201,23 @@ fn migrate(value: &mut serde_json::Value) -> Result<(), String> {
                     .or_insert_with(|| serde_json::json!([["safe_mode", "off"]]));
                 obj.insert("schema_version".into(), serde_json::json!(2));
             }
+            2 => {
+                // v3: Add msync_enabled, performance_hud, retina_mode to bottles
+                let obj = value.as_object_mut().ok_or("state not an object")?;
+                if let Some(bottles) = obj.get_mut("bottles").and_then(|b| b.as_array_mut()) {
+                    for bo in bottles.iter_mut() {
+                        if let Some(o) = bo.as_object_mut() {
+                            o.entry("msync_enabled")
+                                .or_insert_with(|| serde_json::json!(true));
+                            o.entry("performance_hud")
+                                .or_insert_with(|| serde_json::json!(false));
+                            o.entry("retina_mode")
+                                .or_insert_with(|| serde_json::json!(false));
+                        }
+                    }
+                }
+                obj.insert("schema_version".into(), serde_json::json!(3));
+            }
             _ => return Err(format!("unknown state schema version {version}")),
         }
         version += 1;
@@ -222,11 +249,36 @@ mod tests {
             "runtimes": [{"id":"r1","name":"Wine Stable","category":"wine","downloaded":true}]
         }"#;
         let state = AppState::from_raw(raw).unwrap();
-        assert_eq!(state.schema_version, 2);
+        assert_eq!(state.schema_version, 3);
         assert_eq!(state.bottles[0].graphics, "automatic");
         assert_eq!(state.bottles[0].dll_overrides.len(), 0);
+        assert!(state.bottles[0].msync_enabled);
+        assert!(!state.bottles[0].performance_hud);
+        assert!(!state.bottles[0].retina_mode);
         assert_eq!(state.runtimes[0].version, "");
         assert_eq!(state.snapshots.len(), 0);
+    }
+
+    #[test]
+    fn v2_json_migrates_to_v3() {
+        let raw = r#"{
+            "schema_version": 2,
+            "bottles": [{
+                "id": "b1", "name": "Office", "prefix_type": "productivity",
+                "runtime": "Wine Stable", "windows_version": "win10",
+                "graphics": "wined3d", "dxvk_enabled": false,
+                "path": "/data/bottles/b1", "created_at": "2026-08-12T00:00:00Z", "last_used_at": null
+            }],
+            "applications": [],
+            "runtimes": [],
+            "snapshots": [],
+            "settings": []
+        }"#;
+        let state = AppState::from_raw(raw).unwrap();
+        assert_eq!(state.schema_version, 3);
+        assert!(state.bottles[0].msync_enabled);
+        assert!(!state.bottles[0].performance_hud);
+        assert!(!state.bottles[0].retina_mode);
     }
 
     #[test]

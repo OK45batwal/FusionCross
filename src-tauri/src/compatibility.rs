@@ -1,7 +1,7 @@
 use serde::Serialize;
 
 /// Compatibility profiles (PRD §34–35). A small locally-learned database now;
-/// the website compatibility DB will feed the same shape later.
+/// the community compatibility database will feed the same shape later.
 #[derive(Debug, Clone, Serialize)]
 pub struct Recommendation {
     pub profile: &'static str,
@@ -27,6 +27,120 @@ struct Profile {
 
 fn profiles() -> Vec<Profile> {
     vec![
+        Profile {
+            key: "cyberpunk",
+            runtime_hint: "Wine-GE",
+            graphics: "d3dmetal",
+            windows_version: "win10",
+            dependencies: vec!["vcrun2022", "d3dcompiler_47"],
+            launch_arguments: vec!["-skipStartScreen".into()],
+            compatibility: 86,
+            notes: vec!["D3DMetal and MSync provide best frame rates on M-series chips."],
+        },
+        Profile {
+            key: "elden",
+            runtime_hint: "Wine-GE",
+            graphics: "d3dmetal",
+            windows_version: "win10",
+            dependencies: vec!["vcrun2022"],
+            launch_arguments: vec![],
+            compatibility: 85,
+            notes: vec!["EAC requires offline mode or anti-cheat toggle to start in Wine."],
+        },
+        Profile {
+            key: "baldur",
+            runtime_hint: "Wine Stable",
+            graphics: "d3dmetal",
+            windows_version: "win11",
+            dependencies: vec!["vcrun2019", "corefonts"],
+            launch_arguments: vec![],
+            compatibility: 92,
+            notes: vec!["Select DX11 mode in Larian launcher for highest stability."],
+        },
+        Profile {
+            key: "gta",
+            runtime_hint: "Wine Stable",
+            graphics: "dxvk",
+            windows_version: "win10",
+            dependencies: vec!["vcrun2019", "d3dcompiler_47"],
+            launch_arguments: vec![],
+            compatibility: 89,
+            notes: vec!["Story mode runs smoothly with DXVK and MSync."],
+        },
+        Profile {
+            key: "witcher",
+            runtime_hint: "Wine Stable",
+            graphics: "d3dmetal",
+            windows_version: "win10",
+            dependencies: vec!["vcrun2019"],
+            launch_arguments: vec![],
+            compatibility: 90,
+            notes: vec!["DirectX 11 mode recommended for best FPS."],
+        },
+        Profile {
+            key: "skyrim",
+            runtime_hint: "Wine Stable",
+            graphics: "dxvk",
+            windows_version: "win10",
+            dependencies: vec!["vcrun2019"],
+            launch_arguments: vec![],
+            compatibility: 94,
+            notes: vec!["Flawless performance with DXVK. Mod organizer works."],
+        },
+        Profile {
+            key: "fallout",
+            runtime_hint: "Wine Stable",
+            graphics: "dxvk",
+            windows_version: "win10",
+            dependencies: vec!["vcrun2019"],
+            launch_arguments: vec![],
+            compatibility: 91,
+            notes: vec!["DirectX 11 runs near native speed with DXVK."],
+        },
+        Profile {
+            key: "diablo",
+            runtime_hint: "Wine-GE",
+            graphics: "d3dmetal",
+            windows_version: "win11",
+            dependencies: vec!["vcrun2022"],
+            launch_arguments: vec![],
+            compatibility: 80,
+            notes: vec!["Requires D3DMetal (DirectX 12) and Battle.net launcher."],
+        },
+        Profile {
+            key: "hades",
+            runtime_hint: "Wine Stable",
+            graphics: "dxvk",
+            windows_version: "win10",
+            dependencies: vec![],
+            launch_arguments: vec![],
+            compatibility: 98,
+            notes: vec!["Near-perfect compatibility and full controller support."],
+        },
+        Profile {
+            key: "valorant",
+            runtime_hint: "Wine Stable",
+            graphics: "d3dmetal",
+            windows_version: "win10",
+            dependencies: vec![],
+            launch_arguments: vec![],
+            compatibility: 5,
+            notes: vec![
+                "Blocked: Riot Vanguard kernel-level anti-cheat driver cannot run on macOS/Wine.",
+            ],
+        },
+        Profile {
+            key: "fortnite",
+            runtime_hint: "Wine Stable",
+            graphics: "d3dmetal",
+            windows_version: "win10",
+            dependencies: vec![],
+            launch_arguments: vec![],
+            compatibility: 5,
+            notes: vec![
+                "Blocked: Easy Anti-Cheat / BattlEye kernel drivers are incompatible with Wine.",
+            ],
+        },
         Profile {
             key: "photoshop",
             runtime_hint: "Wine-GE",

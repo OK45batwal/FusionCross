@@ -8,108 +8,107 @@
 --------------------------------------------------------------------------- */
 
 @theme {
-  /* Graphite neutral ramp */
-  --color-graphite-100: #f0f4f8;
-  --color-graphite-200: #d6dee8;
-  --color-graphite-300: #aab4c4;
-  --color-graphite-400: #647080;
-  --color-graphite-500: #3d4754;
-  --color-graphite-600: #262d35;
-  --color-graphite-700: #1c222a;
-  --color-graphite-750: #182027;
-  --color-graphite-800: #171c22;
-  --color-graphite-850: #141920;
-  --color-graphite-900: #101419;
-  --color-graphite-950: #080a0d;
+  /* Refined neutral ramp */
+  --color-graphite-100: #f4f4f5;
+  --color-graphite-200: #e4e4e7;
+  --color-graphite-300: #a1a1aa;
+  --color-graphite-400: #71717a;
+  --color-graphite-500: #3f3f46;
+  --color-graphite-600: #27272a;
+  --color-graphite-700: #18181b;
+  --color-graphite-750: #141416;
+  --color-graphite-800: #121214;
+  --color-graphite-850: #0f0f11;
+  --color-graphite-900: #0c0c0e;
+  --color-graphite-950: #08080a;
 
-  /* Accent (brand indigo) */
-  --color-accent-300: #8a9fff;
-  --color-accent-400: #5b76f7;
-  --color-accent-500: #5b76f7;
-  --color-accent-600: #4762e5;
+  /* Accent (macOS system blue / electric indigo) */
+  --color-accent-300: #93c5fd;
+  --color-accent-400: #60a5fa;
+  --color-accent-500: #3b82f6;
+  --color-accent-600: #2563eb;
 
   /* Status */
-  --color-ok: #2fd6a2;
-  --color-warn: #f0b429;
-  --color-err: #f25c54;
+  --color-ok: #10b981;
+  --color-warn: #f59e0b;
+  --color-err: #ef4444;
 
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif;
-  --font-mono: "SFMono-Regular", "SF Mono", "Cascadia Code", ui-monospace, monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Geist Sans", system-ui, sans-serif;
+  --font-mono: "SF Mono", "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
 }
 
 :root {
-  /* Dark Theme (Default) */
-  --bg-main: var(--color-graphite-950);
-  --bg-surface: var(--color-graphite-900);
-  --bg-elevated: var(--color-graphite-800);
-  --bg-glass: rgba(16, 20, 25, 0.85);
+  /* Dark Theme (Default) - Crisp, deep, restrained */
+  --bg-main: #0c0c0e;
+  --bg-surface: #141416;
+  --bg-elevated: #1c1c1f;
+  --bg-glass: rgba(14, 14, 16, 0.88);
 
-  --border-color: var(--color-graphite-600);
-  --border-hover: var(--color-graphite-500);
+  --border-color: #27272a;
+  --border-hover: #3f3f46;
 
-  --text-main: var(--color-graphite-100);
-  --text-secondary: var(--color-graphite-300);
-  --text-muted: var(--color-graphite-400);
+  --text-main: #f4f4f5;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
 
-  --accent-primary: var(--color-accent-500);
-  --accent-hover: var(--color-accent-600);
-  --accent-glow: rgba(91, 118, 247, 0.35);
+  --accent-primary: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-glow: rgba(59, 130, 246, 0.2);
 
-  --color-ok-glow: rgba(47, 214, 162, 0.2);
-  --color-warn-glow: rgba(240, 180, 41, 0.2);
-  --color-err-glow: rgba(242, 92, 84, 0.2);
+  --color-ok-glow: rgba(16, 185, 129, 0.15);
+  --color-warn-glow: rgba(245, 158, 11, 0.15);
+  --color-err-glow: rgba(239, 68, 68, 0.15);
 
-  --card-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
-  --card-hover-shadow: 0 24px 60px rgba(91, 118, 247, 0.2);
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --card-hover-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 
-  --theme-transition: background-color 0.4s cubic-bezier(0.16, 1, 0.3, 1),
-                     color 0.4s cubic-bezier(0.16, 1, 0.3, 1),
-                     border-color 0.4s cubic-bezier(0.16, 1, 0.3, 1),
-                     box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  --theme-transition: background-color 0.2s ease,
+                     color 0.2s ease,
+                     border-color 0.2s ease;
 }
 
 [data-theme="light"] {
-  --bg-main: #f8fafc;
+  --bg-main: #f9f9fb;
   --bg-surface: #ffffff;
-  --bg-elevated: #f1f5f9;
-  --bg-glass: rgba(248, 250, 252, 0.88);
+  --bg-elevated: #f4f4f6;
+  --bg-glass: rgba(255, 255, 255, 0.92);
 
-  --border-color: #e2e8f0;
-  --border-hover: #cbd5e1;
+  --border-color: #e4e4e7;
+  --border-hover: #d4d4d8;
 
-  --text-main: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #94a3b8;
+  --text-main: #18181b;
+  --text-secondary: #52525b;
+  --text-muted: #a1a1aa;
 
-  --accent-primary: #4338ca;
-  --accent-hover: #3730a3;
-  --accent-glow: rgba(67, 56, 202, 0.2);
+  --accent-primary: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-glow: rgba(37, 99, 235, 0.12);
 
-  --color-ok-glow: rgba(5, 150, 105, 0.15);
-  --color-warn-glow: rgba(217, 119, 6, 0.15);
-  --color-err-glow: rgba(220, 38, 38, 0.15);
+  --color-ok-glow: rgba(16, 185, 129, 0.1);
+  --color-warn-glow: rgba(245, 158, 11, 0.1);
+  --color-err-glow: rgba(239, 68, 68, 0.1);
 
-  --card-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
-  --card-hover-shadow: 0 24px 50px rgba(67, 56, 202, 0.15);
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  --card-hover-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 
   /* Light-mode overrides for the named Tailwind palette */
-  --color-graphite-100: #0f172a;
-  --color-graphite-200: #334155;
-  --color-graphite-300: #475569;
-  --color-graphite-400: #94a3b8;
-  --color-graphite-500: #cbd5e1;
-  --color-graphite-600: #e2e8f0;
-  --color-graphite-700: #eef2f7;
-  --color-graphite-750: #f1f5f9;
-  --color-graphite-800: #f1f5f9;
-  --color-graphite-850: #f7fafd;
+  --color-graphite-100: #18181b;
+  --color-graphite-200: #27272a;
+  --color-graphite-300: #52525b;
+  --color-graphite-400: #a1a1aa;
+  --color-graphite-500: #d4d4d8;
+  --color-graphite-600: #e4e4e7;
+  --color-graphite-700: #f4f4f6;
+  --color-graphite-750: #f4f4f6;
+  --color-graphite-800: #f4f4f6;
+  --color-graphite-850: #f9f9fb;
   --color-graphite-900: #ffffff;
-  --color-graphite-950: #f8fafc;
+  --color-graphite-950: #f9f9fb;
 
-  --color-accent-300: #6d84f2;
-  --color-accent-400: #4338ca;
-  --color-accent-500: #4338ca;
-  --color-accent-600: #3730a3;
+  --color-accent-300: #60a5fa;
+  --color-accent-400: #3b82f6;
+  --color-accent-500: #2563eb;
+  --color-accent-600: #1d4ed8;
 
   --color-ok: #059669;
   --color-warn: #d97706;
@@ -124,6 +123,7 @@ body,
   color: var(--text-main);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.011em;
   transition: var(--theme-transition);
 }
 

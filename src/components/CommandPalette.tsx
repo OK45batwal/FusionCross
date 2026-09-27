@@ -7,8 +7,9 @@ import {
   Cpu,
   Activity,
   Settings,
+  LayoutGrid,
+  Heart,
   AppWindow,
-  Globe,
   X,
 } from "lucide-react";
 import { ViewId } from "./Sidebar";
@@ -18,6 +19,7 @@ interface CommandPaletteProps {
   isOpen: boolean;
   onClose: () => void;
   onNavigate: (view: ViewId) => void;
+  onSelectBottle?: (bottleId: string) => void;
   applications: Application[];
   bottles: Bottle[];
   runtimes: Runtime[];
@@ -28,6 +30,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   isOpen,
   onClose,
   onNavigate,
+  onSelectBottle,
   applications,
   bottles,
   runtimes,
@@ -58,13 +61,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   );
 
   const navigationCommands = [
-    { label: "Install Application", view: "installer" as ViewId, icon: Download },
-    { label: "Create Bottle Environment", view: "bottles" as ViewId, icon: FlaskConical },
-    { label: "Runtime Manager", view: "runtimes" as ViewId, icon: Boxes },
+    { label: "All Applications", view: "all_apps" as ViewId, icon: LayoutGrid },
+    { label: "Favorite Applications", view: "favorites" as ViewId, icon: Heart },
+    { label: "Install a Windows Application", view: "installer" as ViewId, icon: Download },
     { label: "Compatibility Center", view: "compatibility" as ViewId, icon: Cpu },
-    { label: "Diagnostics & Auto-Fix", view: "diagnostics" as ViewId, icon: Activity },
-    { label: "Website & DB Portal", view: "website" as ViewId, icon: Globe },
-    { label: "Application Settings", view: "settings" as ViewId, icon: Settings },
+    { label: "Diagnostics & Health", view: "diagnostics" as ViewId, icon: Activity },
+    { label: "Wine Runtimes", view: "runtimes" as ViewId, icon: Boxes },
+    { label: "Settings", view: "settings" as ViewId, icon: Settings },
   ].filter((c) => c.label.toLowerCase().includes(query.toLowerCase()));
 
   return (
@@ -161,7 +164,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                   <button
                     key={b.id}
                     onClick={() => {
-                      onNavigate("bottles");
+                      if (onSelectBottle) onSelectBottle(b.id);
+                      onNavigate("bottle");
                       onClose();
                     }}
                     className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-graphite-850 hover:bg-graphite-800 border border-graphite-700/60 transition-colors text-left"

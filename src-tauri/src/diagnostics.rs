@@ -10,6 +10,8 @@ pub enum FixIntent {
     InitPrefix,
     InstallDependency(String),
     SwitchGraphics,
+    EnableMsync,
+    InstallRosetta,
 }
 
 impl FixIntent {
@@ -19,6 +21,8 @@ impl FixIntent {
             FixIntent::InitPrefix => "init_prefix".into(),
             FixIntent::InstallDependency(v) => format!("install_dep:{v}"),
             FixIntent::SwitchGraphics => "switch_graphics".into(),
+            FixIntent::EnableMsync => "enable_msync".into(),
+            FixIntent::InstallRosetta => "install_rosetta".into(),
         }
     }
 
@@ -30,6 +34,8 @@ impl FixIntent {
             "install_runtime" => Some(FixIntent::InstallRuntime),
             "init_prefix" => Some(FixIntent::InitPrefix),
             "switch_graphics" => Some(FixIntent::SwitchGraphics),
+            "enable_msync" => Some(FixIntent::EnableMsync),
+            "install_rosetta" => Some(FixIntent::InstallRosetta),
             _ => None,
         }
     }
@@ -41,6 +47,8 @@ impl FixIntent {
             FixIntent::InitPrefix => "Initialize the bottle prefix".into(),
             FixIntent::InstallDependency(v) => format!("Install dependency: {v}"),
             FixIntent::SwitchGraphics => "Switch graphics backend".into(),
+            FixIntent::EnableMsync => "Enable MSync Fast Synchronization".into(),
+            FixIntent::InstallRosetta => "Install Apple Rosetta 2".into(),
         }
     }
 }
@@ -178,6 +186,54 @@ pub fn run_app_diagnostics(state: &AppState, app_id: &str) -> Vec<DiagnosticChec
             });
         }
     }
+
+    // Rosetta 2 Translation (Apple Silicon check)
+    #[cfg(target_arch = "aarch64")]
+    {
+        let rosetta_installed =
+            std::path::Path::new("/Library/Apple/usr/libexec/oah/libRosettaRuntime").exists()
+                || std::process::Command::new("arch")
+                    .args(["-x86_64", "/usr/bin/true"])
+                    .output()
+                    .map(|o| o.status.success())
+                    .unwrap_or(false);
+
+        checks.push(DiagnosticCheck {
+            id: "rosetta",
+            label: "Rosetta 2",
+            status: if rosetta_installed { "ok" } else { "fail" },
+            detail: if rosetta_installed {
+                "Apple Silicon x86_64 AOT translation active".into()
+            } else {
+                "Rosetta 2 is not installed. Windows x86_64 apps cannot run.".into()
+            },
+            fix: if rosetta_installed {
+                None
+            } else {
+                Some(FixIntent::InstallRosetta.id())
+            },
+        });
+    }
+
+    // MSync Fast Synchronization (Mach semaphores)
+    if let Some(b) = bottle {
+        checks.push(DiagnosticCheck {
+            id: "msync",
+            label: "Synchronization",
+            status: if b.msync_enabled { "ok" } else { "warn" },
+            detail: if b.msync_enabled {
+                "MSync (Mach semaphores) active — high performance multi-threaded sync".into()
+            } else {
+                "MSync is off. Games relying on multithreading may stutter or have low FPS.".into()
+            },
+            fix: if b.msync_enabled {
+                None
+            } else {
+                Some(FixIntent::EnableMsync.id())
+            },
+        });
+    }
+
     checks
 }
 
@@ -211,6 +267,9 @@ mod tests {
             windows_version: "win10".into(),
             graphics: "dxvk".into(),
             dxvk_enabled: true,
+            msync_enabled: true,
+            performance_hud: false,
+            retina_mode: false,
             path: "/nonexistent/b1".into(),
             created_at: "".into(),
             last_used_at: None,
@@ -242,6 +301,7 @@ mod tests {
         assert!(ids.contains(&"bottle"));
         assert!(ids.contains(&"prefix"));
         assert!(ids.contains(&"executable"));
+        assert!(ids.contains(&"msync"));
         // executable missing → fail
         let exe = checks.iter().find(|c| c.id == "executable").unwrap();
         assert_eq!(exe.status, "fail");

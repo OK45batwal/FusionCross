@@ -42,11 +42,8 @@ npm run build        # typecheck + production frontend build
 npm run lint         # ESLint
 npm run check        # TypeScript typecheck
 npm run tauri build  # release .app / .dmg
-npm run website      # serve the standalone marketing site (website/)
 cargo test --manifest-path src-tauri/Cargo.toml   # Rust backend tests
 ```
-
-The website lives in `website/` — a self-contained static site (served with `npm run website` or any static host) that doubles as the in-app download/catalog view.
 
 CI (`.github/workflows/ci.yml`) runs rustfmt, clippy (`-D warnings`), Rust tests, ESLint, typecheck, a frontend build, and a debug Tauri build on every push.
 
@@ -81,17 +78,18 @@ Backend errors never cross IPC as bare strings — always `{ code, message, acti
 
 ## Design system
 
-A single token-driven design language is shared across the app and the marketing site:
+A single token-driven design language powers the macOS desktop application:
 
 - Dark-first, light-secondary theme switched via `data-theme` and persisted to `localStorage`.
 - Graphite neutral ramp + a single indigo accent + mint/amber/red status colors.
-- Defined once in `src/index.css` (Tailwind v4 `@theme`) and mirrored in `website/styles.css`.
+- Defined in `src/index.css` (Tailwind v4 `@theme`).
 
 ## Documentation
 
 - [Product requirements (PRD)](docs/PRD.md)
 - [System implementation plan](docs/SYSTEM_IMPLEMENTATION_PLAN.md)
 - [CrossOver parity roadmap](docs/CROSSOVER_PARITY_ROADMAP.md)
+- [Comprehensive test plan](docs/TEST_PLAN.md)
 
 ## License
 
