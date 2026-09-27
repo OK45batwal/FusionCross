@@ -1,0 +1,321 @@
+import { useState, useEffect } from "react";
+import {
+  Bottle,
+  analyzeInstaller,
+  InstallerAnalysis,
+  runCommandInBottle,
+  registerApplication,
+  createBottle,
+  FusionErrorPayload,
+} from "../services/tauri";
+import {
+  Play,
+  Plus,
+  X,
+  FileCode,
+  ShieldCheck,
+  Cpu,
+  Layers,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+} from "lucide-react";
+
+interface DroppedFileModalProps {
+  filePath: string;
+  initialBottleId: string;
+  bottles: Bottle[];
+  onClose: () => void;
+  onRefresh: () => Promise<void>;
+  onSelectBottle: (bottleId: string) => void;
+}
+
+export function DroppedFileModal({
+  filePath,
+  initialBottleId,
+  bottles,
+  onClose,
+  onRefresh,
+  onSelectBottle,
+}: DroppedFileModalProps) {
+  const [selectedBottleId, setSelectedBottleId] = useState<string>(initialBottleId);
+  const [analysis, setAnalysis] = useState<InstallerAnalysis | null>(null);
+  const [analyzing, setAnalyzing] = useState(true);
+  const [executing, setExecuting] = useState(false);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // New bottle inline creation
+  const [creatingNewBottle, setCreatingNewBottle] = useState(false);
+  const [newBottleName, setNewBottleName] = useState("");
+
+  const fileName = filePath.split("/").pop() || filePath;
+  const isExeOrMsi = /\.(exe|msi|bat|cmd)$/i.test(fileName);
+
+  useEffect(() => {
+    let active = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async analysis reset on filePath change
+    setAnalyzing(true);
+    analyzeInstaller(filePath)
+      .then((res) => {
+        if (active) {
+          setAnalysis(res);
+          setAnalyzing(false);
+        }
+      })
+      .catch((err) => {
+        if (active) {
+          console.warn("Analysis failed or not an installer:", err);
+          setAnalyzing(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [filePath]);
+
+  const targetBottle = bottles.find((b) => b.id === selectedBottleId) || bottles[0];
+
+  const handleCreateAndSelectBottle = async () => {
+    if (!newBottleName.trim()) return;
+    try {
+      const created = await createBottle(newBottleName.trim(), "gaming");
+      await onRefresh();
+      setSelectedBottleId(created.id);
+      setCreatingNewBottle(false);
+      setNewBottleName("");
+    } catch (e) {
+      setError((e as FusionErrorPayload).message || "Failed to create bottle");
+    }
+  };
+
+  const handleInstall = async () => {
+    if (!selectedBottleId && bottles.length === 0) {
+      setError("Please create or select a bottle first.");
+      return;
+    }
+    const bottleId = selectedBottleId || bottles[0]?.id;
+    setExecuting(true);
+    setError(null);
+    try {
+      // Execute installer inside bottle
+      await runCommandInBottle(bottleId, filePath, []);
+      setActionSuccess(`Launched ${fileName} in bottle "${targetBottle?.name || 'Steam'}"!`);
+      await onRefresh();
+      onSelectBottle(bottleId);
+      setTimeout(() => {
+        onClose();
+      }, 1500);
+    } catch (e) {
+      const err = e as FusionErrorPayload;
+      setError(err.message || "Failed to launch installer in bottle.");
+      setExecuting(false);
+    }
+  };
+
+  const handleRegisterApp = async () => {
+    if (!selectedBottleId && bottles.length === 0) return;
+    const bottleId = selectedBottleId || bottles[0]?.id;
+    setExecuting(true);
+    setError(null);
+    try {
+      const appName = fileName.replace(/\.(exe|msi)$/i, "");
+      await registerApplication(bottleId, appName, filePath, "applications");
+      setActionSuccess(`Added "${appName}" to bottle application launcher!`);
+      await onRefresh();
+      onSelectBottle(bottleId);
+      setTimeout(() => {
+        onClose();
+      }, 1500);
+    } catch (e) {
+      const err = e as FusionErrorPayload;
+      setError(err.message || "Failed to register application.");
+      setExecuting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[110] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+      <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl max-w-lg w-full p-6 shadow-2xl shadow-black/40 text-left animate-scale-in">
+        {/* Header */}
+        <div className="flex items-start justify-between pb-4 border-b border-[var(--border-color)]">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[var(--accent)]/10 border border-[var(--accent)]/20 flex items-center justify-center text-[var(--accent)]">
+              <FileCode className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-[16px] font-semibold text-[var(--text-primary)] tracking-tight">
+                Inspect Dropped File
+              </h3>
+              <p className="text-[12px] text-[var(--text-secondary)] font-mono truncate max-w-xs">
+                {fileName}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close dialog"
+            className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] p-1 rounded-md hover:bg-[var(--bg-hover)] transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* File Analysis Section */}
+        <div className="py-4 space-y-3">
+          <div className="bg-[var(--bg-subtle)] border border-[var(--border-color)] rounded-xl p-3.5 space-y-2">
+            <div className="flex items-center justify-between text-[12px]">
+              <span className="text-[var(--text-secondary)] flex items-center gap-1.5">
+                <Cpu className="w-3.5 h-3.5 text-[var(--accent)]" /> Architecture:
+              </span>
+              <span className="font-mono text-[var(--text-primary)] font-medium">
+                {analyzing ? (
+                  <span className="flex items-center gap-1 text-[var(--text-tertiary)]">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Analyzing PE headers...
+                  </span>
+                ) : analysis ? (
+                  `${analysis.arch.toUpperCase()} ${analysis.is_windows_installer ? "(Installer Package)" : "(Executable)"}`
+                ) : isExeOrMsi ? (
+                  "Windows PE Executable"
+                ) : (
+                  "Binary File"
+                )}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between text-[12px]">
+              <span className="text-[var(--text-secondary)] flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-indigo-400" /> Translation Layer:
+              </span>
+              <span className="text-[var(--text-primary)] font-mono text-[11px]">
+                {analysis && analysis.size_bytes > 0
+                  ? `${(analysis.size_bytes / (1024 * 1024)).toFixed(1)} MB • DXVK / Metal DXMT`
+                  : "Whisky-Wine 11.0 (Apple GPTK)"}
+              </span>
+            </div>
+
+            <div className="text-[11px] font-mono text-[var(--text-tertiary)] break-all pt-1 border-t border-[var(--border-color)]/60">
+              {filePath}
+            </div>
+          </div>
+
+          {/* Bottle Selector */}
+          <div>
+            <label className="text-[11px] font-medium text-[var(--text-secondary)] block mb-1.5">
+              Target Wine Bottle
+            </label>
+
+            {!creatingNewBottle ? (
+              <div className="flex items-center gap-2">
+                <select
+                  aria-label="Select Target Bottle"
+                  value={selectedBottleId}
+                  onChange={(e) => setSelectedBottleId(e.target.value)}
+                  className="flex-1 bg-[var(--bg-subtle)] border border-[var(--border-color)] text-[13px] rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
+                >
+                  {bottles.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} ({b.windows_version} • {b.graphics})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setCreatingNewBottle(true)}
+                  className="px-3 py-2 text-[12px] bg-[var(--bg-subtle)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-[var(--text-primary)] rounded-lg flex items-center gap-1 transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" /> New
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Bottle Name (e.g. Gaming Bottle)"
+                  value={newBottleName}
+                  onChange={(e) => setNewBottleName(e.target.value)}
+                  className="flex-1 bg-[var(--bg-subtle)] border border-[var(--border-color)] text-[13px] rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={handleCreateAndSelectBottle}
+                  className="px-3 py-2 text-[12px] bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white font-medium rounded-lg"
+                >
+                  Create
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCreatingNewBottle(false)}
+                  className="px-2 py-2 text-[12px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Feedback & Alerts */}
+          {error && (
+            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-[12px] flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {actionSuccess && (
+            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 text-[12px] flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>{actionSuccess}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Footer Actions */}
+        <div className="flex items-center justify-between pt-4 border-t border-[var(--border-color)]">
+          <div className="text-[11px] text-[var(--text-tertiary)] flex items-center gap-1">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" /> Sandboxed Bottle Execution
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-3 py-1.5 text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-hover)] transition-colors"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="button"
+              disabled={executing || bottles.length === 0}
+              onClick={handleRegisterApp}
+              className="px-3 py-1.5 text-[12px] bg-[var(--bg-subtle)] hover:bg-[var(--bg-hover)] border border-[var(--border-color)] text-[var(--text-primary)] rounded-lg flex items-center gap-1.5 transition-colors disabled:opacity-50"
+              title="Add to application shelf without executing now"
+            >
+              <Plus className="w-3.5 h-3.5" /> Add to Shelf
+            </button>
+
+            <button
+              type="button"
+              disabled={executing || bottles.length === 0}
+              onClick={handleInstall}
+              className="px-4 py-1.5 text-[12px] font-medium bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white rounded-lg flex items-center gap-1.5 shadow-sm transition-colors disabled:opacity-50"
+            >
+              {executing ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Launching...
+                </>
+              ) : (
+                <>
+                  <Play className="w-3.5 h-3.5 fill-current" /> Install & Run
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

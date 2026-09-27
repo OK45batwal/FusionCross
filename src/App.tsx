@@ -24,6 +24,8 @@ import {
   FusionErrorPayload,
 } from "./services/tauri";
 import { RefreshCw, X, FlaskConical } from "lucide-react";
+import { GlobalDropZone } from "./components/GlobalDropZone";
+import { DroppedFileModal } from "./components/DroppedFileModal";
 
 export function App() {
   const [currentView, setCurrentView] = useState<ViewId>("all_apps");
@@ -45,6 +47,10 @@ export function App() {
   const [newBottleName, setNewBottleName] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState("gaming");
   const [creatingBottle, setCreatingBottle] = useState(false);
+
+  // Dropped file inspection state
+  const [droppedFilePath, setDroppedFilePath] = useState<string | null>(null);
+  const [droppedTargetBottleId, setDroppedTargetBottleId] = useState<string>("");
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -398,6 +404,31 @@ export function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Global Drag & Drop Window-wide Listener & Overlay */}
+      <GlobalDropZone
+        bottles={state?.bottles || []}
+        selectedBottleId={selectedBottleId}
+        onFileDropped={(filePath, targetBottleId) => {
+          setDroppedFilePath(filePath);
+          setDroppedTargetBottleId(targetBottleId);
+        }}
+      />
+
+      {/* Dropped File Inspection & One-Click Execution Modal */}
+      {droppedFilePath && (
+        <DroppedFileModal
+          filePath={droppedFilePath}
+          initialBottleId={droppedTargetBottleId || selectedBottleId || ""}
+          bottles={state?.bottles || []}
+          onClose={() => setDroppedFilePath(null)}
+          onRefresh={refreshState}
+          onSelectBottle={(id) => {
+            setSelectedBottleId(id);
+            setCurrentView("bottle");
+          }}
+        />
       )}
     </div>
   );

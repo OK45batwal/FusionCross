@@ -411,8 +411,7 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
                   No programs installed in {bottle.name}
                 </h3>
                 <p className="text-[12px] text-[var(--text-muted)] leading-relaxed">
-                  Install a game or Windows application using an installer (.exe, .msi) or run a
-                  standalone program directly.
+                  Drag & drop any Windows installer (<span className="font-mono text-[var(--text-main)]">.exe</span>, <span className="font-mono text-[var(--text-main)]">.msi</span>) anywhere into this window, or choose an option below.
                 </p>
               </div>
               <div className="pt-2 flex items-center gap-2">
