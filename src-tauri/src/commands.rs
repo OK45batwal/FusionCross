@@ -27,17 +27,66 @@ fn now_ts() -> String {
 
 fn wine_binary_for(app: &AppHandle, runtime_id: &str) -> Result<String, FusionError> {
     let st = app.state::<FusionState>();
-    let rt =
-        st.0.lock()
-            .map_err(|_| FusionError::Unsupported)?
-            .runtimes
-            .iter()
-            .find(|r| r.id == runtime_id)
-            .cloned()
-            .ok_or(FusionError::RuntimeNotFound)?;
-    runtime::engine_binary(Path::new(&rt.path))
-        .map(|p| p.to_string_lossy().into_owned())
-        .ok_or(FusionError::RuntimeNotFound)
+    let rt = st
+        .0
+        .lock()
+        .map_err(|_| FusionError::Unsupported)?
+        .runtimes
+        .iter()
+        .find(|r| r.id == runtime_id)
+        .cloned();
+
+    if let Some(r) = rt {
+        if let Some(bin) = runtime::engine_binary(Path::new(&r.path)) {
+            return Ok(bin.to_string_lossy().into_owned());
+        }
+    }
+
+    // Check custom path in settings
+    if let Ok(state) = st.0.lock() {
+        if let Some((_, custom_path)) = state.settings.iter().find(|(k, _)| k == "wine_binary_path") {
+            if !custom_path.is_empty() && Path::new(custom_path).exists() {
+                return Ok(custom_path.clone());
+            }
+        }
+    }
+
+    // Standard macOS locations (Homebrew, CrossOver, Whisky)
+    let candidates = [
+        "/opt/homebrew/bin/wine64",
+        "/opt/homebrew/bin/wine",
+        "/usr/local/bin/wine64",
+        "/usr/local/bin/wine",
+        "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine64",
+        "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine",
+        "/Applications/Whisky.app/Contents/Resources/Wine/bin/wine64",
+    ];
+
+    for cand in candidates {
+        if Path::new(cand).exists() {
+            return Ok(cand.to_string());
+        }
+    }
+
+    // Check PATH via which
+    if let Ok(out) = std::process::Command::new("which").arg("wine64").output() {
+        if out.status.success() {
+            let p = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if !p.is_empty() && Path::new(&p).exists() {
+                return Ok(p);
+            }
+        }
+    }
+    if let Ok(out) = std::process::Command::new("which").arg("wine").output() {
+        if out.status.success() {
+            let p = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if !p.is_empty() && Path::new(&p).exists() {
+                return Ok(p);
+            }
+        }
+    }
+
+    Err(FusionError::RuntimeNotFound)
 }
 
 /* ---------- read commands ---------- */
