@@ -27,3 +27,6 @@ flate2 = "1"
 xz2 = "0.1"
 libc = "0.2"
 
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
