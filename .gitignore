@@ -32,3 +32,6 @@ dist-ssr
 /runtimes/
 /downloads/
 /releases/
+
+# Release bundles
+release_bundle/
