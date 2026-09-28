@@ -12,12 +12,14 @@ import {
   Moon,
   Sun,
   Download,
+  Gamepad2,
 } from "lucide-react";
 import { Bottle, RunningInfo } from "../services/tauri";
 
 export type ViewId =
   | "all_apps"
   | "favorites"
+  | "catalog"
   | "bottle"
   | "installer"
   | "compatibility"
@@ -138,6 +140,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   {favoritesCount}
                 </span>
               )}
+            </button>
+
+            <button
+              onClick={() => onNavigate("catalog")}
+              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-[12px] font-medium transition-colors cursor-pointer ${
+                currentView === "catalog"
+                  ? "bg-[var(--bg-elevated)] text-[var(--text-main)] shadow-xs"
+                  : "text-[var(--text-secondary)] hover:text-[var(--text-main)] hover:bg-[var(--bg-elevated)]/60"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Gamepad2 className="w-4 h-4 text-[var(--accent-primary)]" />
+                <span>Game Catalog</span>
+              </div>
+              <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-semibold bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]">
+                50+
+              </span>
             </button>
           </div>
         </div>

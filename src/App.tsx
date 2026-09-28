@@ -4,6 +4,7 @@ import { CommandPalette } from "./components/CommandPalette";
 import { BottleWorkspaceView } from "./views/BottleWorkspaceView";
 import { ApplicationsView } from "./views/ApplicationsView";
 import { InstallerWizardView } from "./views/InstallerWizardView";
+import { CatalogView } from "./views/CatalogView";
 import { RuntimeManagerView } from "./views/RuntimeManagerView";
 import { CompatibilityView } from "./views/CompatibilityView";
 import { DiagnosticsView } from "./views/DiagnosticsView";
@@ -288,6 +289,18 @@ export function App() {
               bottles={state?.bottles || []}
               onFinish={() => setCurrentView("all_apps")}
               onRefreshState={refreshState}
+            />
+          )}
+
+          {currentView === "catalog" && (
+            <CatalogView
+              bottles={state?.bottles || []}
+              onOpenInstaller={(bottleId) => {
+                setSelectedBottleId(bottleId);
+                setCurrentView("installer");
+              }}
+              onRefreshState={refreshState}
+              onSelectBottle={handleSelectBottle}
             />
           )}
 

@@ -1,14 +1,25 @@
-import { useEffect, useState } from "react";
-import { Cpu, Sparkles } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import {
+  Cpu,
+  Sparkles,
+  Search,
+  ShieldCheck,
+} from "lucide-react";
 import { getRecommendation, Recommendation } from "../services/tauri";
 
-const KNOWN_APPS = [
-  "Adobe Photoshop 2024",
+const SHOWCASE_APPS = [
+  "Cyberpunk 2077",
+  "Elden Ring",
+  "Baldur's Gate 3",
+  "Grand Theft Auto V",
+  "The Witcher 3: Wild Hunt",
+  "Skyrim Special Edition",
+  "Diablo IV",
+  "Hades II",
+  "Raji: An Ancient Epic",
   "Steam Client",
-  "Microsoft Office 2021",
-  "Autodesk AutoCAD",
-  "Notepad++",
-  "GIMP Windows Build",
+  "Battle.net Desktop App",
+  "Adobe Photoshop 2024",
 ];
 
 export const CompatibilityView: React.FC = () => {
@@ -18,7 +29,7 @@ export const CompatibilityView: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all(KNOWN_APPS.map(async (name) => ({ name, rec: await getRecommendation(name) })))
+    Promise.all(SHOWCASE_APPS.map(async (name) => ({ name, rec: await getRecommendation(name) })))
       .then((res) => !cancelled && setProfiles(res))
       .catch(() => {});
     return () => {
@@ -33,110 +44,166 @@ export const CompatibilityView: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center justify-between pb-4 border-b border-graphite-600/70">
+    <div className="flex-1 overflow-y-auto p-6 max-w-5xl mx-auto space-y-6 text-[var(--text-main)]">
+      {/* Title */}
+      <div className="flex items-center justify-between pb-4 border-b border-[var(--border-color)]">
         <div>
-          <h1 className="text-[20px] font-bold text-graphite-100 flex items-center gap-2">
-            <Cpu className="w-5 h-5 text-accent-400" /> Compatibility Engine (PRD §34)
+          <h1 className="text-[20px] font-bold text-[var(--text-main)] flex items-center gap-2">
+            <Cpu className="w-5 h-5 text-[var(--accent-primary)]" />
+            Compatibility Engine & Recipes
           </h1>
-          <p className="text-[12px] text-graphite-400">
-            Local & Remote compatibility database matching applications to optimal Wine runtimes & graphics settings
+          <p className="text-[12px] text-[var(--text-secondary)] mt-1">
+            Automated translation recipes matching Windows games & software to optimal Apple Silicon D3DMetal (GPTK), DXVK, and MSync settings.
           </p>
         </div>
       </div>
 
-      {/* Interactive Recommendation Tester */}
-      <div className="rounded-xl border border-graphite-600 bg-graphite-900 p-5 space-y-4 shadow-sm">
-        <h2 className="text-[12px] font-mono font-bold text-graphite-400 uppercase tracking-wider flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-accent-400" /> Test Application Compatibility Recommendation
+      {/* Interactive Recommendation Evaluator */}
+      <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] p-5 space-y-4 shadow-xs">
+        <h2 className="text-[12px] font-mono font-bold text-[var(--text-muted)] uppercase tracking-wider flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-[var(--accent-primary)]" />
+          Test Any Windows Game or Executable
         </h2>
 
         <div className="flex items-center gap-2">
-          <input
-            type="text"
-            placeholder="Type app name e.g. Photoshop, Steam, AutoCAD..."
-            value={testAppName}
-            onChange={(e) => setTestAppName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleTestRecommendation()}
-            className="flex-1 px-3 py-2 rounded-lg bg-graphite-850 border border-graphite-700 font-mono text-[12px] text-graphite-100 focus:outline-none focus:border-accent-500"
-          />
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+            <input
+              type="text"
+              placeholder="Type any game name e.g. Cyberpunk, Elden Ring, GTA, Valorant, Skyrim, Photoshop..."
+              value={testAppName}
+              onChange={(e) => setTestAppName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleTestRecommendation()}
+              className="w-full pl-9 pr-3 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[12px] font-sans text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)]"
+            />
+          </div>
           <button
             onClick={handleTestRecommendation}
-            className="px-4 py-2 rounded-lg bg-accent-500 hover:bg-accent-400 text-white font-mono text-[12px] font-semibold"
+            className="px-4 py-2 rounded-lg bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white font-medium text-[12px] shadow-xs cursor-pointer transition-colors"
           >
             Evaluate
           </button>
         </div>
 
         {testedRecommendation && (
-          <div className="rounded-lg bg-graphite-950 p-4 border border-graphite-700/60 font-mono text-[12px] space-y-2">
+          <div className="rounded-xl bg-[var(--bg-elevated)] p-4.5 border border-[var(--border-color)] space-y-3 animate-fade-in">
             <div className="flex items-center justify-between">
-              <span className="font-bold text-graphite-100">
-                Matched Profile: {testedRecommendation.profile}
-              </span>
-              <span className="text-ok font-bold text-[14px]">
-                {testedRecommendation.compatibility}% Score
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-[14px] text-[var(--text-main)]">
+                  Matched Recipe: {testedRecommendation.profile.toUpperCase()}
+                </span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] font-semibold">
+                  Recipe Found
+                </span>
+              </div>
+              <span
+                className={`font-bold font-mono text-[14px] px-2.5 py-0.5 rounded-full ${
+                  testedRecommendation.compatibility >= 85
+                    ? "bg-[var(--color-ok-glow)] text-[var(--color-ok)] border border-[var(--color-ok)]/30"
+                    : testedRecommendation.compatibility >= 70
+                    ? "bg-amber-500/10 text-amber-500 border border-amber-500/30"
+                    : "bg-red-500/10 text-red-500 border border-red-500/30"
+                }`}
+              >
+                {testedRecommendation.compatibility}% Compatibility
               </span>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-graphite-800 text-[11px]">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2 border-t border-[var(--border-color)]/60 text-[11px] font-mono">
               <div>
-                <span className="text-graphite-400">Runtime: </span>
-                <span className="text-accent-400 font-semibold">{testedRecommendation.runtime_hint}</span>
+                <span className="text-[var(--text-muted)] block">Wine Runtime:</span>
+                <span className="text-[var(--accent-primary)] font-semibold">
+                  {testedRecommendation.runtime_hint}
+                </span>
               </div>
               <div>
-                <span className="text-graphite-400">Graphics: </span>
-                <span className="text-ok font-semibold">{testedRecommendation.graphics.toUpperCase()}</span>
+                <span className="text-[var(--text-muted)] block">Graphics Engine:</span>
+                <span className="text-[var(--color-ok)] font-semibold">
+                  {testedRecommendation.graphics === "d3dmetal" ? "D3DMetal (GPTK)" : testedRecommendation.graphics.toUpperCase()}
+                </span>
               </div>
               <div>
-                <span className="text-graphite-400">Windows: </span>
-                <span className="text-graphite-100">{testedRecommendation.windows_version}</span>
+                <span className="text-[var(--text-muted)] block">Target Windows:</span>
+                <span className="text-[var(--text-main)] font-semibold">
+                  {testedRecommendation.windows_version.toUpperCase()}
+                </span>
+              </div>
+              <div>
+                <span className="text-[var(--text-muted)] block">Dependencies:</span>
+                <span className="text-[var(--text-secondary)] font-semibold">
+                  {testedRecommendation.dependencies.length > 0 ? testedRecommendation.dependencies.join(", ") : "None"}
+                </span>
               </div>
             </div>
+
             {testedRecommendation.notes.length > 0 && (
-              <p className="text-[11px] text-warn pt-1">
-                Note: {testedRecommendation.notes.join(" ")}
-              </p>
+              <div className="pt-2 border-t border-[var(--border-color)]/60 text-[11px]">
+                <span className="text-amber-500 font-semibold">Community Guidance: </span>
+                <span className="text-[var(--text-secondary)]">{testedRecommendation.notes.join(" ")}</span>
+              </div>
             )}
           </div>
         )}
       </div>
 
-      {/* Featured Compatibility Database Cards */}
-      <div className="space-y-3">
-        <h2 className="text-[12px] font-mono font-bold text-graphite-400 uppercase tracking-wider">
-          Compatibility Database Highlights
-        </h2>
+      {/* Anti-Cheat Transparency Card */}
+      <div className="p-4 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] space-y-2.5">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="w-4 h-4 text-emerald-500" />
+          <h3 className="text-[13px] font-semibold text-[var(--text-main)]">
+            macOS Anti-Cheat Architecture Transparency
+          </h3>
+        </div>
+        <p className="text-[12px] text-[var(--text-secondary)] leading-relaxed">
+          Windows games that use user-space anti-cheat (Valve VAC, Blizzard Warden, Easy Anti-Cheat in offline mode) run smoothly. Games requiring Windows <strong>ring-0 kernel drivers</strong> (Riot Vanguard, BattlEye kernel mode) cannot execute under macOS kernel security policy. FusionCross identifies these titles immediately to save you time.
+        </p>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* Featured Profiles Section */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-[12px] font-mono font-bold text-[var(--text-muted)] uppercase tracking-wider">
+            Verified Game & Launcher Recipes
+          </h2>
+          <span className="text-[11px] font-mono text-[var(--text-muted)]">
+            {profiles.length} Verified Highlights
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
           {profiles.map(({ name, rec }) => (
             <div
               key={name}
-              className="rounded-xl border border-graphite-600 bg-graphite-900 p-4 space-y-3 flex flex-col justify-between"
+              className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] hover:border-[var(--border-hover)] p-4 space-y-3 flex flex-col justify-between transition-all shadow-xs"
             >
               <div>
                 <div className="flex items-start justify-between gap-2">
-                  <h3 className="text-[14px] font-bold text-graphite-100">{name}</h3>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-ok/10 text-ok border border-ok/30">
+                  <h3 className="text-[13px] font-bold text-[var(--text-main)] truncate max-w-[170px]">
+                    {name}
+                  </h3>
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                      rec.compatibility >= 85
+                        ? "bg-[var(--color-ok-glow)] text-[var(--color-ok)] border border-[var(--color-ok)]/30"
+                        : "bg-amber-500/10 text-amber-500 border border-amber-500/30"
+                    }`}
+                  >
                     {rec.compatibility}%
                   </span>
                 </div>
-                <p className="text-[11px] font-mono text-graphite-400 mt-1">
-                  Profile: {rec.profile}
+                <p className="text-[11px] font-mono text-[var(--text-muted)] mt-1">
+                  Engine: <span className="text-[var(--accent-primary)] font-semibold">{rec.graphics === "d3dmetal" ? "D3DMetal (GPTK)" : rec.graphics.toUpperCase()}</span>
                 </p>
               </div>
 
-              <div className="pt-3 border-t border-graphite-700/60 font-mono text-[11px] space-y-1">
-                <p className="text-graphite-300">
-                  <span className="text-graphite-400">Runtime: </span>
+              <div className="pt-2 border-t border-[var(--border-color)]/60 font-mono text-[11px] space-y-1">
+                <p className="text-[var(--text-secondary)]">
+                  <span className="text-[var(--text-muted)]">Runtime: </span>
                   {rec.runtime_hint}
                 </p>
-                <p className="text-graphite-300">
-                  <span className="text-graphite-400">Graphics: </span>
-                  <span className="text-accent-400">{rec.graphics}</span>
-                </p>
-                <p className="text-graphite-400 text-[10px]">
-                  Deps: {rec.dependencies.join(", ") || "None"}
+                <p className="text-[var(--text-secondary)]">
+                  <span className="text-[var(--text-muted)]">Runtimes: </span>
+                  {rec.dependencies.length > 0 ? rec.dependencies.join(", ") : "None"}
                 </p>
               </div>
             </div>

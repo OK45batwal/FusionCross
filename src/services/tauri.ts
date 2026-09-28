@@ -226,3 +226,25 @@ export const downloadRuntime = (runtimeId: string) =>
 export const removeRuntime = (runtimeId: string) => invoke<void>("remove_runtime", { runtimeId });
 export const setSafeMode = (enabled: boolean) => invoke<void>("set_safe_mode", { enabled });
 export const exportAppBundle = (appId: string) => invoke<string>("export_app_bundle", { appId });
+
+export interface GameCatalogItem {
+  id: string;
+  title: string;
+  developer: string;
+  category: string;
+  tier: "Platinum" | "Gold" | "Silver" | "Blocked" | string;
+  compatibility: number;
+  graphics_backend: "d3dmetal" | "dxvk" | "wined3d" | string;
+  windows_version: string;
+  directx_version: string;
+  msync_recommended: boolean;
+  dependencies: string[];
+  launch_arguments: string[];
+  installer_url?: string | null;
+  notes: string;
+  anti_cheat_status: "Supported" | "Singleplayer Only" | "Kernel Driver Incompatible" | string;
+}
+
+export const getGameCatalog = () => invoke<GameCatalogItem[]>("get_game_catalog");
+export const installCatalogGame = (catalogId: string, bottleId?: string) =>
+  invoke<string>("install_catalog_game", { catalogId, bottleId });

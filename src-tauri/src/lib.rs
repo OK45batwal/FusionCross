@@ -85,6 +85,8 @@ pub fn run() {
             commands::remove_runtime,
             commands::set_safe_mode,
             commands::export_app_bundle,
+            commands::get_game_catalog,
+            commands::install_catalog_game,
         ])
         .run(tauri::generate_context!())
         .expect("error while running FusionCross");
