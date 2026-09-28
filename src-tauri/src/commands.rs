@@ -27,14 +27,13 @@ fn now_ts() -> String {
 
 fn wine_binary_for(app: &AppHandle, runtime_id: &str) -> Result<String, FusionError> {
     let st = app.state::<FusionState>();
-    let rt = st
-        .0
-        .lock()
-        .map_err(|_| FusionError::Unsupported)?
-        .runtimes
-        .iter()
-        .find(|r| r.id == runtime_id)
-        .cloned();
+    let rt =
+        st.0.lock()
+            .map_err(|_| FusionError::Unsupported)?
+            .runtimes
+            .iter()
+            .find(|r| r.id == runtime_id)
+            .cloned();
 
     if let Some(r) = rt {
         if let Some(bin) = runtime::engine_binary(Path::new(&r.path)) {
@@ -44,7 +43,8 @@ fn wine_binary_for(app: &AppHandle, runtime_id: &str) -> Result<String, FusionEr
 
     // Check custom path in settings
     if let Ok(state) = st.0.lock() {
-        if let Some((_, custom_path)) = state.settings.iter().find(|(k, _)| k == "wine_binary_path") {
+        if let Some((_, custom_path)) = state.settings.iter().find(|(k, _)| k == "wine_binary_path")
+        {
             if !custom_path.is_empty() && Path::new(custom_path).exists() {
                 return Ok(custom_path.clone());
             }
@@ -53,11 +53,13 @@ fn wine_binary_for(app: &AppHandle, runtime_id: &str) -> Result<String, FusionEr
 
     // Check user Library Whisky installation
     if let Ok(home) = std::env::var("HOME").map(PathBuf::from) {
-        let whisky_bin = home.join("Library/Application Support/com.isaacmarovitz.Whisky/Libraries/Wine/bin/wine64");
+        let whisky_bin = home
+            .join("Library/Application Support/com.isaacmarovitz.Whisky/Libraries/Wine/bin/wine64");
         if whisky_bin.exists() {
             return Ok(whisky_bin.to_string_lossy().into_owned());
         }
-        let fc_runtime_bin = home.join("Library/Application Support/FusionCross/runtimes/whisky-wine/bin/wine64");
+        let fc_runtime_bin =
+            home.join("Library/Application Support/FusionCross/runtimes/whisky-wine/bin/wine64");
         if fc_runtime_bin.exists() {
             return Ok(fc_runtime_bin.to_string_lossy().into_owned());
         }
@@ -131,11 +133,16 @@ pub fn get_system_info() -> Result<SystemInfo, FusionError> {
 }
 
 #[tauri::command]
-pub fn probe_runtime(app: AppHandle, engine: String) -> Result<runtime::RuntimeStatus, FusionError> {
+pub fn probe_runtime(
+    app: AppHandle,
+    engine: String,
+) -> Result<runtime::RuntimeStatus, FusionError> {
     let version = if let Ok(bin) = wine_binary_for(&app, &engine) {
         let out = std::process::Command::new(&bin).arg("--version").output();
         out.ok()
-            .and_then(|o| crate::wine::engine::parse_wine_version(&String::from_utf8_lossy(&o.stdout)))
+            .and_then(|o| {
+                crate::wine::engine::parse_wine_version(&String::from_utf8_lossy(&o.stdout))
+            })
             .unwrap_or_else(|| "11.0".into())
     } else {
         let e = WineEngine::new(&engine);
@@ -624,8 +631,15 @@ pub fn scan_bottle(app: AppHandle, bottle_id: String) -> Result<Vec<DiscoveredEx
     let found = scanner::scan_prefix(Path::new(&bottle.path));
     st.with_state(|s| {
         for exe in &found {
-            let full_path = Path::new(&bottle.path).join(&exe.rel_path).to_string_lossy().into_owned();
-            if !s.applications.iter().any(|a| a.bottle_id == bottle_id && a.executable_path == full_path) {
+            let full_path = Path::new(&bottle.path)
+                .join(&exe.rel_path)
+                .to_string_lossy()
+                .into_owned();
+            if !s
+                .applications
+                .iter()
+                .any(|a| a.bottle_id == bottle_id && a.executable_path == full_path)
+            {
                 let rec = compatibility::recommend(&exe.name);
                 let icon_data = crate::wine::icon::extract_icon_data_url(Path::new(&full_path));
                 s.applications.push(Application {
@@ -660,8 +674,14 @@ pub fn scan_all_bottles(app: AppHandle) -> Result<usize, FusionError> {
         let found = scanner::scan_prefix(Path::new(&bottle.path));
         st.with_state(|s| {
             for exe in &found {
-                let full_path = Path::new(&bottle.path).join(&exe.rel_path).to_string_lossy().into_owned();
-                if !s.applications.iter().any(|a| a.bottle_id == bottle.id && (a.executable_path == full_path || a.name == exe.name)) {
+                let full_path = Path::new(&bottle.path)
+                    .join(&exe.rel_path)
+                    .to_string_lossy()
+                    .into_owned();
+                if !s.applications.iter().any(|a| {
+                    a.bottle_id == bottle.id
+                        && (a.executable_path == full_path || a.name == exe.name)
+                }) {
                     let rec = compatibility::recommend(&exe.name);
                     let icon_data = crate::wine::icon::extract_icon_data_url(Path::new(&full_path));
                     s.applications.push(Application {
@@ -697,10 +717,7 @@ pub fn extract_installer_icon(path: String) -> Result<Option<String>, FusionErro
 }
 
 #[tauri::command]
-pub fn install_gaming_essentials(
-    app: AppHandle,
-    bottle_id: String,
-) -> Result<String, FusionError> {
+pub fn install_gaming_essentials(app: AppHandle, bottle_id: String) -> Result<String, FusionError> {
     let verbs = vec![
         "vcrun2022".to_string(),
         "d3dx9".to_string(),
@@ -740,7 +757,10 @@ pub fn install_gaming_essentials(
                     Ok(())
                 });
                 let _ = st.save(&handle);
-                jobs.finish(&job_id, "Installed Gaming Essentials (DirectX, VC++ 2022, Core Fonts).".into());
+                jobs.finish(
+                    &job_id,
+                    "Installed Gaming Essentials (DirectX, VC++ 2022, Core Fonts).".into(),
+                );
             }
             Err(e) => jobs.fail(&job_id, format!("Gaming Essentials install failed: {e}")),
         }
@@ -760,11 +780,9 @@ pub fn register_application(
     let rec = compatibility::recommend(&name);
     let icon_data = crate::wine::icon::extract_icon_data_url(Path::new(&executable_path));
     let application = st.with_state(|s| {
-        if let Some(existing) = s
-            .applications
-            .iter_mut()
-            .find(|a| a.bottle_id == bottle_id && (a.executable_path == executable_path || a.name == name))
-        {
+        if let Some(existing) = s.applications.iter_mut().find(|a| {
+            a.bottle_id == bottle_id && (a.executable_path == executable_path || a.name == name)
+        }) {
             existing.executable_path = executable_path;
             existing.name = name;
             if existing.icon_data.is_none() {
@@ -1412,7 +1430,7 @@ pub fn install_catalog_game(
                         Ok(s.bottles
                             .iter()
                             .find(|b| {
-                                b.name.to_lowercase().contains(&item.id)
+                                b.name.to_lowercase().contains(item.id)
                                     || b.name == "Gaming Bottle"
                                     || b.prefix_type == "gaming"
                             })
@@ -1460,11 +1478,8 @@ pub fn install_catalog_game(
 
             // 3. Pre-install dependencies
             for dep in &item.dependencies {
-                let _ = install_bottle_verb(
-                    handle.clone(),
-                    target_bottle_id.clone(),
-                    dep.to_string(),
-                );
+                let _ =
+                    install_bottle_verb(handle.clone(), target_bottle_id.clone(), dep.to_string());
             }
 
             // 4. Run installer inside target bottle
@@ -1484,4 +1499,3 @@ pub fn install_catalog_game(
 
     Ok(job)
 }
-

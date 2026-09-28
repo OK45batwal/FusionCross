@@ -71,8 +71,14 @@ impl FusionState {
                     let path = entry.path();
                     if path.is_dir() {
                         let id = entry.file_name().to_string_lossy().into_owned();
-                        let has_prefix = path.join("drive_c").is_dir() || path.join("system.reg").is_file();
-                        if has_prefix && !state.bottles.iter().any(|b| b.id == id || b.path == path.to_string_lossy()) {
+                        let has_prefix =
+                            path.join("drive_c").is_dir() || path.join("system.reg").is_file();
+                        if has_prefix
+                            && !state
+                                .bottles
+                                .iter()
+                                .any(|b| b.id == id || b.path == path.to_string_lossy())
+                        {
                             let name = if id == "bottle-2ff1dd5a" {
                                 "Steam".to_string()
                             } else if id == "bottle-61d41d23" {
@@ -108,10 +114,17 @@ impl FusionState {
         for bottle in &state.bottles {
             let found = crate::wine::scanner::scan_prefix(std::path::Path::new(&bottle.path));
             for exe in found {
-                let full_path = std::path::Path::new(&bottle.path).join(&exe.rel_path).to_string_lossy().into_owned();
-                if !state.applications.iter().any(|a| a.bottle_id == bottle.id && (a.executable_path == full_path || a.name == exe.name)) {
+                let full_path = std::path::Path::new(&bottle.path)
+                    .join(&exe.rel_path)
+                    .to_string_lossy()
+                    .into_owned();
+                if !state.applications.iter().any(|a| {
+                    a.bottle_id == bottle.id
+                        && (a.executable_path == full_path || a.name == exe.name)
+                }) {
                     let rec = crate::compatibility::recommend(&exe.name);
-                    let icon_data = crate::wine::icon::extract_icon_data_url(std::path::Path::new(&full_path));
+                    let icon_data =
+                        crate::wine::icon::extract_icon_data_url(std::path::Path::new(&full_path));
                     state.applications.push(crate::core::state::Application {
                         id: crate::core::ids::new_id(),
                         bottle_id: bottle.id.clone(),
@@ -144,7 +157,9 @@ impl FusionState {
         // Ensure all valid applications have icons extracted
         for app_entry in &mut state.applications {
             if app_entry.icon_data.is_none() {
-                app_entry.icon_data = crate::wine::icon::extract_icon_data_url(std::path::Path::new(&app_entry.executable_path));
+                app_entry.icon_data = crate::wine::icon::extract_icon_data_url(
+                    std::path::Path::new(&app_entry.executable_path),
+                );
             }
         }
 

@@ -20,7 +20,7 @@ pub fn extract_icon_data_url(exe_path: &Path) -> Option<String> {
         ico.extend_from_slice(&[0, 0]); // Reserved
         ico.extend_from_slice(&[1, 0]); // Type 1 (Icon)
         ico.extend_from_slice(&[1, 0]); // 1 image
-        // ICONDIRENTRY (16 bytes)
+                                        // ICONDIRENTRY (16 bytes)
         ico.push(0); // width (0 = 256)
         ico.push(0); // height (0 = 256)
         ico.push(0); // color count
@@ -29,7 +29,7 @@ pub fn extract_icon_data_url(exe_path: &Path) -> Option<String> {
         ico.extend_from_slice(&[32, 0]); // bit count (32 bpp)
         ico.extend_from_slice(&(raw_icon.len() as u32).to_le_bytes()); // dwBytesInRes
         ico.extend_from_slice(&22u32.to_le_bytes()); // dwImageOffset (22)
-        // Image data
+                                                     // Image data
         ico.extend_from_slice(&raw_icon);
         ("image/x-icon", ico)
     };
@@ -79,7 +79,7 @@ fn extract_raw_icon(data: &[u8]) -> Option<(Vec<u8>, bool)> {
             let max_size = vs.max(rs);
             if rva >= va && rva < va.saturating_add(max_size) {
                 let delta = (rva - va) as usize;
-                return Some((rp as usize).checked_add(delta)?);
+                return (rp as usize).checked_add(delta);
             }
         }
         None
@@ -189,11 +189,19 @@ fn read_u32(data: &[u8], off: usize) -> Option<u32> {
 const BASE64_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 fn base64_encode(input: &[u8]) -> String {
-    let mut out = String::with_capacity((input.len() + 2) / 3 * 4);
+    let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
     for chunk in input.chunks(3) {
         let b0 = chunk[0] as usize;
-        let b1 = if chunk.len() > 1 { chunk[1] as usize } else { 0 };
-        let b2 = if chunk.len() > 2 { chunk[2] as usize } else { 0 };
+        let b1 = if chunk.len() > 1 {
+            chunk[1] as usize
+        } else {
+            0
+        };
+        let b2 = if chunk.len() > 2 {
+            chunk[2] as usize
+        } else {
+            0
+        };
 
         let triple = (b0 << 16) | (b1 << 8) | b2;
 

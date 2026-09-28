@@ -1,0 +1,61 @@
+name: Game / App Compatibility Report
+description: Submit test results or request a 1-click recipe for a Windows game or app
+title: "[Compatibility]: "
+labels: ["compatibility", "recipes"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Help expand the FusionCross 50+ Game Catalog by submitting compatibility reports or recipe configurations.
+  - type: input
+    id: game_title
+    attributes:
+      label: Game / Application Title
+      placeholder: e.g. Cyberpunk 2077, Elden Ring, Affinity Photo
+    validations:
+      required: true
+  - type: dropdown
+    id: tier
+    attributes:
+      label: Compatibility Tier
+      description: Rate how well the software runs.
+      options:
+        - "Platinum (Flawless out-of-the-box, 60+ FPS, zero glitches)"
+        - "Gold (Minor setup needed or non-critical graphics quirks)"
+        - "Silver (Playable but requires manual DLL overrides or lower FPS)"
+        - "Blocked (Fails to launch, kernel anti-cheat error, or crash)"
+    validations:
+      required: true
+  - type: dropdown
+    id: graphics_backend
+    attributes:
+      label: Best Graphics Backend
+      options:
+        - "D3DMetal (Apple Game Porting Toolkit / Metal)"
+        - "DXVK (Vulkan translation)"
+        - "DXMT (Direct3D 11 Metal)"
+        - "WineD3D (OpenGL Fallback)"
+    validations:
+      required: true
+  - type: checkboxes
+    id: toggles
+    attributes:
+      label: Recommended Performance Toggles
+      options:
+        - label: "MSync / Mach Semaphores Enabled"
+        - label: "Retina / High Resolution Mode Enabled"
+        - label: "Performance HUD Useful"
+  - type: input
+    id: dependencies
+    attributes:
+      label: Required Dependencies / Verbs
+      placeholder: e.g. vcrun2022, d3dcompiler_47, corefonts
+    validations:
+      required: false
+  - type: textarea
+    id: notes
+    attributes:
+      label: Optimization Notes & Gameplay Experience
+      description: Frame rates observed, resolution, audio quality, and any launch arguments.
+    validations:
+      required: true

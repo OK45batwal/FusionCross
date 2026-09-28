@@ -262,13 +262,15 @@ fn wine_on_path() -> bool {
         }
     }
     if let Ok(home) = std::env::var("HOME").map(std::path::PathBuf::from) {
-        let p = home.join("Library/Application Support/com.isaacmarovitz.Whisky/Libraries/Wine/bin/wine64");
+        let p = home
+            .join("Library/Application Support/com.isaacmarovitz.Whisky/Libraries/Wine/bin/wine64");
         if let Ok(out) = std::process::Command::new(&p).arg("--version").output() {
             if out.status.success() {
                 return true;
             }
         }
-        let p2 = home.join("Library/Application Support/FusionCross/runtimes/whisky-wine/bin/wine64");
+        let p2 =
+            home.join("Library/Application Support/FusionCross/runtimes/whisky-wine/bin/wine64");
         if let Ok(out) = std::process::Command::new(&p2).arg("--version").output() {
             if out.status.success() {
                 return true;

@@ -17,14 +17,13 @@ pub fn new_id() -> String {
     let counter = COUNTER.fetch_add(1, Ordering::Relaxed);
     let pid = std::process::id() as u64;
 
-    let mut mix = nanos as u64 ^ (pid.wrapping_mul(0x9E3779B97F4A7C15)) ^ counter;
-    // xorshift64* to diffuse
-    mix ^= mix >> 30;
-    mix = mix.wrapping_mul(0xBF58476D1CE4E5B9);
-    mix ^= mix >> 27;
-    mix = mix.wrapping_mul(0x94D049BB133111EB);
-    mix ^= mix >> 31;
-    mix &= (1u64 << 48) - 1; // keep it to 12 hex digits
+    let mut z = (nanos as u64)
+        .wrapping_add(counter.wrapping_mul(0x9E3779B97F4A7C15))
+        .wrapping_add(pid.wrapping_mul(0x517CC1B727220A95));
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
+    z ^= z >> 31;
+    let mix = (z ^ (z >> 48)) & ((1u64 << 48) - 1); // 12 hex digits (48-bit mask)
 
     format!("{mix:012x}")
 }

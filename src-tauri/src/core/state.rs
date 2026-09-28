@@ -187,9 +187,12 @@ fn migrate(value: &mut serde_json::Value) -> Result<(), String> {
         match version {
             0 => {
                 let obj = value.as_object_mut().ok_or("state not an object")?;
-                obj.entry("applications").or_insert_with(|| serde_json::json!([]));
-                obj.entry("bottles").or_insert_with(|| serde_json::json!([]));
-                obj.entry("runtimes").or_insert_with(|| serde_json::json!([]));
+                obj.entry("applications")
+                    .or_insert_with(|| serde_json::json!([]));
+                obj.entry("bottles")
+                    .or_insert_with(|| serde_json::json!([]));
+                obj.entry("runtimes")
+                    .or_insert_with(|| serde_json::json!([]));
                 obj.insert("schema_version".into(), serde_json::json!(1));
             }
             1 => {
@@ -200,7 +203,8 @@ fn migrate(value: &mut serde_json::Value) -> Result<(), String> {
                 if let Some(apps) = obj.remove("apps") {
                     obj.entry("applications").or_insert(apps);
                 }
-                obj.entry("applications").or_insert_with(|| serde_json::json!([]));
+                obj.entry("applications")
+                    .or_insert_with(|| serde_json::json!([]));
 
                 if let Some(apps) = obj.get_mut("applications").and_then(|a| a.as_array_mut()) {
                     for ap in apps.iter_mut() {
@@ -208,11 +212,16 @@ fn migrate(value: &mut serde_json::Value) -> Result<(), String> {
                             if let Some(p) = o.remove("exe_path") {
                                 o.entry("executable_path").or_insert(p);
                             }
-                            o.entry("category").or_insert_with(|| serde_json::json!("applications"));
-                            o.entry("favorite").or_insert_with(|| serde_json::json!(false));
-                            o.entry("launch_count").or_insert_with(|| serde_json::json!(0));
-                            o.entry("play_time_mins").or_insert_with(|| serde_json::json!(0));
-                            o.entry("last_played").or_insert_with(|| serde_json::json!(null));
+                            o.entry("category")
+                                .or_insert_with(|| serde_json::json!("applications"));
+                            o.entry("favorite")
+                                .or_insert_with(|| serde_json::json!(false));
+                            o.entry("launch_count")
+                                .or_insert_with(|| serde_json::json!(0));
+                            o.entry("play_time_mins")
+                                .or_insert_with(|| serde_json::json!(0));
+                            o.entry("last_played")
+                                .or_insert_with(|| serde_json::json!(null));
                             o.entry("compatibility")
                                 .or_insert_with(|| serde_json::json!(null));
                             o.entry("profile")
@@ -262,19 +271,24 @@ fn migrate(value: &mut serde_json::Value) -> Result<(), String> {
                                             serde_json::json!([k, val_str])
                                         })
                                         .collect();
-                                    o.entry("environment").or_insert(serde_json::Value::Array(pairs));
+                                    o.entry("environment")
+                                        .or_insert(serde_json::Value::Array(pairs));
                                 }
                             }
                             o.entry("environment")
                                 .or_insert_with(|| serde_json::json!([]));
 
                             // Normalize dll_overrides
-                            if let Some(dlls) = o.get_mut("dll_overrides").and_then(|d| d.as_array_mut()) {
+                            if let Some(dlls) =
+                                o.get_mut("dll_overrides").and_then(|d| d.as_array_mut())
+                            {
                                 let mut string_dlls = Vec::new();
                                 for d in dlls.iter() {
                                     if let Some(s) = d.as_str() {
                                         string_dlls.push(serde_json::json!(s));
-                                    } else if let Some(lib) = d.get("library").and_then(|l| l.as_str()) {
+                                    } else if let Some(lib) =
+                                        d.get("library").and_then(|l| l.as_str())
+                                    {
                                         string_dlls.push(serde_json::json!(lib));
                                     }
                                 }
@@ -289,7 +303,8 @@ fn migrate(value: &mut serde_json::Value) -> Result<(), String> {
                 }
 
                 // Migrate runtimes
-                obj.entry("runtimes").or_insert_with(|| serde_json::json!([]));
+                obj.entry("runtimes")
+                    .or_insert_with(|| serde_json::json!([]));
                 if let Some(runtimes) = obj.get_mut("runtimes").and_then(|r| r.as_array_mut()) {
                     for rt in runtimes.iter_mut() {
                         if let Some(o) = rt.as_object_mut() {

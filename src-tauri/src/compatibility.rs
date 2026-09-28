@@ -19,8 +19,8 @@ pub struct GameCatalogItem {
     pub id: &'static str,
     pub title: &'static str,
     pub developer: &'static str,
-    pub category: &'static str,         // "Stores & Launchers", "Action & RPG", "Indie & Classics", "Shooters & Online", "Creative & Utilities"
-    pub tier: &'static str,             // "Platinum", "Gold", "Silver", "Blocked"
+    pub category: &'static str, // "Stores & Launchers", "Action & RPG", "Indie & Classics", "Shooters & Online", "Creative & Utilities"
+    pub tier: &'static str,     // "Platinum", "Gold", "Silver", "Blocked"
     pub compatibility: u32,
     pub graphics_backend: &'static str, // "d3dmetal", "dxvk", "wined3d"
     pub windows_version: &'static str,  // "win10", "win11", "win7"
@@ -1108,7 +1108,7 @@ pub fn recommend(app_name: &str) -> Recommendation {
     let lower = app_name.to_lowercase();
     let mut catalog = get_catalog();
     // Sort by title length descending so longer/more specific titles (e.g. "Hades II") match before substrings (e.g. "Hades")
-    catalog.sort_by(|a, b| b.title.len().cmp(&a.title.len()));
+    catalog.sort_by_key(|b| std::cmp::Reverse(b.title.len()));
 
     // 1. Check if name matches any game catalog item
     for item in &catalog {
@@ -1117,11 +1117,19 @@ pub fn recommend(app_name: &str) -> Recommendation {
         if lower.contains(&title_lower) || lower.contains(&id_lower) {
             return Recommendation {
                 profile: item.id,
-                runtime_hint: if item.graphics_backend == "d3dmetal" { "Wine-GE" } else { "Wine Stable" },
+                runtime_hint: if item.graphics_backend == "d3dmetal" {
+                    "Wine-GE"
+                } else {
+                    "Wine Stable"
+                },
                 graphics: item.graphics_backend,
                 windows_version: item.windows_version,
                 dependencies: item.dependencies.clone(),
-                launch_arguments: item.launch_arguments.iter().map(|s| s.to_string()).collect(),
+                launch_arguments: item
+                    .launch_arguments
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
                 compatibility: item.compatibility,
                 notes: vec![item.notes],
             };

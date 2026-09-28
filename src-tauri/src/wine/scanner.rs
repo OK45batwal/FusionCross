@@ -268,7 +268,12 @@ fn prettify(stem: &str) -> String {
 
 fn guess_category(path: &Path) -> String {
     let p = path.to_string_lossy().to_lowercase();
-    if p.contains("steam") || p.contains("epic") || p.contains("gog") || p.contains("battle.net") || p.contains("game") {
+    if p.contains("steam")
+        || p.contains("epic")
+        || p.contains("gog")
+        || p.contains("battle.net")
+        || p.contains("game")
+    {
         "games".to_string()
     } else {
         "applications".to_string()
