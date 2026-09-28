@@ -295,6 +295,7 @@ fn initialize_bottle_prefix(app: &AppHandle, bottle_id: &str) -> Result<String, 
     let binary = wine_binary_for(app, &bottle.runtime)?;
     let prefix = Path::new(&bottle.path);
     crate::wine::prefix::init_prefix(&binary, prefix)?;
+    crate::wine::prefix::ensure_graphics_registry(prefix, &bottle.graphics).ok();
     crate::wine::prefix::install_verbs(&binary, prefix, &bottle.dependencies)?;
     Ok("Prefix ready".to_string())
 }
@@ -419,6 +420,124 @@ pub fn reveal_in_finder(path: String) -> Result<(), FusionError> {
     }
 }
 
+/// Construct the complete Wine execution context (environment variables and DLL overrides)
+/// ensuring full support for Apple D3DMetal (GPTK), DXVK, Rosetta 2 AVX, and Mach semaphores.
+pub fn build_wine_execution_context(
+    wine_binary: &str,
+    bottle: &crate::core::state::Bottle,
+    safe_mode: bool,
+) -> (Vec<(String, String)>, String) {
+    let mut env = bottle.environment.clone();
+
+    // 1. Resolve Wine runtime root directory
+    let bin_path = Path::new(wine_binary);
+    let runtime_dir = bin_path.parent().and_then(|p| p.parent());
+
+    // 2. Dynamic Linker library paths for D3DMetal and Wine dylibs
+    if let Some(rdir) = runtime_dir {
+        let ext_dir = rdir.join("lib").join("external");
+        let lib_dir = rdir.join("lib");
+        let mut dyld_paths = Vec::new();
+        if ext_dir.exists() {
+            dyld_paths.push(ext_dir.to_string_lossy().into_owned());
+        }
+        if lib_dir.exists() {
+            dyld_paths.push(lib_dir.to_string_lossy().into_owned());
+        }
+
+        if !dyld_paths.is_empty() {
+            let joined = dyld_paths.join(":");
+            env.push(("DYLD_FALLBACK_LIBRARY_PATH".into(), joined.clone()));
+            env.push(("DYLD_LIBRARY_PATH".into(), joined));
+        }
+
+        if ext_dir.join("D3DMetal.framework").exists() {
+            let ext_str = ext_dir.to_string_lossy().into_owned();
+            env.push(("DYLD_FRAMEWORK_PATH".into(), ext_str.clone()));
+            env.push(("DYLD_FALLBACK_FRAMEWORK_PATH".into(), ext_str));
+        }
+
+        if let Some(bin_dir) = bin_path.parent() {
+            let current_path = std::env::var("PATH").unwrap_or_default();
+            env.push((
+                "PATH".into(),
+                format!("{}:{}", bin_dir.to_string_lossy(), current_path),
+            ));
+        }
+    }
+
+    // 3. Apple Silicon Rosetta 2 AVX & DXR Advertisement
+    if std::env::consts::ARCH == "aarch64" {
+        env.push(("ROSETTA_ADVERTISE_AVX".into(), "1".into()));
+        env.push(("D3DM_SUPPORT_DXR".into(), "1".into()));
+    }
+
+    // 4. Synchronization (MSync / Mach Semaphores)
+    if bottle.msync_enabled {
+        env.push(("WINEMSYNC".into(), "1".into()));
+        env.push(("WINE_MSYNC".into(), "1".into()));
+        env.push(("WINEESYNC".into(), "0".into()));
+        env.push(("WINEFSYNC".into(), "0".into()));
+    } else {
+        env.push(("WINEMSYNC".into(), "0".into()));
+        env.push(("WINE_MSYNC".into(), "0".into()));
+    }
+
+    // 5. Diagnostics HUD
+    if bottle.performance_hud && !safe_mode {
+        env.push(("MTL_HUD_ENABLED".into(), "1".into()));
+        env.push((
+            "DXVK_HUD".into(),
+            "fps,frametimes,gputemp,memory,version".into(),
+        ));
+    }
+
+    // 6. Retina High-DPI Scaling
+    if bottle.retina_mode {
+        env.push(("WINE_DPI".into(), "192".into()));
+        env.push(("ENABLE_RETINA".into(), "1".into()));
+    }
+
+    // 7. Graphics backend resolution & DLL overrides
+    let mut overrides = bottle.dll_overrides.clone();
+    let backend = if bottle.graphics.is_empty() || bottle.graphics == "automatic" {
+        if let Some(rdir) = runtime_dir {
+            if rdir.join("lib/external/D3DMetal.framework").exists() {
+                "d3dmetal"
+            } else {
+                "dxvk"
+            }
+        } else {
+            "d3dmetal"
+        }
+    } else {
+        bottle.graphics.as_str()
+    };
+
+    match backend {
+        "d3dmetal" => {
+            overrides.push("d3d11,d3d12,dxgi,d3d10core=n,b".into());
+        }
+        "dxvk" => {
+            overrides.push("d3d9,d3d10core,d3d11,dxgi=n,b".into());
+        }
+        "dxmt" => {
+            overrides.push("d3d11=n,b".into());
+        }
+        "wined3d" => {
+            overrides.push("d3d9,d3d10core,d3d11,d3d12,dxgi=b".into());
+        }
+        _ => {
+            overrides.push("d3d11,d3d12,dxgi,d3d10core=n,b".into());
+        }
+    }
+
+    overrides.push("mscoree,mshtml=".into());
+    let dll_overrides_str = overrides.join(";");
+
+    (env, dll_overrides_str)
+}
+
 #[tauri::command]
 pub fn run_command_in_bottle(
     app: AppHandle,
@@ -439,15 +558,16 @@ pub fn run_command_in_bottle(
     if !crate::wine::prefix::prefix_prepared(prefix) {
         crate::wine::prefix::init_prefix(&binary, prefix)?;
     }
+    crate::wine::prefix::ensure_graphics_registry(prefix, &bottle.graphics).ok();
+
+    let safe = settings_bool(&app, "safe_mode");
+    let (override_env, dll_overrides) = build_wine_execution_context(&binary, &bottle, safe);
 
     let mut cmd = std::process::Command::new(&binary);
     cmd.env("WINEPREFIX", prefix);
-    if bottle.msync_enabled {
-        cmd.env("WINEMSYNC", "1");
-        cmd.env("WINE_MSYNC", "1");
-    }
-    if !bottle.dll_overrides.is_empty() {
-        cmd.env("WINEDLLOVERRIDES", bottle.dll_overrides.join(";"));
+    cmd.env("WINEDLLOVERRIDES", &dll_overrides);
+    for (k, v) in override_env {
+        cmd.env(k, v);
     }
     cmd.arg(&command);
     for arg in args {
@@ -871,10 +991,12 @@ fn install_job(
     let target = target_dir.join(file_name);
     std::fs::copy(installer_path, &target).map_err(|_| FusionError::InvalidExecutable)?;
 
+    let (override_env, dll_overrides) = build_wine_execution_context(&binary, &bottle, false);
     let mut cmd = std::process::Command::new(&binary);
     cmd.env("WINEPREFIX", prefix);
-    if !bottle.dll_overrides.is_empty() {
-        cmd.env("WINEDLLOVERRIDES", bottle.dll_overrides.join(";"));
+    cmd.env("WINEDLLOVERRIDES", &dll_overrides);
+    for (k, v) in override_env {
+        cmd.env(k, v);
     }
     let status = cmd
         .arg(&target)
@@ -955,64 +1077,28 @@ pub fn launch_application(app: AppHandle, app_id: String) -> Result<RunningInfo,
     if !crate::wine::prefix::prefix_prepared(prefix) {
         crate::wine::prefix::init_prefix(&binary, prefix)?;
     }
+    crate::wine::prefix::ensure_graphics_registry(prefix, &bottle.graphics).ok();
 
     let safe = settings_bool(&app, "safe_mode");
-    let mut override_env = if safe {
-        vec![]
-    } else {
-        bottle.environment.clone()
-    };
+    let (override_env, dll_overrides) = build_wine_execution_context(&binary, &bottle, safe);
 
-    if !safe {
-        // MSync: Mach semaphore fast synchronization on macOS (PRD / CrossOver parity)
-        if bottle.msync_enabled {
-            override_env.push(("WINEMSYNC".into(), "1".into()));
-            override_env.push(("WINE_MSYNC".into(), "1".into()));
-            override_env.push(("WINEESYNC".into(), "0".into()));
-            override_env.push(("WINEFSYNC".into(), "0".into()));
-        } else {
-            override_env.push(("WINEMSYNC".into(), "0".into()));
-            override_env.push(("WINEESYNC".into(), "0".into()));
-        }
+    // Detect launch arguments: Unreal Engine games (like Raji) benefit from -dx11 to force D3D11 RHI
+    let mut launch_args = Vec::new();
+    let lower_exe = application.executable_path.to_lowercase();
+    let lower_name = application.name.to_lowercase();
+    let is_unreal_engine = lower_exe.contains("raji")
+        || lower_name.contains("raji")
+        || lower_exe.ends_with("-win64-shipping.exe")
+        || lower_exe.contains("ue4")
+        || Path::new(&application.executable_path)
+            .parent()
+            .and_then(|p| p.parent())
+            .map(|p| p.join("Engine").exists())
+            .unwrap_or(false);
 
-        // Performance HUD: Apple Metal HUD + DXVK HUD
-        if bottle.performance_hud {
-            override_env.push(("MTL_HUD_ENABLED".into(), "1".into()));
-            override_env.push((
-                "DXVK_HUD".into(),
-                "fps,frametimes,gputemp,memory,version".into(),
-            ));
-        }
-
-        // Retina mode: High-DPI display scaling
-        if bottle.retina_mode {
-            override_env.push(("WINE_DPI".into(), "192".into()));
-            override_env.push(("ENABLE_RETINA".into(), "1".into()));
-        }
+    if is_unreal_engine {
+        launch_args.push("-dx11".to_string());
     }
-
-    let dll_overrides = if safe {
-        String::new()
-    } else {
-        let mut overrides = bottle.dll_overrides.clone();
-        match bottle.graphics.as_str() {
-            "d3dmetal" => {
-                overrides.push("d3d11,d3d12,dxgi=n,b".into());
-            }
-            "dxvk" => {
-                overrides.push("d3d9,d3d10core,d3d11,dxgi=n,b".into());
-            }
-            "dxmt" => {
-                overrides.push("d3d11=n,b".into());
-            }
-            "wined3d" => {
-                overrides.push("d3d9,d3d10core,d3d11,d3d12,dxgi=b".into());
-            }
-            _ => {}
-        }
-        overrides.push("mscoree,mshtml=".into());
-        overrides.join(";")
-    };
 
     let info = pm.spawn(
         &app_id,
@@ -1021,7 +1107,7 @@ pub fn launch_application(app: AppHandle, app_id: String) -> Result<RunningInfo,
         &binary,
         &bottle.path,
         &application.executable_path,
-        &[],
+        &launch_args,
         &override_env,
         &dll_overrides,
     )?;
@@ -1127,12 +1213,12 @@ pub fn apply_fix(app: AppHandle, fix_id: String, app_id: String) -> Result<Strin
             st.with_state(|s| {
                 let app2 = s.applications.iter().find(|a| a.id == app_id).cloned().ok_or(FusionError::ApplicationNotFound)?;
                 let b = s.bottles.iter_mut().find(|b| b.id == app2.bottle_id).ok_or(FusionError::BottleNotFound)?;
-                b.dxvk_enabled = false;
-                b.graphics = "wined3d".to_string();
+                b.dxvk_enabled = true;
+                b.graphics = "d3dmetal".to_string();
                 Ok(())
             })?;
             st.save(&app)?;
-            Ok("Switched graphics to WineD3D.".into())
+            Ok("Switched graphics to D3DMetal (Apple GPTK) for full DirectX 11/12 hardware acceleration.".into())
         }
         FixIntent::EnableMsync => {
             let st = app.state::<FusionState>();
@@ -1498,4 +1584,46 @@ pub fn install_catalog_game(
     });
 
     Ok(job)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::state::Bottle;
+
+    #[test]
+    fn test_build_wine_execution_context_d3dmetal() {
+        let b = Bottle {
+            id: "b1".into(),
+            name: "Gaming Bottle".into(),
+            prefix_type: "gaming".into(),
+            runtime: "whisky-wine".into(),
+            windows_version: "win10".into(),
+            graphics: "d3dmetal".into(),
+            dxvk_enabled: true,
+            msync_enabled: true,
+            performance_hud: true,
+            retina_mode: false,
+            path: "/tmp/prefix".into(),
+            created_at: "".into(),
+            last_used_at: None,
+            environment: vec![("CUSTOM_KEY".into(), "CUSTOM_VAL".into())],
+            dll_overrides: vec!["custom_dll=n".into()],
+            dependencies: vec![],
+        };
+
+        let (env, overrides) = build_wine_execution_context("/fake/runtime/bin/wine64", &b, false);
+
+        assert!(overrides.contains("d3d11,d3d12,dxgi,d3d10core=n,b"));
+        assert!(overrides.contains("custom_dll=n"));
+        assert!(overrides.contains("mscoree,mshtml="));
+
+        let env_map: std::collections::HashMap<_, _> = env.into_iter().collect();
+        assert_eq!(env_map.get("CUSTOM_KEY"), Some(&"CUSTOM_VAL".to_string()));
+        assert_eq!(env_map.get("WINEMSYNC"), Some(&"1".to_string()));
+        assert_eq!(env_map.get("MTL_HUD_ENABLED"), Some(&"1".to_string()));
+        if std::env::consts::ARCH == "aarch64" {
+            assert_eq!(env_map.get("ROSETTA_ADVERTISE_AVX"), Some(&"1".to_string()));
+        }
+    }
 }

@@ -174,15 +174,32 @@ pub fn run_app_diagnostics(state: &AppState, app_id: &str) -> Vec<DiagnosticChec
         });
     }
 
-    // Graphics (warn-only; never blocks launch)
+    // Graphics
     if let Some(b) = bottle {
-        if b.dxvk_enabled {
+        if b.graphics == "wined3d" {
             checks.push(DiagnosticCheck {
                 id: "graphics",
                 label: "Graphics",
                 status: "warn",
-                detail: format!("DXVK is enabled on the {} backend.", b.graphics),
+                detail: "WineD3D (OpenGL 4.1) lacks DirectX 11 Feature Level 10.0+ on macOS. Switch to D3DMetal (GPTK) or DXVK for modern 3D games.".into(),
                 fix: Some(FixIntent::SwitchGraphics.id()),
+            });
+        } else {
+            checks.push(DiagnosticCheck {
+                id: "graphics",
+                label: "Graphics",
+                status: "ok",
+                detail: format!(
+                    "{} translation active with Direct3D 11/12 and Metal hardware acceleration.",
+                    if b.graphics == "d3dmetal" {
+                        "Apple D3DMetal (GPTK)"
+                    } else if b.graphics == "dxvk" {
+                        "DXVK (DirectX -> Metal/Vulkan)"
+                    } else {
+                        "Hardware-accelerated"
+                    }
+                ),
+                fix: None,
             });
         }
     }
@@ -331,6 +348,7 @@ mod tests {
         assert!(ids.contains(&"prefix"));
         assert!(ids.contains(&"executable"));
         assert!(ids.contains(&"msync"));
+        assert!(ids.contains(&"graphics"));
         // executable missing → fail
         let exe = checks.iter().find(|c| c.id == "executable").unwrap();
         assert_eq!(exe.status, "fail");
