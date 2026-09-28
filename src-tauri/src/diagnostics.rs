@@ -315,6 +315,7 @@ mod tests {
             last_played: None,
             compatibility: None,
             profile: None,
+            icon_data: None,
         });
         s
     }

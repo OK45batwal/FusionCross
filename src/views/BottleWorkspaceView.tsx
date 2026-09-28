@@ -18,6 +18,7 @@ import {
   X,
   PackagePlus,
   RefreshCw,
+  Zap,
 } from "lucide-react";
 import {
   Application,
@@ -31,6 +32,7 @@ import {
   killBottleProcesses,
   launchWineTool,
   installBottleVerb,
+  installGamingEssentials,
   repairBottle,
   updateBottle,
   cloneBottle,
@@ -90,6 +92,7 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
   const [showCloneModal, setShowCloneModal] = useState(false);
   const [cloneName, setCloneName] = useState(`${bottle.name} (Copy)`);
   const [scanning, setScanning] = useState(false);
+  const [installingEssentials, setInstallingEssentials] = useState(false);
 
   // Filter apps belonging to this bottle
   const bottleApps = applications.filter((a) => a.bottle_id === bottle.id);
@@ -102,6 +105,21 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
   const isBottleRunning = runningAppsInBottle.length > 0;
 
   // Handlers
+  const handleInstallEssentials = async () => {
+    setInstallingEssentials(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await installGamingEssentials(bottle.id);
+      setNotice(res);
+      await onRefreshState();
+    } catch (e) {
+      setError((e as FusionErrorPayload).message || "Failed to install gaming essentials.");
+    } finally {
+      setInstallingEssentials(false);
+    }
+  };
+
   const handleScanBottle = async () => {
     setScanning(true);
     try {
@@ -479,9 +497,17 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-9 h-9 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] flex items-center justify-center font-bold text-[14px] text-[var(--accent-primary)] shrink-0">
-                          {app.name.charAt(0).toUpperCase()}
-                        </div>
+                        {app.icon_data ? (
+                          <img
+                            src={app.icon_data}
+                            alt={app.name}
+                            className="w-9 h-9 rounded-lg object-contain bg-[var(--bg-elevated)] p-1 border border-[var(--border-color)] shrink-0 shadow-xs"
+                          />
+                        ) : (
+                          <div className="w-9 h-9 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] flex items-center justify-center font-bold text-[14px] text-[var(--accent-primary)] shrink-0">
+                            {app.name.charAt(0).toUpperCase()}
+                          </div>
+                        )}
                         <div className="min-w-0">
                           <p className="text-[13px] font-semibold text-[var(--text-main)] truncate">
                             {app.name}
@@ -673,6 +699,36 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Gaming Essentials 1-Click Installer */}
+          <div className="p-3 rounded-xl bg-gradient-to-br from-[var(--accent-primary)]/10 via-[var(--bg-elevated)] to-[var(--bg-elevated)] border border-[var(--accent-primary)]/20 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-[12px] text-[var(--text-main)] flex items-center gap-1.5">
+                <Zap className="w-3.5 h-3.5 text-[var(--accent-primary)] fill-current" /> Gaming Essentials
+              </span>
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--accent-primary)]/20 text-[var(--accent-primary)] font-semibold">1-Click</span>
+            </div>
+            <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+              Installs DirectX 9, VC++ 2015-2022 runtimes, and CoreFonts to prevent DLL launch crashes.
+            </p>
+            <button
+              onClick={handleInstallEssentials}
+              disabled={installingEssentials}
+              className="w-full py-1.5 px-3 rounded-lg bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-[11px] font-mono font-bold flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-50"
+            >
+              {installingEssentials ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Installing Runtimes...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Install Essentials</span>
+                </>
+              )}
+            </button>
           </div>
 
           {/* Bottle Maintenance Actions */}

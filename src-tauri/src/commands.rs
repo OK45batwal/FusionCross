@@ -627,6 +627,7 @@ pub fn scan_bottle(app: AppHandle, bottle_id: String) -> Result<Vec<DiscoveredEx
             let full_path = Path::new(&bottle.path).join(&exe.rel_path).to_string_lossy().into_owned();
             if !s.applications.iter().any(|a| a.bottle_id == bottle_id && a.executable_path == full_path) {
                 let rec = compatibility::recommend(&exe.name);
+                let icon_data = crate::wine::icon::extract_icon_data_url(Path::new(&full_path));
                 s.applications.push(Application {
                     id: new_id(),
                     bottle_id: bottle_id.clone(),
@@ -639,6 +640,7 @@ pub fn scan_bottle(app: AppHandle, bottle_id: String) -> Result<Vec<DiscoveredEx
                     last_played: None,
                     compatibility: Some(rec.compatibility),
                     profile: Some(rec.profile.to_string()),
+                    icon_data,
                 });
             }
         }
@@ -661,6 +663,7 @@ pub fn scan_all_bottles(app: AppHandle) -> Result<usize, FusionError> {
                 let full_path = Path::new(&bottle.path).join(&exe.rel_path).to_string_lossy().into_owned();
                 if !s.applications.iter().any(|a| a.bottle_id == bottle.id && (a.executable_path == full_path || a.name == exe.name)) {
                     let rec = compatibility::recommend(&exe.name);
+                    let icon_data = crate::wine::icon::extract_icon_data_url(Path::new(&full_path));
                     s.applications.push(Application {
                         id: new_id(),
                         bottle_id: bottle.id.clone(),
@@ -673,6 +676,7 @@ pub fn scan_all_bottles(app: AppHandle) -> Result<usize, FusionError> {
                         last_played: None,
                         compatibility: Some(rec.compatibility),
                         profile: Some(rec.profile.to_string()),
+                        icon_data,
                     });
                     total_added += 1;
                 }
@@ -688,6 +692,63 @@ pub fn scan_all_bottles(app: AppHandle) -> Result<usize, FusionError> {
 }
 
 #[tauri::command]
+pub fn extract_installer_icon(path: String) -> Result<Option<String>, FusionError> {
+    Ok(crate::wine::icon::extract_icon_data_url(Path::new(&path)))
+}
+
+#[tauri::command]
+pub fn install_gaming_essentials(
+    app: AppHandle,
+    bottle_id: String,
+) -> Result<String, FusionError> {
+    let verbs = vec![
+        "vcrun2022".to_string(),
+        "d3dx9".to_string(),
+        "d3dcompiler_47".to_string(),
+        "corefonts".to_string(),
+    ];
+    let st = app.state::<FusionState>();
+    let bottle = st.with_state(|s| {
+        s.bottles
+            .iter()
+            .find(|b| b.id == bottle_id)
+            .cloned()
+            .ok_or(FusionError::BottleNotFound)
+    })?;
+    let binary = wine_binary_for(&app, &bottle.runtime)?;
+    let prefix = PathBuf::from(&bottle.path);
+
+    let jobs = app.state::<Jobs>();
+    let job = jobs.begin(format!("Installing Gaming Essentials into {}", bottle.name));
+    let job_id = job.clone();
+    let handle = app.clone();
+    let bottle_id_clone = bottle_id.clone();
+
+    std::thread::spawn(move || {
+        let jobs = handle.state::<Jobs>();
+        match crate::wine::prefix::install_verbs(&binary, &prefix, &verbs) {
+            Ok(()) => {
+                let st = handle.state::<FusionState>();
+                let _ = st.with_state(|s| {
+                    if let Some(b) = s.bottles.iter_mut().find(|b| b.id == bottle_id_clone) {
+                        for v in &verbs {
+                            if !b.dependencies.contains(v) {
+                                b.dependencies.push(v.clone());
+                            }
+                        }
+                    }
+                    Ok(())
+                });
+                let _ = st.save(&handle);
+                jobs.finish(&job_id, "Installed Gaming Essentials (DirectX, VC++ 2022, Core Fonts).".into());
+            }
+            Err(e) => jobs.fail(&job_id, format!("Gaming Essentials install failed: {e}")),
+        }
+    });
+    Ok(job)
+}
+
+#[tauri::command]
 pub fn register_application(
     app: AppHandle,
     bottle_id: String,
@@ -697,6 +758,7 @@ pub fn register_application(
 ) -> Result<Application, FusionError> {
     let st = app.state::<FusionState>();
     let rec = compatibility::recommend(&name);
+    let icon_data = crate::wine::icon::extract_icon_data_url(Path::new(&executable_path));
     let application = st.with_state(|s| {
         if let Some(existing) = s
             .applications
@@ -705,6 +767,9 @@ pub fn register_application(
         {
             existing.executable_path = executable_path;
             existing.name = name;
+            if existing.icon_data.is_none() {
+                existing.icon_data = icon_data;
+            }
             return Ok(existing.clone());
         }
         let app = Application {
@@ -719,6 +784,7 @@ pub fn register_application(
             last_played: None,
             compatibility: Some(rec.compatibility),
             profile: Some(rec.profile.to_string()),
+            icon_data,
         };
         s.applications.push(app.clone());
         Ok(app)
@@ -813,6 +879,7 @@ fn install_job(
                 last_played: None,
                 compatibility: None,
                 profile: None,
+                icon_data: crate::wine::icon::extract_icon_data_url(&prefix.join(&exe.rel_path)),
             });
             registered += 1;
         }

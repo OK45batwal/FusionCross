@@ -120,6 +120,9 @@ pub struct Application {
     /// Compatibility profile hint learned/applied for this app (e.g. "photoshop")
     #[serde(default)]
     pub profile: Option<String>,
+    /// Base64 data URL of the application's embedded icon
+    #[serde(default)]
+    pub icon_data: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

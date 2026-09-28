@@ -3,6 +3,7 @@ import {
   Bottle,
   analyzeInstaller,
   InstallerAnalysis,
+  extractInstallerIcon,
   runCommandInBottle,
   registerApplication,
   scanBottle,
@@ -45,6 +46,7 @@ export function DroppedFileModal({
   const [executing, setExecuting] = useState(false);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [installerIcon, setInstallerIcon] = useState<string | null>(null);
 
   // New bottle inline creation
   const [creatingNewBottle, setCreatingNewBottle] = useState(false);
@@ -57,6 +59,8 @@ export function DroppedFileModal({
     let active = true;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- async analysis reset on filePath change
     setAnalyzing(true);
+    setInstallerIcon(null);
+
     analyzeInstaller(filePath)
       .then((res) => {
         if (active) {
@@ -70,6 +74,14 @@ export function DroppedFileModal({
           setAnalyzing(false);
         }
       });
+
+    extractInstallerIcon(filePath)
+      .then((icon) => {
+        if (active && icon) {
+          setInstallerIcon(icon);
+        }
+      })
+      .catch(() => {});
 
     return () => {
       active = false;
@@ -158,9 +170,17 @@ export function DroppedFileModal({
         {/* Header */}
         <div className="flex items-start justify-between pb-4 border-b border-[var(--border-color)]">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[var(--accent)]/10 border border-[var(--accent)]/20 flex items-center justify-center text-[var(--accent)]">
-              <FileCode className="w-5 h-5" />
-            </div>
+            {installerIcon ? (
+              <img
+                src={installerIcon}
+                alt={fileName}
+                className="w-10 h-10 rounded-xl object-contain bg-[var(--bg-subtle)] p-1 border border-[var(--border-color)] shadow-xs shrink-0"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-xl bg-[var(--accent)]/10 border border-[var(--accent)]/20 flex items-center justify-center text-[var(--accent)] shrink-0">
+                <FileCode className="w-5 h-5" />
+              </div>
+            )}
             <div>
               <h3 className="text-[16px] font-semibold text-[var(--text-primary)] tracking-tight">
                 Inspect Dropped File

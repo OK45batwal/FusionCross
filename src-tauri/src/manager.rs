@@ -111,6 +111,7 @@ impl FusionState {
                 let full_path = std::path::Path::new(&bottle.path).join(&exe.rel_path).to_string_lossy().into_owned();
                 if !state.applications.iter().any(|a| a.bottle_id == bottle.id && (a.executable_path == full_path || a.name == exe.name)) {
                     let rec = crate::compatibility::recommend(&exe.name);
+                    let icon_data = crate::wine::icon::extract_icon_data_url(std::path::Path::new(&full_path));
                     state.applications.push(crate::core::state::Application {
                         id: crate::core::ids::new_id(),
                         bottle_id: bottle.id.clone(),
@@ -123,6 +124,7 @@ impl FusionState {
                         last_played: None,
                         compatibility: Some(rec.compatibility),
                         profile: Some(rec.profile.to_string()),
+                        icon_data,
                     });
                 }
             }
@@ -135,6 +137,13 @@ impl FusionState {
                 && !app.executable_path.contains("/site-packages/")
                 && std::path::Path::new(&app.executable_path).exists()
         });
+
+        // Ensure all valid applications have icons extracted
+        for app_entry in &mut state.applications {
+            if app_entry.icon_data.is_none() {
+                app_entry.icon_data = crate::wine::icon::extract_icon_data_url(std::path::Path::new(&app_entry.executable_path));
+            }
+        }
 
         let st = Self(Mutex::new(state));
         st.save(app).ok();

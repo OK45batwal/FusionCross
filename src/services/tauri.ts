@@ -50,6 +50,7 @@ export interface Application {
   last_played: string | null;
   compatibility?: number;
   profile?: string;
+  icon_data?: string | null;
 }
 
 export interface Runtime {
@@ -189,8 +190,10 @@ export const runCommandInBottle = (
 export const repairBottle = (bottleId: string) => invoke<string>("repair_bottle", { bottleId });
 
 export const analyzeInstaller = (path: string) => invoke<InstallerAnalysis>("analyze_installer", { path });
+export const extractInstallerIcon = (path: string) => invoke<string | null>("extract_installer_icon", { path });
 export const scanBottle = (bottleId: string) => invoke<DiscoveredExe[]>("scan_bottle", { bottleId });
 export const scanAllBottles = () => invoke<number>("scan_all_bottles");
+export const installGamingEssentials = (bottleId: string) => invoke<string>("install_gaming_essentials", { bottleId });
 export const registerApplication = (
   bottleId: string,
   name: string,

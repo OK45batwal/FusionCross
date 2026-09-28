@@ -224,9 +224,17 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                   <div>
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div className="flex items-center gap-2">
-                        <span className="w-8 h-8 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] flex items-center justify-center font-mono font-bold text-[var(--accent-primary)] text-[14px]">
-                          {app.name.charAt(0).toUpperCase()}
-                        </span>
+                        {app.icon_data ? (
+                          <img
+                            src={app.icon_data}
+                            alt={app.name}
+                            className="w-8 h-8 rounded-lg object-contain bg-[var(--bg-elevated)] p-1 border border-[var(--border-color)] shrink-0 shadow-xs"
+                          />
+                        ) : (
+                          <span className="w-8 h-8 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] flex items-center justify-center font-mono font-bold text-[var(--accent-primary)] text-[14px] shrink-0">
+                            {app.name.charAt(0).toUpperCase()}
+                          </span>
+                        )}
                         <div>
                           <h3 className="text-[14px] font-bold text-[var(--text-main)] truncate max-w-[140px]">
                             {app.name}
@@ -319,9 +327,17 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                   className="p-3 hover:bg-[var(--bg-elevated)] transition-colors flex items-center justify-between cursor-pointer"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="w-8 h-8 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] flex items-center justify-center font-mono font-bold text-[var(--accent-primary)] text-[13px]">
-                      {app.name.charAt(0).toUpperCase()}
-                    </span>
+                    {app.icon_data ? (
+                      <img
+                        src={app.icon_data}
+                        alt={app.name}
+                        className="w-8 h-8 rounded-lg object-contain bg-[var(--bg-elevated)] p-1 border border-[var(--border-color)] shrink-0 shadow-xs"
+                      />
+                    ) : (
+                      <span className="w-8 h-8 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] flex items-center justify-center font-mono font-bold text-[var(--accent-primary)] text-[13px] shrink-0">
+                        {app.name.charAt(0).toUpperCase()}
+                      </span>
+                    )}
                     <div>
                       <h4 className="text-[13px] font-bold text-[var(--text-main)]">{app.name}</h4>
                       <p className="text-[11px] font-mono text-[var(--text-secondary)]">
@@ -382,9 +398,17 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
           <div className="w-full max-w-lg rounded-2xl border border-[var(--border-color)] bg-[var(--bg-surface)] p-6 shadow-2xl space-y-5">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
-                <span className="w-10 h-10 rounded-xl bg-[var(--accent-primary)]/10 border border-[var(--accent-primary)]/30 flex items-center justify-center font-mono font-bold text-[var(--accent-primary)] text-[18px]">
-                  {selectedApp.name.charAt(0).toUpperCase()}
-                </span>
+                {selectedApp.icon_data ? (
+                  <img
+                    src={selectedApp.icon_data}
+                    alt={selectedApp.name}
+                    className="w-12 h-12 rounded-xl object-contain bg-[var(--bg-elevated)] p-1.5 border border-[var(--border-color)] shadow-sm shrink-0"
+                  />
+                ) : (
+                  <span className="w-10 h-10 rounded-xl bg-[var(--accent-primary)]/10 border border-[var(--accent-primary)]/30 flex items-center justify-center font-mono font-bold text-[var(--accent-primary)] text-[18px] shrink-0">
+                    {selectedApp.name.charAt(0).toUpperCase()}
+                  </span>
+                )}
                 <div>
                   <h3 className="text-[18px] font-bold text-[var(--text-main)]">{selectedApp.name}</h3>
                   <p className="text-[12px] font-mono text-[var(--text-secondary)]">
