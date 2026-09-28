@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Play,
   Square,
@@ -19,6 +19,7 @@ import {
   PackagePlus,
   RefreshCw,
   Zap,
+  MoreVertical,
 } from "lucide-react";
 import {
   Application,
@@ -42,6 +43,7 @@ import {
   deleteSnapshot,
   exportAppBundle,
   scanBottle,
+  unregisterApplication,
   FusionErrorPayload,
 } from "../services/tauri";
 
@@ -93,6 +95,13 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
   const [cloneName, setCloneName] = useState(`${bottle.name} (Copy)`);
   const [scanning, setScanning] = useState(false);
   const [installingEssentials, setInstallingEssentials] = useState(false);
+  const [menuAppId, setMenuAppId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleCloseMenu = () => setMenuAppId(null);
+    window.addEventListener("click", handleCloseMenu);
+    return () => window.removeEventListener("click", handleCloseMenu);
+  }, []);
 
   // Filter apps belonging to this bottle
   const bottleApps = applications.filter((a) => a.bottle_id === bottle.id);
@@ -267,6 +276,16 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
       await revealInFinder(path);
     } catch (e) {
       setError((e as FusionErrorPayload).message || "Reveal failed.");
+    }
+  };
+
+  const handleUnregisterApp = async (appId: string, appName: string) => {
+    try {
+      await unregisterApplication(appId);
+      await onRefreshState();
+      setNotice(`Removed "${appName}" from library.`);
+    } catch (e) {
+      setError((e as FusionErrorPayload).message || "Failed to remove application.");
     }
   };
 
@@ -486,85 +505,169 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
               </div>
             </div>
           ) : (
-            /* Applications Grid */
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            /* CrossOver Native Application Shelf (Icon Grid) */
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 pt-2">
               {filteredApps.map((app) => {
                 const isRunning = runningInfo.some((r) => r.app_id === app.id);
+                const isMenuOpen = menuAppId === app.id;
                 return (
                   <div
                     key={app.id}
-                    className="p-4 rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] hover:border-[var(--border-hover)] transition-all flex flex-col justify-between space-y-3 group shadow-xs"
+                    onDoubleClick={() => onLaunchApp(app.id)}
+                    className="group relative flex flex-col items-center p-3.5 rounded-2xl border border-transparent hover:border-[var(--border-color)] hover:bg-[var(--bg-surface)] hover:shadow-sm transition-all duration-150 cursor-pointer select-none text-center"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-3 min-w-0">
-                        {app.icon_data ? (
-                          <img
-                            src={app.icon_data}
-                            alt={app.name}
-                            className="w-9 h-9 rounded-lg object-contain bg-[var(--bg-elevated)] p-1 border border-[var(--border-color)] shrink-0 shadow-xs"
-                          />
+                    {/* App Icon (macOS Launchpad / CrossOver style 64x64) */}
+                    <div className="relative w-16 h-16 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-color)] shadow-xs flex items-center justify-center overflow-hidden transition-transform duration-200 group-hover:scale-105">
+                      {app.icon_data ? (
+                        <img
+                          src={app.icon_data}
+                          alt={app.name}
+                          className="w-full h-full object-contain p-2"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center font-bold text-[22px] text-[var(--accent-primary)] bg-gradient-to-br from-[var(--bg-elevated)] to-[var(--bg-surface)]">
+                          {app.name.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+
+                      {/* Running Indicator (Green status dot) */}
+                      {isRunning && (
+                        <span
+                          title="Application is running"
+                          className="absolute top-1 right-1 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[var(--bg-surface)] shadow-xs animate-pulse"
+                        />
+                      )}
+
+                      {/* Hover Quick Launch Scrim */}
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isRunning) {
+                            onStopApp(app.id);
+                          } else {
+                            onLaunchApp(app.id);
+                          }
+                        }}
+                        className="absolute inset-0 bg-black/40 backdrop-blur-[1px] opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer"
+                        title={isRunning ? "Stop Application" : "Launch Application"}
+                      >
+                        {isRunning ? (
+                          <div className="w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center shadow-md">
+                            <Square className="w-3.5 h-3.5 fill-current" />
+                          </div>
                         ) : (
-                          <div className="w-9 h-9 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] flex items-center justify-center font-bold text-[14px] text-[var(--accent-primary)] shrink-0">
-                            {app.name.charAt(0).toUpperCase()}
+                          <div className="w-8 h-8 rounded-full bg-[var(--accent-primary)] text-white flex items-center justify-center shadow-md">
+                            <Play className="w-4 h-4 fill-current ml-0.5" />
                           </div>
                         )}
-                        <div className="min-w-0">
-                          <p className="text-[13px] font-semibold text-[var(--text-main)] truncate">
-                            {app.name}
-                          </p>
-                          <p className="text-[11px] font-mono text-[var(--text-muted)] capitalize truncate">
-                            {app.category}
-                          </p>
-                        </div>
                       </div>
+                    </div>
 
+                    {/* App Title */}
+                    <div className="mt-2.5 max-w-[120px] w-full">
+                      <p
+                        className="text-[12.5px] font-medium text-[var(--text-main)] truncate leading-tight group-hover:text-[var(--accent-primary)] transition-colors"
+                        title={app.name}
+                      >
+                        {app.name}
+                      </p>
+                      <p className="text-[10px] font-mono text-[var(--text-muted)] capitalize truncate mt-0.5">
+                        {app.category}
+                      </p>
+                    </div>
+
+                    {/* Context Menu Button */}
+                    <div className="absolute top-1.5 right-1.5">
                       <button
-                        onClick={() => onToggleFavorite(app.id)}
-                        title={app.favorite ? "Favorited" : "Add to favorites"}
-                        className={`p-1 rounded hover:bg-[var(--bg-elevated)] transition-colors cursor-pointer ${
-                          app.favorite ? "text-rose-500" : "text-[var(--text-muted)]"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMenuAppId(isMenuOpen ? null : app.id);
+                        }}
+                        className={`p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-elevated)] transition-colors cursor-pointer ${
+                          isMenuOpen ? "opacity-100 bg-[var(--bg-elevated)] text-[var(--text-main)]" : "opacity-0 group-hover:opacity-100"
                         }`}
+                        title="Options"
                       >
-                        <Heart className="w-3.5 h-3.5 fill-current" />
+                        <MoreVertical className="w-3.5 h-3.5" />
                       </button>
-                    </div>
 
-                    <div className="pt-2 border-t border-[var(--border-color)] flex items-center justify-between text-[11px] font-mono text-[var(--text-muted)]">
-                      <span>Played {app.launch_count} times</span>
-                      {isRunning ? (
-                        <button
-                          onClick={() => onStopApp(app.id)}
-                          className="px-3 py-1 rounded-md bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 text-[11px] font-mono font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                      {/* Dropdown Menu */}
+                      {isMenuOpen && (
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute right-0 top-7 w-48 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-color)] shadow-xl py-1 z-30 text-left text-[12px] font-mono animate-in fade-in zoom-in-95 duration-100"
                         >
-                          <Square className="w-3 h-3 fill-current" /> Stop
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => onLaunchApp(app.id)}
-                          className="px-3 py-1 rounded-md bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-[11px] font-medium flex items-center gap-1 shadow-xs transition-colors cursor-pointer"
-                        >
-                          <Play className="w-3 h-3 fill-current" /> Launch
-                        </button>
+                          {isRunning ? (
+                            <button
+                              onClick={() => {
+                                onStopApp(app.id);
+                                setMenuAppId(null);
+                              }}
+                              className="w-full px-3 py-1.5 hover:bg-red-500/10 text-red-500 flex items-center gap-2 cursor-pointer transition-colors"
+                            >
+                              <Square className="w-3.5 h-3.5 fill-current" />
+                              <span>Stop Application</span>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                onLaunchApp(app.id);
+                                setMenuAppId(null);
+                              }}
+                              className="w-full px-3 py-1.5 hover:bg-[var(--bg-surface)] text-[var(--text-main)] flex items-center gap-2 cursor-pointer transition-colors"
+                            >
+                              <Play className="w-3.5 h-3.5 fill-current text-[var(--accent-primary)]" />
+                              <span>Launch Application</span>
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => {
+                              onToggleFavorite(app.id);
+                              setMenuAppId(null);
+                            }}
+                            className="w-full px-3 py-1.5 hover:bg-[var(--bg-surface)] text-[var(--text-main)] flex items-center gap-2 cursor-pointer transition-colors"
+                          >
+                            <Heart className={`w-3.5 h-3.5 ${app.favorite ? "fill-red-500 text-red-500" : "text-[var(--text-muted)]"}`} />
+                            <span>{app.favorite ? "Favorited" : "Favorite"}</span>
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              handleExportApp(app.id, app.name);
+                              setMenuAppId(null);
+                            }}
+                            className="w-full px-3 py-1.5 hover:bg-[var(--bg-surface)] text-[var(--text-main)] flex items-center gap-2 cursor-pointer transition-colors"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                            <span>Export as Mac App</span>
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              handleReveal(app.executable_path);
+                              setMenuAppId(null);
+                            }}
+                            className="w-full px-3 py-1.5 hover:bg-[var(--bg-surface)] text-[var(--text-main)] flex items-center gap-2 cursor-pointer transition-colors"
+                          >
+                            <FolderOpen className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                            <span>Reveal in Finder</span>
+                          </button>
+
+                          <div className="my-1 border-t border-[var(--border-color)]" />
+
+                          <button
+                            onClick={() => {
+                              handleUnregisterApp(app.id, app.name);
+                              setMenuAppId(null);
+                            }}
+                            className="w-full px-3 py-1.5 hover:bg-red-500/10 text-red-500 flex items-center gap-2 cursor-pointer transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Remove from Shelf</span>
+                          </button>
+                        </div>
                       )}
-                    </div>
-
-                    {/* Secondary Actions Row */}
-                    <div className="flex items-center gap-1.5 pt-1 text-[11px] text-[var(--text-muted)]">
-                      <button
-                        onClick={() => handleExportApp(app.id, app.name)}
-                        className="hover:text-[var(--text-main)] transition-colors flex items-center gap-1 cursor-pointer"
-                        title="Create macOS .app launcher in ~/Applications/FusionCross"
-                      >
-                        <ExternalLink className="w-3 h-3" /> Export Mac App
-                      </button>
-                      <span>·</span>
-                      <button
-                        onClick={() => handleReveal(app.executable_path)}
-                        className="hover:text-[var(--text-main)] transition-colors flex items-center gap-1 cursor-pointer"
-                        title="Reveal in macOS Finder"
-                      >
-                        <FolderOpen className="w-3 h-3" /> Finder
-                      </button>
                     </div>
                   </div>
                 );

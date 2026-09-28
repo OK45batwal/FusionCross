@@ -130,12 +130,15 @@ impl FusionState {
             }
         }
 
-        // Clean up any bogus applications (such as symlinks escaping to dosdevices/z: or non-existent files)
+        // Clean up any bogus applications (such as symlinks escaping to dosdevices/z:, non-existent files,
+        // or helper/installer/uninstaller binaries that should not appear on the user's shelf)
         state.applications.retain(|app| {
+            let p = std::path::Path::new(&app.executable_path);
             !app.executable_path.contains("dosdevices/z:")
                 && !app.executable_path.contains("/opt/homebrew/")
                 && !app.executable_path.contains("/site-packages/")
-                && std::path::Path::new(&app.executable_path).exists()
+                && p.exists()
+                && !crate::wine::scanner::is_ignored_exe(p)
         });
 
         // Ensure all valid applications have icons extracted

@@ -7,15 +7,24 @@ import {
   Square,
   Heart,
   Activity,
-  AlertTriangle,
   AppWindow,
-  Clock,
-  CheckCircle2,
   X,
   Share,
   RefreshCw,
+  MoreVertical,
+  Trash2,
+  FolderOpen,
+  ExternalLink,
 } from "lucide-react";
-import { Application, Bottle, RunningInfo, exportAppBundle, scanAllBottles } from "../services/tauri";
+import {
+  Application,
+  Bottle,
+  RunningInfo,
+  exportAppBundle,
+  scanAllBottles,
+  revealInFinder,
+  unregisterApplication,
+} from "../services/tauri";
 import { ViewId } from "../components/Sidebar";
 
 interface ApplicationsViewProps {
@@ -47,6 +56,13 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
   const [selectedApp, setSelectedApp] = useState<Application | null>(null);
   const [exportStatus, setExportStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [menuAppId, setMenuAppId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleCloseMenu = () => setMenuAppId(null);
+    window.addEventListener("click", handleCloseMenu);
+    return () => window.removeEventListener("click", handleCloseMenu);
+  }, []);
 
   const handleScanAll = async () => {
     setScanning(true);
@@ -76,6 +92,24 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bottles.length, applications.length]);
+
+  const handleUnregisterApp = async (appId: string) => {
+    try {
+      await unregisterApplication(appId);
+      if (onRefreshState) await onRefreshState();
+      if (selectedApp?.id === appId) setSelectedApp(null);
+    } catch {
+      // handled
+    }
+  };
+
+  const handleReveal = async (path: string) => {
+    try {
+      await revealInFinder(path);
+    } catch {
+      // handled
+    }
+  };
 
   const categories = ["all", "games", "productivity", "utilities", "applications"];
 
@@ -206,108 +240,176 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
             </div>
           </div>
         ) : viewMode === "grid" ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 pt-2">
             {filtered.map((app) => {
               const active = isRunning(app.id);
-              const score = app.compatibility ?? 88;
+              const isMenuOpen = menuAppId === app.id;
               return (
                 <div
                   key={app.id}
                   onClick={() => setSelectedApp(app)}
-                  className={`group rounded-xl border p-4 transition-all cursor-pointer flex flex-col justify-between relative ${
-                    active
-                      ? "bg-[var(--color-ok-glow)] border-[var(--color-ok)]/50 shadow-md"
-                      : "bg-[var(--bg-surface)] border-[var(--border-color)] hover:border-[var(--border-hover)] hover:-translate-y-0.5"
-                  }`}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    if (active) onStopApp(app.id);
+                    else onLaunchApp(app.id);
+                  }}
+                  className="group relative flex flex-col items-center p-3.5 rounded-2xl border border-transparent hover:border-[var(--border-color)] hover:bg-[var(--bg-surface)] hover:shadow-sm transition-all duration-150 cursor-pointer select-none text-center"
                 >
-                  {/* Card Header */}
-                  <div>
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-2">
-                        {app.icon_data ? (
-                          <img
-                            src={app.icon_data}
-                            alt={app.name}
-                            className="w-8 h-8 rounded-lg object-contain bg-[var(--bg-elevated)] p-1 border border-[var(--border-color)] shrink-0 shadow-xs"
-                          />
-                        ) : (
-                          <span className="w-8 h-8 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] flex items-center justify-center font-mono font-bold text-[var(--accent-primary)] text-[14px] shrink-0">
-                            {app.name.charAt(0).toUpperCase()}
-                          </span>
-                        )}
-                        <div>
-                          <h3 className="text-[14px] font-bold text-[var(--text-main)] truncate max-w-[140px]">
-                            {app.name}
-                          </h3>
-                          <p className="text-[10px] font-mono text-[var(--text-muted)]">
-                            {getBottleName(app.bottle_id)}
-                          </p>
-                        </div>
+                  {/* App Icon (macOS Launchpad / CrossOver style 64x64) */}
+                  <div className="relative w-16 h-16 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-color)] shadow-xs flex items-center justify-center overflow-hidden transition-transform duration-200 group-hover:scale-105">
+                    {app.icon_data ? (
+                      <img
+                        src={app.icon_data}
+                        alt={app.name}
+                        className="w-full h-full object-contain p-2"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center font-bold text-[22px] text-[var(--accent-primary)] bg-gradient-to-br from-[var(--bg-elevated)] to-[var(--bg-surface)]">
+                        {app.name.charAt(0).toUpperCase()}
                       </div>
+                    )}
 
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onToggleFavorite(app.id);
-                        }}
-                        className={`p-1 rounded transition-colors ${
-                          app.favorite ? "text-red-500" : "text-[var(--text-muted)] hover:text-[var(--text-main)]"
-                        }`}
-                      >
-                        <Heart className={`w-4 h-4 ${app.favorite ? "fill-current" : ""}`} />
-                      </button>
-                    </div>
+                    {/* Running Indicator (Green status dot) */}
+                    {active && (
+                      <span
+                        title="Application is running"
+                        className="absolute top-1 right-1 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[var(--bg-surface)] shadow-xs animate-pulse"
+                      />
+                    )}
 
-                    {/* Status badges */}
-                    <div className="flex items-center gap-2 mt-3">
+                    {/* Hover Quick Launch Scrim */}
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (active) {
+                          onStopApp(app.id);
+                        } else {
+                          onLaunchApp(app.id);
+                        }
+                      }}
+                      className="absolute inset-0 bg-black/40 backdrop-blur-[1px] opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer"
+                      title={active ? "Stop Application" : "Launch Application"}
+                    >
                       {active ? (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-[var(--color-ok-glow)] text-[var(--color-ok)] border border-[var(--color-ok)]/30 flex items-center gap-1 animate-pulse">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-ok)]" /> RUNNING
-                        </span>
+                        <div className="w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center shadow-md">
+                          <Square className="w-3.5 h-3.5 fill-current" />
+                        </div>
                       ) : (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-color)]">
-                          {app.category}
-                        </span>
-                      )}
-
-                      {score < 75 ? (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-amber-500/10 text-amber-500 border border-amber-500/30 flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3" /> {score}% Compat
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-[var(--color-ok-glow)] text-[var(--color-ok)] border border-[var(--color-ok)]/30 flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" /> {score}% Compat
-                        </span>
+                        <div className="w-8 h-8 rounded-full bg-[var(--accent-primary)] text-white flex items-center justify-center shadow-md">
+                          <Play className="w-4 h-4 fill-current ml-0.5" />
+                        </div>
                       )}
                     </div>
                   </div>
 
-                  {/* Card Footer Actions */}
-                  <div className="mt-4 pt-3 border-t border-[var(--border-color)] flex items-center justify-between">
-                    <span className="text-[10px] font-mono text-[var(--text-muted)] flex items-center gap-1">
-                      <Clock className="w-3 h-3" /> {app.launch_count} launches
-                    </span>
+                  {/* App Title */}
+                  <div className="mt-2.5 max-w-[120px] w-full">
+                    <p
+                      className="text-[12.5px] font-medium text-[var(--text-main)] truncate leading-tight group-hover:text-[var(--accent-primary)] transition-colors"
+                      title={app.name}
+                    >
+                      {app.name}
+                    </p>
+                    <p className="text-[10px] font-mono text-[var(--text-muted)] truncate mt-0.5">
+                      {getBottleName(app.bottle_id)}
+                    </p>
+                  </div>
 
-                    {active ? (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onStopApp(app.id);
-                        }}
-                        className="px-3 py-1 rounded bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 text-red-500 text-[11px] font-mono font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                  {/* Context Menu Button */}
+                  <div className="absolute top-1.5 right-1.5">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMenuAppId(isMenuOpen ? null : app.id);
+                      }}
+                      className={`p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-elevated)] transition-colors cursor-pointer ${
+                        isMenuOpen ? "opacity-100 bg-[var(--bg-elevated)] text-[var(--text-main)]" : "opacity-0 group-hover:opacity-100"
+                      }`}
+                      title="Options"
+                    >
+                      <MoreVertical className="w-3.5 h-3.5" />
+                    </button>
+
+                    {/* Dropdown Menu */}
+                    {isMenuOpen && (
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute right-0 top-7 w-48 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-color)] shadow-xl py-1 z-30 text-left text-[12px] font-mono animate-in fade-in zoom-in-95 duration-100"
                       >
-                        <Square className="w-3 h-3 fill-current" /> STOP
-                      </button>
-                    ) : (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onLaunchApp(app.id);
-                        }}
-                        className="px-3 py-1 rounded bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-[11px] font-mono font-bold flex items-center gap-1 transition-colors cursor-pointer"
-                      >
-                        <Play className="w-3 h-3 fill-current" /> LAUNCH
-                      </button>
+                        {active ? (
+                          <button
+                            onClick={() => {
+                              onStopApp(app.id);
+                              setMenuAppId(null);
+                            }}
+                            className="w-full px-3 py-1.5 hover:bg-red-500/10 text-red-500 flex items-center gap-2 cursor-pointer transition-colors"
+                          >
+                            <Square className="w-3.5 h-3.5 fill-current" />
+                            <span>Stop Application</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              onLaunchApp(app.id);
+                              setMenuAppId(null);
+                            }}
+                            className="w-full px-3 py-1.5 hover:bg-[var(--bg-surface)] text-[var(--text-main)] flex items-center gap-2 cursor-pointer transition-colors"
+                          >
+                            <Play className="w-3.5 h-3.5 fill-current text-[var(--accent-primary)]" />
+                            <span>Launch Application</span>
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => {
+                            onToggleFavorite(app.id);
+                            setMenuAppId(null);
+                          }}
+                          className="w-full px-3 py-1.5 hover:bg-[var(--bg-surface)] text-[var(--text-main)] flex items-center gap-2 cursor-pointer transition-colors"
+                        >
+                          <Heart className={`w-3.5 h-3.5 ${app.favorite ? "fill-red-500 text-red-500" : "text-[var(--text-muted)]"}`} />
+                          <span>{app.favorite ? "Favorited" : "Favorite"}</span>
+                        </button>
+
+                        <button
+                          onClick={async () => {
+                            setMenuAppId(null);
+                            try {
+                              await exportAppBundle(app.id);
+                            } catch {
+                              // ignore
+                            }
+                          }}
+                          className="w-full px-3 py-1.5 hover:bg-[var(--bg-surface)] text-[var(--text-main)] flex items-center gap-2 cursor-pointer transition-colors"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                          <span>Export as Mac App</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            handleReveal(app.executable_path);
+                            setMenuAppId(null);
+                          }}
+                          className="w-full px-3 py-1.5 hover:bg-[var(--bg-surface)] text-[var(--text-main)] flex items-center gap-2 cursor-pointer transition-colors"
+                        >
+                          <FolderOpen className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                          <span>Reveal in Finder</span>
+                        </button>
+
+                        <div className="my-1 border-t border-[var(--border-color)]" />
+
+                        <button
+                          onClick={() => {
+                            handleUnregisterApp(app.id);
+                            setMenuAppId(null);
+                          }}
+                          className="w-full px-3 py-1.5 hover:bg-red-500/10 text-red-500 flex items-center gap-2 cursor-pointer transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Remove from Shelf</span>
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -469,6 +571,13 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                   className="px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--border-color)] text-[var(--text-main)] text-[11px] font-mono flex items-center gap-1.5 border border-[var(--border-color)] cursor-pointer transition-colors"
                 >
                   <Share className="w-3.5 h-3.5 text-[var(--accent-primary)]" /> Export .app
+                </button>
+
+                <button
+                  onClick={() => handleUnregisterApp(selectedApp.id)}
+                  className="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 text-[11px] font-mono flex items-center gap-1.5 border border-red-500/30 cursor-pointer transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Remove from Shelf
                 </button>
               </div>
 

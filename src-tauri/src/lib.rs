@@ -68,6 +68,7 @@ pub fn run() {
             commands::scan_bottle,
             commands::scan_all_bottles,
             commands::register_application,
+            commands::unregister_application,
             commands::run_installer,
             commands::list_jobs,
             commands::launch_application,

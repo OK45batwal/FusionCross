@@ -200,6 +200,8 @@ export const registerApplication = (
   executablePath: string,
   category: string
 ) => invoke<Application>("register_application", { bottleId, name, executablePath, category });
+export const unregisterApplication = (appId: string) =>
+  invoke<void>("unregister_application", { appId });
 
 export const runInstaller = (installerPath: string, bottleId: string) =>
   invoke<string>("run_installer", { installerPath, bottleId });

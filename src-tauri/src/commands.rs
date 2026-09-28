@@ -794,6 +794,17 @@ pub fn register_application(
 }
 
 #[tauri::command]
+pub fn unregister_application(app: AppHandle, app_id: String) -> Result<(), FusionError> {
+    let st = app.state::<FusionState>();
+    st.with_state(|s| {
+        s.applications.retain(|a| a.id != app_id);
+        Ok(())
+    })?;
+    st.save(&app)?;
+    Ok(())
+}
+
+#[tauri::command]
 pub fn run_installer(
     app: AppHandle,
     installer_path: String,
