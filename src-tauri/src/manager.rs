@@ -14,12 +14,21 @@ fn app_data_dir(app: &AppHandle) -> Option<PathBuf> {
 
 pub fn dirs(app: &AppHandle) -> Dirs {
     let base = app_data_dir(app).unwrap_or_else(|| PathBuf::from("/tmp/fusioncross"));
+    let home = std::env::var("HOME").unwrap_or_default();
+    let legacy_libraries = PathBuf::from(&home).join("Library/Application Support/FusionCross/libraries");
+    let libraries = if legacy_libraries.exists() {
+        legacy_libraries
+    } else {
+        base.join("libraries")
+    };
+
     Dirs {
         base: base.clone(),
         bottles: base.join("bottles"),
         runtimes: base.join("runtimes"),
         snapshots: base.join("snapshots"),
         downloads: base.join("downloads"),
+        libraries,
         state: base.join("state.json"),
     }
 }
@@ -33,6 +42,7 @@ pub struct Dirs {
     pub runtimes: PathBuf,
     pub snapshots: PathBuf,
     pub downloads: PathBuf,
+    pub libraries: PathBuf,
     pub state: PathBuf,
 }
 
@@ -43,6 +53,7 @@ impl Dirs {
             &self.runtimes,
             &self.snapshots,
             &self.downloads,
+            &self.libraries,
         ] {
             std::fs::create_dir_all(d).map_err(|_| FusionError::PermissionDenied)?;
         }

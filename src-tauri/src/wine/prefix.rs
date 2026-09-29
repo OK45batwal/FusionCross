@@ -106,44 +106,65 @@ pub fn ensure_graphics_registry(prefix: &Path, _graphics: &str) -> Result<(), Fu
         Err(_) => return Ok(()),
     };
 
-    let mut new_sections = String::new();
+    let mut updated = content.clone();
 
-    if !content.contains("[Software\\\\Wine\\\\Direct3D]") {
-        new_sections.push_str("\n[Software\\\\Wine\\\\Direct3D] 1790614100\n");
-        new_sections.push_str("#time=1dd4e9b00000000\n");
-        new_sections.push_str("\"CheckFloatConstants\"=\"disabled\"\n");
-        new_sections.push_str("\"Direct3D10\"=\"1\"\n");
-        new_sections.push_str("\"Direct3D11\"=\"1\"\n");
-        new_sections.push_str("\"MaxShaderModelCS\"=\"5\"\n");
-        new_sections.push_str("\"MaxShaderModelDS\"=\"5\"\n");
-        new_sections.push_str("\"MaxShaderModelGS\"=\"5\"\n");
-        new_sections.push_str("\"MaxShaderModelHS\"=\"5\"\n");
-        new_sections.push_str("\"MaxShaderModelPS\"=\"5\"\n");
-        new_sections.push_str("\"MaxShaderModelVS\"=\"5\"\n");
-        new_sections.push_str("\"VideoMemorySize\"=\"4096\"\n");
-        new_sections.push_str("\"csmt\"=dword:00000001\n");
+    // Direct3D settings
+    if !updated.contains("\"Direct3D11\"") {
+        let d3d_block = "\n[Software\\\\Wine\\\\Direct3D] 1790614100\n\
+#time=1dd4e9b00000000\n\
+\"CheckFloatConstants\"=\"disabled\"\n\
+\"Direct3D10\"=\"1\"\n\
+\"Direct3D11\"=\"1\"\n\
+\"MaxShaderModelCS\"=\"5\"\n\
+\"MaxShaderModelDS\"=\"5\"\n\
+\"MaxShaderModelGS\"=\"5\"\n\
+\"MaxShaderModelHS\"=\"5\"\n\
+\"MaxShaderModelPS\"=\"5\"\n\
+\"MaxShaderModelVS\"=\"5\"\n\
+\"VideoMemorySize\"=\"4096\"\n\
+\"csmt\"=dword:00000001\n";
+        updated.push_str(d3d_block);
     }
 
-    if !content.contains("[Software\\\\Wine\\\\DllOverrides]") {
-        new_sections.push_str("\n[Software\\\\Wine\\\\DllOverrides] 1790614100\n");
-        new_sections.push_str("#time=1dd4e9b00000000\n");
-        new_sections.push_str("\"*d3d10\"=\"native,builtin\"\n");
-        new_sections.push_str("\"*d3d10_1\"=\"native,builtin\"\n");
-        new_sections.push_str("\"*d3d10core\"=\"native,builtin\"\n");
-        new_sections.push_str("\"*d3d11\"=\"native,builtin\"\n");
-        new_sections.push_str("\"*d3d12\"=\"native,builtin\"\n");
-        new_sections.push_str("\"*d3d12core\"=\"native,builtin\"\n");
-        new_sections.push_str("\"*dxgi\"=\"native,builtin\"\n");
-        new_sections.push_str("\"*d3d9\"=\"native,builtin\"\n");
-        new_sections.push_str("\"mscoree\"=\"\"\n");
-        new_sections.push_str("\"mshtml\"=\"\"\n");
-    }
+    // DLL Overrides for Metal / DXMT / DXVK
+    let has_d3d_override = updated.contains("\"*d3d11\"") || updated.contains("\"d3d11\"");
+    if !has_d3d_override {
+        let overrides = "\"*d3d10\"=\"native,builtin\"\n\
+\"*d3d10_1\"=\"native,builtin\"\n\
+\"*d3d10core\"=\"native,builtin\"\n\
+\"*d3d11\"=\"native,builtin\"\n\
+\"*d3d12\"=\"native,builtin\"\n\
+\"*d3d12core\"=\"native,builtin\"\n\
+\"*d3d9\"=\"native,builtin\"\n\
+\"*dxgi\"=\"native,builtin\"\n\
+\"*winemetal\"=\"native,builtin\"\n\
+\"d3d10\"=\"native,builtin\"\n\
+\"d3d10_1\"=\"native,builtin\"\n\
+\"d3d10core\"=\"native,builtin\"\n\
+\"d3d11\"=\"native,builtin\"\n\
+\"d3d12\"=\"native,builtin\"\n\
+\"d3d12core\"=\"native,builtin\"\n\
+\"d3d9\"=\"native,builtin\"\n\
+\"dxgi\"=\"native,builtin\"\n\
+\"winemetal\"=\"native,builtin\"\n\
+\"mscoree\"=\"\"\n\
+\"mshtml\"=\"\"\n";
 
-    if !new_sections.is_empty() {
-        use std::io::Write;
-        if let Ok(mut file) = std::fs::OpenOptions::new().append(true).open(&user_reg) {
-            let _ = file.write_all(new_sections.as_bytes());
+        let target = "[Software\\\\Wine\\\\DllOverrides]";
+        if let Some(idx) = updated.find(target) {
+            let end_of_line = updated[idx..]
+                .find('\n')
+                .map(|i| idx + i + 1)
+                .unwrap_or(idx + target.len());
+            updated.insert_str(end_of_line, overrides);
+        } else {
+            let section = format!("\n[Software\\\\Wine\\\\DllOverrides] 1790614100\n#time=1dd4e9b00000000\n{}", overrides);
+            updated.push_str(&section);
         }
+    }
+
+    if updated != content {
+        std::fs::write(&user_reg, updated).map_err(|_| FusionError::LaunchFailed)?;
     }
 
     Ok(())
@@ -183,6 +204,32 @@ mod tests {
         assert!(ensure_graphics_registry(&temp, "d3dmetal").is_ok());
         let content_after = std::fs::read_to_string(&user_reg).unwrap();
         assert_eq!(content, content_after);
+
+        std::fs::remove_dir_all(&temp).ok();
+    }
+
+    #[test]
+    fn test_ensure_graphics_registry_populates_empty_dlloverrides_section() {
+        let temp = std::env::temp_dir().join(format!(
+            "fc_test_prefix_empty_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&temp).unwrap();
+        let user_reg = temp.join("user.reg");
+        std::fs::write(
+            &user_reg,
+            "WINE REGISTRY Version 2\n[Software\\\\Wine\\\\DllOverrides] 123456\n#time=1234\n\n[Other]\n",
+        )
+        .unwrap();
+
+        assert!(ensure_graphics_registry(&temp, "d3dmetal").is_ok());
+        let content = std::fs::read_to_string(&user_reg).unwrap();
+        assert!(content.contains("\"*d3d11\"=\"native,builtin\""));
+        assert!(content.contains("\"*dxgi\"=\"native,builtin\""));
+        assert!(content.contains("[Software\\\\Wine\\\\Direct3D]"));
 
         std::fs::remove_dir_all(&temp).ok();
     }

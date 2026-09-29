@@ -287,6 +287,35 @@ pub fn create_bottle(
     Ok(bottle)
 }
 
+/// Automatically deploy hardware-accelerated graphics libraries (DXMT/Metal) into bottle system directories.
+pub fn deploy_graphics_libraries(app: &AppHandle, prefix: &Path) {
+    let d = dirs(app);
+    let dxmt_x64 = d.libraries.join("Libraries/DXMT/x64");
+    let dxmt_x32 = d.libraries.join("Libraries/DXMT/x32");
+    let sys32 = prefix.join("drive_c/windows/system32");
+    let syswow64 = prefix.join("drive_c/windows/syswow64");
+
+    if dxmt_x64.exists() && sys32.exists() {
+        for name in &["d3d10core.dll", "d3d11.dll", "dxgi.dll", "winemetal.dll", "nvapi64.dll", "nvngx.dll"] {
+            let src = dxmt_x64.join(name);
+            let dst = sys32.join(name);
+            if src.exists() && !dst.exists() {
+                let _ = std::fs::copy(&src, &dst);
+            }
+        }
+    }
+
+    if dxmt_x32.exists() && syswow64.exists() {
+        for name in &["d3d10core.dll", "d3d11.dll", "dxgi.dll", "winemetal.dll"] {
+            let src = dxmt_x32.join(name);
+            let dst = syswow64.join(name);
+            if src.exists() && !dst.exists() {
+                let _ = std::fs::copy(&src, &dst);
+            }
+        }
+    }
+}
+
 fn initialize_bottle_prefix(app: &AppHandle, bottle_id: &str) -> Result<String, FusionError> {
     let st = app.state::<FusionState>();
     let bottle = st
@@ -295,6 +324,7 @@ fn initialize_bottle_prefix(app: &AppHandle, bottle_id: &str) -> Result<String, 
     let binary = wine_binary_for(app, &bottle.runtime)?;
     let prefix = Path::new(&bottle.path);
     crate::wine::prefix::init_prefix(&binary, prefix)?;
+    deploy_graphics_libraries(app, prefix);
     crate::wine::prefix::ensure_graphics_registry(prefix, &bottle.graphics).ok();
     crate::wine::prefix::install_verbs(&binary, prefix, &bottle.dependencies)?;
     Ok("Prefix ready".to_string())
@@ -558,6 +588,7 @@ pub fn run_command_in_bottle(
     if !crate::wine::prefix::prefix_prepared(prefix) {
         crate::wine::prefix::init_prefix(&binary, prefix)?;
     }
+    deploy_graphics_libraries(&app, prefix);
     crate::wine::prefix::ensure_graphics_registry(prefix, &bottle.graphics).ok();
 
     let safe = settings_bool(&app, "safe_mode");
@@ -1077,6 +1108,7 @@ pub fn launch_application(app: AppHandle, app_id: String) -> Result<RunningInfo,
     if !crate::wine::prefix::prefix_prepared(prefix) {
         crate::wine::prefix::init_prefix(&binary, prefix)?;
     }
+    deploy_graphics_libraries(&app, prefix);
     crate::wine::prefix::ensure_graphics_registry(prefix, &bottle.graphics).ok();
 
     let safe = settings_bool(&app, "safe_mode");
