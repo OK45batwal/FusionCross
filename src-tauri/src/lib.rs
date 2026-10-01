@@ -1,6 +1,8 @@
+#![allow(dead_code)]
+
 use std::sync::Arc;
 
-mod commands;
+pub mod commands;
 mod compatibility;
 mod core;
 mod diagnostics;
