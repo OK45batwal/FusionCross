@@ -76,6 +76,25 @@ pub fn launch_application(app: AppHandle, app_id: String) -> Result<RunningInfo,
         launch_args.push("-dx11".to_string());
     }
 
+    // Steam Client fixes: Chromium CEF sandbox & GPU acceleration crash in Wine on macOS.
+    // -no-cef-sandbox disables Windows token sandboxing which Wine cannot emulate
+    // -cef-disable-gpu disables hardware CEF rendering preventing webhelper crashes
+    // -cef-disable-hang-monitor prevents Steam from killing steamwebhelper when Wine IPC lags
+    let is_steam = lower_exe.ends_with("steam.exe") || lower_name == "steam";
+    if is_steam {
+        for flag in &[
+            "-no-cef-sandbox",
+            "-cef-disable-gpu",
+            "-cef-disable-hang-monitor",
+            "-allpackagedcontent",
+            "-noverifyfiles",
+        ] {
+            if !launch_args.iter().any(|a| a == *flag) {
+                launch_args.push(flag.to_string());
+            }
+        }
+    }
+
     // Append any user-defined custom launch arguments
     if let Some(ref custom_args) = application.launch_arguments {
         for arg in custom_args.split_whitespace() {

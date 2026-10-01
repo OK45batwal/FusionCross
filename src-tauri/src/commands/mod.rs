@@ -202,7 +202,12 @@ pub fn build_wine_execution_context(
         env.push(("DXVK_HUD".into(), "0".into()));
     }
 
-    // 6. Graphics Backend Routing & Overrides
+    // 6. Suppress noisy Wine fixme stubs
+    if !env.iter().any(|(k, _)| k == "WINEDEBUG") {
+        env.push(("WINEDEBUG".into(), "fixme-all".into()));
+    }
+
+    // 7. Graphics Backend Routing & Overrides
     let mut overrides = bottle.dll_overrides.clone();
     overrides.push("mscoree,mshtml=".into()); // Silence gecko/mono prompts
 

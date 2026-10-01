@@ -126,6 +126,21 @@ pub fn ensure_graphics_registry(prefix: &Path, _graphics: &str) -> Result<(), Fu
         updated.push_str(d3d_block);
     }
 
+    // Suppress WineDbg GUI crash dialog popups (avoids steamwebhelper blocking modals)
+    if !updated.contains("\"ShowCrashDialog\"") {
+        let winedbg_target = "[Software\\\\Wine\\\\WineDbg]";
+        if let Some(idx) = updated.find(winedbg_target) {
+            let end_of_line = updated[idx..]
+                .find('\n')
+                .map(|i| idx + i + 1)
+                .unwrap_or(idx + winedbg_target.len());
+            updated.insert_str(end_of_line, "\"ShowCrashDialog\"=dword:00000000\n");
+        } else {
+            let section = "\n[Software\\\\Wine\\\\WineDbg] 1790615848\n#time=1dd4e9b00000000\n\"ShowCrashDialog\"=dword:00000000\n";
+            updated.push_str(section);
+        }
+    }
+
     // DLL Overrides for Metal / DXMT / DXVK
     let has_d3d_override = updated.contains("\"*d3d11\"") || updated.contains("\"d3d11\"");
     if !has_d3d_override {

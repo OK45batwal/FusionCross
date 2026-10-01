@@ -51,7 +51,7 @@ pub fn get_catalog() -> Vec<GameCatalogItem> {
             directx_version: "DirectX 11",
             msync_recommended: true,
             dependencies: vec!["corefonts", "vcrun2022"],
-            launch_arguments: vec!["-noreactlogin"],
+            launch_arguments: vec!["-no-cef-sandbox", "-cef-disable-gpu", "-cef-disable-hang-monitor"],
             installer_url: Some("https://cdn.cloudflare.steamstatic.com/client/installer/SteamSetup.exe"),
             notes: "Flawless store navigation, cloud saves, and native controller support. Essential starting point.",
             anti_cheat_status: "Supported",
@@ -1144,7 +1144,11 @@ pub fn recommend(app_name: &str) -> Recommendation {
             graphics: "dxvk",
             windows_version: "win10",
             dependencies: vec!["corefonts", "vcrun2022"],
-            launch_arguments: vec!["-noreactlogin".into()],
+            launch_arguments: vec![
+                "-no-cef-sandbox".into(),
+                "-cef-disable-gpu".into(),
+                "-cef-disable-hang-monitor".into(),
+            ],
             compatibility: 96,
             notes: vec!["Steam client profile applied."],
         };
