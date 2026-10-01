@@ -100,9 +100,19 @@ pub fn launch_application(app: AppHandle, app_id: String) -> Result<RunningInfo,
             ));
         }
 
+        // Clean stale htmlcache lockfiles that cause CEF IPC deadlocks and hangs
+        for user in &["omkar", "steam", "default"] {
+            let lf = Path::new(&bottle.path)
+                .join(format!("drive_c/users/{}/AppData/Local/Steam/htmlcache/lockfile", user));
+            if lf.exists() {
+                let _ = std::fs::remove_file(lf);
+            }
+        }
+
         for flag in &[
             "-no-cef-sandbox",
             "-cef-disable-gpu",
+            "-cef-disable-gpu-compositing",
             "-cef-disable-hang-monitor",
             "-allpackagedcontent",
             "-noverifyfiles",

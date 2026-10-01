@@ -172,6 +172,53 @@ pub fn ensure_graphics_registry(prefix: &Path, _graphics: &str) -> Result<(), Fu
         updated.push_str(section);
     }
 
+    // 3. Steam WebHelper optimizations (CrossOver / Whisky parity)
+    // Disabling GPU acceleration for Steam webviews forces software rendering for Chromium CEF,
+    // avoiding failed offscreen shared JS contexts and webhelper crashes.
+    let steam_target = "[Software\\\\Valve\\\\Steam]";
+    if let Some(idx) = updated.find(steam_target) {
+        let rest = &updated[idx..];
+        let next_section_offset = rest[steam_target.len()..]
+            .find("\n[")
+            .map(|i| i + steam_target.len() + 1)
+            .unwrap_or(rest.len());
+        let section_content = &rest[..next_section_offset];
+        if !section_content.contains("\"GPUAccelWebViews\"") {
+            let insert_offset = if let Some(time_idx) = rest[..next_section_offset].find("#time=") {
+                let after_time = &rest[time_idx..next_section_offset];
+                time_idx + after_time.find('\n').map(|i| i + 1).unwrap_or(after_time.len())
+            } else {
+                rest[..next_section_offset].find('\n').map(|i| i + 1).unwrap_or(steam_target.len())
+            };
+            updated.insert_str(
+                idx + insert_offset,
+                "\"GPUAccelWebViews\"=dword:00000000\n\"HwAccel\"=dword:00000000\n\"SmoothScrollWebViews\"=dword:00000000\n",
+            );
+        }
+    } else {
+        let section = "\n[Software\\\\Valve\\\\Steam] 1790615848\n#time=1dd4e9b00000000\n\"GPUAccelWebViews\"=dword:00000000\n\"HwAccel\"=dword:00000000\n\"SmoothScrollWebViews\"=dword:00000000\n";
+        updated.push_str(section);
+    }
+
+    // 4. Disable AeDebug automated debugger attachment in system.reg to avoid thread freezing
+    let system_reg = prefix.join("system.reg");
+    if system_reg.exists() {
+        if let Ok(sys_content) = std::fs::read_to_string(&system_reg) {
+            if sys_content.contains("\"Debugger\"=\"winedbg --auto %ld %ld\"") {
+                let sys_updated = sys_content
+                    .replace(
+                        "\"Debugger\"=\"winedbg --auto %ld %ld\"",
+                        "\"Debugger\"=\"\"",
+                    )
+                    .replace(
+                        "\"Auto\"=\"1\"",
+                        "\"Auto\"=\"0\"",
+                    );
+                let _ = std::fs::write(&system_reg, sys_updated);
+            }
+        }
+    }
+
     // DLL Overrides for Metal / DXMT / DXVK
     let has_d3d_override = updated.contains("\"*d3d11\"") || updated.contains("\"d3d11\"");
     if !has_d3d_override {
