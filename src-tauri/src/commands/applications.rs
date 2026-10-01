@@ -16,6 +16,7 @@ use super::bottles::deploy_graphics_libraries;
 use super::{build_wine_execution_context, now_ts, settings_bool, wine_binary_for};
 
 #[derive(Debug, Clone, Serialize)]
+#[allow(dead_code)]
 pub struct LogEntry {
     pub filename: String,
     pub path: String,
@@ -197,6 +198,7 @@ pub fn unregister_application(app: AppHandle, app_id: String) -> Result<(), Fusi
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub fn update_application(
     app: AppHandle,
     app_id: String,
@@ -233,6 +235,7 @@ pub fn update_application(
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub fn list_application_logs(
     app: AppHandle,
     app_id: Option<String>,
@@ -278,6 +281,7 @@ pub fn list_application_logs(
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub fn read_log_file(_app: AppHandle, log_path: String) -> Result<String, FusionError> {
     let path = Path::new(&log_path);
     if !path.exists() {

@@ -76,6 +76,7 @@ pub fn set_safe_mode(app: AppHandle, enabled: bool) -> Result<(), FusionError> {
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub fn set_setting(app: AppHandle, key: String, value: String) -> Result<(), FusionError> {
     let st = app.state::<FusionState>();
     st.with_state(|s| {
@@ -90,6 +91,7 @@ pub fn set_setting(app: AppHandle, key: String, value: String) -> Result<(), Fus
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub fn get_settings(app: AppHandle) -> Result<Vec<(String, String)>, FusionError> {
     let st = app.state::<FusionState>();
     st.with_state(|s| Ok(s.settings.clone()))
@@ -114,6 +116,7 @@ pub fn export_app_bundle(app: AppHandle, app_id: String) -> Result<String, Fusio
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub fn open_logs_directory(app: AppHandle) -> Result<(), FusionError> {
     let d = dirs(&app);
     d.ensure()?;
