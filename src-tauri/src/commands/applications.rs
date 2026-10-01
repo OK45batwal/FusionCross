@@ -56,7 +56,7 @@ pub fn launch_application(app: AppHandle, app_id: String) -> Result<RunningInfo,
     crate::wine::prefix::ensure_graphics_registry(prefix, &bottle.graphics).ok();
 
     let safe = settings_bool(&app, "safe_mode");
-    let (override_env, dll_overrides) = build_wine_execution_context(&binary, &bottle, safe);
+    let (mut override_env, dll_overrides) = build_wine_execution_context(&binary, &bottle, safe);
 
     // Detect launch arguments: Unreal Engine games (like Raji) benefit from -dx11 to force D3D11 RHI
     let mut launch_args = Vec::new();
@@ -82,12 +82,31 @@ pub fn launch_application(app: AppHandle, app_id: String) -> Result<RunningInfo,
     // -cef-disable-hang-monitor prevents Steam from killing steamwebhelper when Wine IPC lags
     let is_steam = lower_exe.ends_with("steam.exe") || lower_name == "steam";
     if is_steam {
+        // Prevent CEF / Chromium crash reporter from allocating nested signal stacks
+        override_env.push(("CHROME_CRASHPAD_PIPE_NAME".into(), "".into()));
+        override_env.push(("BREAKPAD_DUMP_LOCATION".into(), "/dev/null".into()));
+        override_env.push(("CEF_USE_SANDBOX".into(), "0".into()));
+
+        // Steam Wine / Proton environment variables
+        override_env.push(("STEAM_COMPAT_DATA_PATH".into(), bottle.path.clone()));
+        override_env.push(("SteamAppId".into(), "0".into()));
+        override_env.push(("WINE_LARGE_ADDRESS_AWARE".into(), "1".into()));
+        override_env.push(("DXVK_STATE_CACHE_PATH".into(), bottle.path.clone()));
+
+        if let Some(parent) = Path::new(&application.executable_path).parent() {
+            override_env.push((
+                "STEAM_COMPAT_CLIENT_INSTALL_PATH".into(),
+                parent.to_string_lossy().into_owned(),
+            ));
+        }
+
         for flag in &[
             "-no-cef-sandbox",
             "-cef-disable-gpu",
             "-cef-disable-hang-monitor",
             "-allpackagedcontent",
             "-noverifyfiles",
+            "-allosarches",
         ] {
             if !launch_args.iter().any(|a| a == *flag) {
                 launch_args.push(flag.to_string());

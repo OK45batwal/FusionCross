@@ -128,6 +128,56 @@ pub fn deploy_graphics_libraries(app: &AppHandle, prefix: &Path) {
             copy_if_different(&src, &dst);
         }
     }
+
+    // Deploy SDL2.dll for tools like gldriverquery if found in mono or runtime packages
+    let home = std::env::var("HOME").unwrap_or_default();
+    let home_path = PathBuf::from(&home);
+    let sdl2_candidates = [
+        home_path.join("Library/Application Support/FusionCross/runtimes/whisky-wine/share/wine/mono/wine-mono-7.4.1/lib"),
+        home_path.join("Library/Application Support/heroic/tools/wine/Wine-Crossover-latest/Contents/Resources/wine/share/wine/mono/wine-mono-9.0.0/lib"),
+        d.runtimes.join("whisky-wine/share/wine/mono/wine-mono-7.4.1/lib"),
+    ];
+
+    for dir in &sdl2_candidates {
+        if !dir.exists() {
+            continue;
+        }
+        let src32_1 = dir.join("SDL2-x86.dll");
+        let src32_2 = dir.join("x86/SDL2.dll");
+        let src32 = if src32_1.exists() {
+            Some(src32_1)
+        } else if src32_2.exists() {
+            Some(src32_2)
+        } else {
+            None
+        };
+
+        if let Some(src) = src32 {
+            if syswow64.exists() {
+                copy_if_different(&src, &syswow64.join("SDL2.dll"));
+            }
+            let steam_bin = prefix.join("drive_c/Program Files (x86)/Steam/bin");
+            if steam_bin.exists() {
+                copy_if_different(&src, &steam_bin.join("SDL2.dll"));
+            }
+        }
+
+        let src64_1 = dir.join("SDL2-x86_64.dll");
+        let src64_2 = dir.join("x86_64/SDL2.dll");
+        let src64 = if src64_1.exists() {
+            Some(src64_1)
+        } else if src64_2.exists() {
+            Some(src64_2)
+        } else {
+            None
+        };
+
+        if let Some(src) = src64 {
+            if sys32.exists() {
+                copy_if_different(&src, &sys32.join("SDL2.dll"));
+            }
+        }
+    }
 }
 
 pub fn initialize_bottle_prefix(app: &AppHandle, bottle_id: &str) -> Result<String, FusionError> {

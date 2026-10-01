@@ -126,19 +126,50 @@ pub fn ensure_graphics_registry(prefix: &Path, _graphics: &str) -> Result<(), Fu
         updated.push_str(d3d_block);
     }
 
-    // Suppress WineDbg GUI crash dialog popups (avoids steamwebhelper blocking modals)
-    if !updated.contains("\"ShowCrashDialog\"") {
-        let winedbg_target = "[Software\\\\Wine\\\\WineDbg]";
-        if let Some(idx) = updated.find(winedbg_target) {
-            let end_of_line = updated[idx..]
-                .find('\n')
-                .map(|i| idx + i + 1)
-                .unwrap_or(idx + winedbg_target.len());
-            updated.insert_str(end_of_line, "\"ShowCrashDialog\"=dword:00000000\n");
-        } else {
-            let section = "\n[Software\\\\Wine\\\\WineDbg] 1790615848\n#time=1dd4e9b00000000\n\"ShowCrashDialog\"=dword:00000000\n";
-            updated.push_str(section);
+    // 1. Sanitize malformed WineDbg keys/sections (e.g. from missing escapes)
+    if updated.contains("[SoftwareWineWineDbg]") {
+        let mut cleaned = String::new();
+        let mut skipping = false;
+        for line in updated.lines() {
+            if line.starts_with("[SoftwareWineWineDbg]") {
+                skipping = true;
+                continue;
+            }
+            if skipping {
+                if line.starts_with('[') {
+                    skipping = false;
+                    cleaned.push_str(line);
+                    cleaned.push('\n');
+                }
+                continue;
+            }
+            cleaned.push_str(line);
+            cleaned.push('\n');
         }
+        updated = cleaned;
+    }
+
+    // 2. Suppress WineDbg GUI crash dialog popups (avoids steamwebhelper blocking modals)
+    let winedbg_target = "[Software\\\\Wine\\\\WineDbg]";
+    if let Some(idx) = updated.find(winedbg_target) {
+        let rest = &updated[idx..];
+        let next_section_offset = rest[winedbg_target.len()..]
+            .find("\n[")
+            .map(|i| i + winedbg_target.len() + 1)
+            .unwrap_or(rest.len());
+        let section_content = &rest[..next_section_offset];
+        if !section_content.contains("\"ShowCrashDialog\"") {
+            let insert_offset = if let Some(time_idx) = rest[..next_section_offset].find("#time=") {
+                let after_time = &rest[time_idx..next_section_offset];
+                time_idx + after_time.find('\n').map(|i| i + 1).unwrap_or(after_time.len())
+            } else {
+                rest[..next_section_offset].find('\n').map(|i| i + 1).unwrap_or(winedbg_target.len())
+            };
+            updated.insert_str(idx + insert_offset, "\"ShowCrashDialog\"=dword:00000000\n");
+        }
+    } else {
+        let section = "\n[Software\\\\Wine\\\\WineDbg] 1790615848\n#time=1dd4e9b00000000\n\"ShowCrashDialog\"=dword:00000000\n";
+        updated.push_str(section);
     }
 
     // DLL Overrides for Metal / DXMT / DXVK
@@ -245,6 +276,37 @@ mod tests {
         assert!(content.contains("\"*d3d11\"=\"native,builtin\""));
         assert!(content.contains("\"*dxgi\"=\"native,builtin\""));
         assert!(content.contains("[Software\\\\Wine\\\\Direct3D]"));
+
+        std::fs::remove_dir_all(&temp).ok();
+    }
+
+    #[test]
+    fn test_ensure_graphics_registry_sanitizes_winedbg() {
+        let temp = std::env::temp_dir().join(format!(
+            "fc_test_prefix_winedbg_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&temp).unwrap();
+        let user_reg = temp.join("user.reg");
+        let initial = "WINE REGISTRY Version 2\n\
+[Software\\\\Wine\\\\WineDbg] 1790615848\n\
+#time=1dd4f6d3ce45e58\n\
+\n\
+[SoftwareWineWineDbg] 1790615848\n\
+#time=1dd4f6d3ce45e58\n\
+\"ShowCrashDialog\"=dword:00000000\n\
+\n\
+[Volatile Environment]\n";
+        std::fs::write(&user_reg, initial).unwrap();
+
+        assert!(ensure_graphics_registry(&temp, "d3dmetal").is_ok());
+        let content = std::fs::read_to_string(&user_reg).unwrap();
+        assert!(!content.contains("[SoftwareWineWineDbg]"));
+        assert!(content.contains("[Software\\\\Wine\\\\WineDbg]"));
+        assert!(content.contains("\"ShowCrashDialog\"=dword:00000000"));
 
         std::fs::remove_dir_all(&temp).ok();
     }
