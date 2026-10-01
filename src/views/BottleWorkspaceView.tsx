@@ -20,6 +20,7 @@ import {
   RefreshCw,
   Zap,
   MoreVertical,
+  FileText,
 } from "lucide-react";
 import {
   Application,
@@ -27,6 +28,7 @@ import {
   BottleTemplate,
   RunningInfo,
   Snapshot,
+  LogEntry,
   openBottleCDrive,
   revealInFinder,
   runCommandInBottle,
@@ -44,6 +46,9 @@ import {
   exportAppBundle,
   scanBottle,
   unregisterApplication,
+  listApplicationLogs,
+  readLogFile,
+  openLogsDirectory,
   FusionErrorPayload,
 } from "../services/tauri";
 
@@ -87,6 +92,7 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
   const [showWinetricksModal, setShowWinetricksModal] = useState(false);
   const [customVerb, setCustomVerb] = useState("");
   const [installingVerb, setInstallingVerb] = useState(false);
+  const [verbSearch, setVerbSearch] = useState("");
 
   const [showSnapshotsModal, setShowSnapshotsModal] = useState(false);
   const [newSnapshotName, setNewSnapshotName] = useState("");
@@ -246,20 +252,50 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
     }
   };
 
-  const handleDelete = async () => {
-    if (
-      !confirm(
-        `Are you sure you want to delete "${bottle.name}"? All installed programs and saves in this bottle will be permanently removed.`
-      )
-    )
-      return;
+  const [confirmDeleteBottle, setConfirmDeleteBottle] = useState(false);
+  const [confirmDeleteSnapshotId, setConfirmDeleteSnapshotId] = useState<string | null>(null);
+  const [showLogsModal, setShowLogsModal] = useState(false);
+  const [bottleLogs, setBottleLogs] = useState<LogEntry[]>([]);
+  const [selectedLogPath, setSelectedLogPath] = useState<string | null>(null);
+  const [selectedLogContent, setSelectedLogContent] = useState<string | null>(null);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+
+  const handleOpenLogs = async () => {
+    setShowLogsModal(true);
+    setLoadingLogs(true);
     try {
-      await deleteBottle(bottle.id);
-      onRefreshState();
-      onBottleDeleted();
-    } catch (e) {
-      setError((e as FusionErrorPayload).message || "Delete failed.");
+      const logs = await listApplicationLogs();
+      const appIds = new Set(bottleApps.map((a) => a.id));
+      const relevant = logs.filter((l) => {
+        const prefix = l.filename.split("_")[0];
+        return appIds.has(prefix);
+      });
+      const listToUse = relevant.length > 0 ? relevant : logs;
+      setBottleLogs(listToUse);
+      if (listToUse.length > 0 && listToUse[0]) {
+        await handleSelectLog(listToUse[0].path);
+      } else {
+        setSelectedLogContent("No execution logs recorded yet for this bottle.");
+      }
+    } catch {
+      setError("Failed to load application logs.");
+    } finally {
+      setLoadingLogs(false);
     }
+  };
+
+  const handleSelectLog = async (path: string) => {
+    setSelectedLogPath(path);
+    try {
+      const text = await readLogFile(path);
+      setSelectedLogContent(text);
+    } catch {
+      setSelectedLogContent("Failed to read log file.");
+    }
+  };
+
+  const handleDelete = () => {
+    setConfirmDeleteBottle(true);
   };
 
   const handleExportApp = async (appId: string, appName: string) => {
@@ -312,14 +348,8 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
     }
   };
 
-  const handleDeleteSnapshot = async (id: string) => {
-    try {
-      await deleteSnapshot(id);
-      onRefreshState();
-      setNotice("Snapshot deleted.");
-    } catch (e) {
-      setError((e as FusionErrorPayload).message || "Failed to delete snapshot.");
-    }
+  const handleDeleteSnapshot = (id: string) => {
+    setConfirmDeleteSnapshotId(id);
   };
 
   const bottleSnapshots = snapshots.filter((s) => s.bottle_id === bottle.id);
@@ -880,6 +910,14 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
               </button>
 
               <button
+                onClick={handleOpenLogs}
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-main)] hover:bg-[var(--bg-elevated)] transition-colors cursor-pointer"
+              >
+                <FileText className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                <span>View Bottle Logs...</span>
+              </button>
+
+              <button
                 onClick={handleDelete}
                 className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[12px] text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer"
               >
@@ -974,42 +1012,76 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
               Select standard Windows runtime components to install into this bottle:
             </p>
 
-            {/* Popular Verbs Chips */}
-            <div className="grid grid-cols-2 gap-2 overflow-y-auto flex-1 p-1">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[var(--text-muted)]" />
+              <input
+                type="text"
+                placeholder="Search components (e.g. vcrun, dotnet, directx, fonts)..."
+                value={verbSearch}
+                onChange={(e) => setVerbSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[12px] text-[var(--text-main)]"
+              />
+            </div>
+
+            {/* Verbs Grid */}
+            <div className="grid grid-cols-2 gap-2 overflow-y-auto flex-1 p-1 max-h-[45vh]">
               {[
                 { verb: "vcrun2022", label: "Visual C++ 2015-2022", desc: "Required for modern games" },
-                { verb: "dotnet48", label: ".NET Framework 4.8", desc: "For launchers & tools" },
+                { verb: "vcrun2019", label: "Visual C++ 2019", desc: "MSVC runtime 2019" },
+                { verb: "vcrun2015", label: "Visual C++ 2015", desc: "MSVC runtime 2015" },
+                { verb: "vcrun2013", label: "Visual C++ 2013", desc: "MSVC runtime 2013" },
+                { verb: "vcrun2010", label: "Visual C++ 2010", desc: "MSVC runtime 2010" },
+                { verb: "vcrun2008", label: "Visual C++ 2008", desc: "MSVC runtime 2008" },
+                { verb: "dotnet48", label: ".NET Framework 4.8", desc: "For modern launchers & tools" },
+                { verb: "dotnet472", label: ".NET Framework 4.7.2", desc: "Targeted by many game mod tools" },
+                { verb: "dotnet40", label: ".NET Framework 4.0", desc: "Legacy Windows launchers" },
+                { verb: "dotnet35", label: ".NET Framework 3.5", desc: "2.0 and 3.5 runtime" },
                 { verb: "d3dcompiler_47", label: "D3DCompiler 47", desc: "HLSL Shader compilation" },
-                { verb: "corefonts", label: "Microsoft TrueType Fonts", desc: "Arial, Times, Courier" },
-                { verb: "directx9", label: "DirectX End-User Runtimes", desc: "Legacy DirectX libraries" },
+                { verb: "d3dcompiler_43", label: "D3DCompiler 43", desc: "DirectX 9/10 shader support" },
+                { verb: "d3dx9", label: "DirectX 9 Helper Dlls", desc: "Essential legacy D3D9 libraries" },
+                { verb: "d3dx10", label: "DirectX 10 Helper Dlls", desc: "D3DX10 runtime libraries" },
+                { verb: "d3dx11", label: "DirectX 11 Helper Dlls", desc: "D3DX11 runtime libraries" },
+                { verb: "corefonts", label: "Microsoft TrueType Fonts", desc: "Arial, Times, Courier, etc." },
+                { verb: "tahoma", label: "Tahoma & MS Sans Serif", desc: "UI fonts for older launchers" },
+                { verb: "directx9", label: "DirectX End-User Runtimes", desc: "Full DirectX redistributable" },
                 { verb: "msxml6", label: "MSXML 6.0 Parser", desc: "XML data processing" },
-              ].map((item) => {
-                const isInstalled = bottle.dependencies.includes(item.verb);
-                return (
-                  <div
-                    key={item.verb}
-                    className="p-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-elevated)] flex flex-col justify-between space-y-2"
-                  >
-                    <div>
-                      <p className="font-medium text-[12px] text-[var(--text-main)]">{item.label}</p>
-                      <p className="text-[10px] text-[var(--text-muted)]">{item.desc}</p>
+                { verb: "openal", label: "OpenAL 3D Audio", desc: "3D positional sound runtime" },
+                { verb: "physx", label: "NVIDIA PhysX Runtime", desc: "Hardware physics acceleration" },
+                { verb: "xna40", label: "Microsoft XNA 4.0", desc: "For XNA-based indie games" },
+              ]
+                .filter(
+                  (item) =>
+                    item.verb.toLowerCase().includes(verbSearch.toLowerCase()) ||
+                    item.label.toLowerCase().includes(verbSearch.toLowerCase()) ||
+                    item.desc.toLowerCase().includes(verbSearch.toLowerCase())
+                )
+                .map((item) => {
+                  const isInstalled = bottle.dependencies.includes(item.verb);
+                  return (
+                    <div
+                      key={item.verb}
+                      className="p-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-elevated)] flex flex-col justify-between space-y-2"
+                    >
+                      <div>
+                        <p className="font-medium text-[12px] text-[var(--text-main)]">{item.label}</p>
+                        <p className="text-[10px] text-[var(--text-muted)]">{item.desc}</p>
+                      </div>
+                      {isInstalled ? (
+                        <span className="text-[11px] font-mono text-[var(--color-ok)] flex items-center gap-1">
+                          <CheckCircle className="w-3.5 h-3.5" /> Installed
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => handleInstallVerb(item.verb)}
+                          disabled={installingVerb}
+                          className="w-full py-1 rounded bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-[11px] font-medium transition-colors cursor-pointer disabled:opacity-50"
+                        >
+                          Install
+                        </button>
+                      )}
                     </div>
-                    {isInstalled ? (
-                      <span className="text-[11px] font-mono text-[var(--color-ok)] flex items-center gap-1">
-                        <CheckCircle className="w-3.5 h-3.5" /> Installed
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => handleInstallVerb(item.verb)}
-                        disabled={installingVerb}
-                        className="w-full py-1 rounded bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-[11px] font-medium transition-colors cursor-pointer"
-                      >
-                        Install
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
+                  );
+                })}
             </div>
 
             {/* Custom Verb Input */}
@@ -1156,6 +1228,169 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
                 className="px-4 py-1.5 rounded-lg bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-[12px] font-medium cursor-pointer"
               >
                 Duplicate
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Bottle Logs Viewer */}
+      {showLogsModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-4xl h-[75vh] rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+            {/* Header */}
+            <div className="p-4 border-b border-[var(--border-color)] flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <FileText className="w-5 h-5 text-[var(--accent-primary)]" />
+                <div>
+                  <h3 className="text-[14px] font-semibold text-[var(--text-main)]">
+                    Application Logs — {bottle.name}
+                  </h3>
+                  <p className="text-[11px] text-[var(--text-muted)] font-mono">
+                    Captured standard output and error streams
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => openLogsDirectory()}
+                  className="px-2.5 py-1.5 rounded-lg border border-[var(--border-color)] hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] text-[11px] font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <FolderOpen className="w-3.5 h-3.5" />
+                  <span>Open Folder</span>
+                </button>
+                <button
+                  onClick={handleOpenLogs}
+                  className="p-1.5 rounded-lg border border-[var(--border-color)] hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] transition-colors cursor-pointer"
+                  title="Refresh logs"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingLogs ? "animate-spin" : ""}`} />
+                </button>
+                <button
+                  onClick={() => setShowLogsModal(false)}
+                  className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Split View */}
+            <div className="flex-1 flex overflow-hidden">
+              <div className="w-64 border-r border-[var(--border-color)] bg-[var(--bg-surface)] overflow-y-auto p-2 space-y-1">
+                <p className="text-[10px] font-mono uppercase text-[var(--text-muted)] px-2 py-1">
+                  Log Files ({bottleLogs.length})
+                </p>
+                {bottleLogs.length === 0 ? (
+                  <p className="text-[11px] text-[var(--text-muted)] font-mono p-2">
+                    No logs recorded yet.
+                  </p>
+                ) : (
+                  bottleLogs.map((log) => {
+                    const isSelected = selectedLogPath === log.path;
+                    return (
+                      <button
+                        key={log.path}
+                        onClick={() => handleSelectLog(log.path)}
+                        className={`w-full text-left p-2 rounded-lg text-[11px] font-mono transition-colors cursor-pointer ${
+                          isSelected
+                            ? "bg-[var(--accent-primary)]/15 border border-[var(--accent-primary)]/40 text-[var(--text-main)]"
+                            : "hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)]"
+                        }`}
+                      >
+                        <p className="truncate font-semibold">{log.filename}</p>
+                        <p className="text-[10px] text-[var(--text-muted)] mt-0.5">
+                          {(log.size_bytes / 1024).toFixed(1)} KB
+                        </p>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="flex-1 bg-black/40 overflow-auto p-4 font-mono text-[11px] text-zinc-300 leading-relaxed whitespace-pre-wrap select-text">
+                {selectedLogContent || "Select a log file to view its content."}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal: Delete Bottle */}
+      {confirmDeleteBottle && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] p-6 shadow-2xl space-y-4 text-center animate-in fade-in zoom-in-95 duration-100">
+            <div className="w-12 h-12 rounded-full bg-red-500/10 text-red-500 mx-auto flex items-center justify-center">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-[15px] font-bold text-[var(--text-main)]">Delete Bottle?</h3>
+              <p className="text-[12px] text-[var(--text-muted)] mt-1.5 leading-relaxed">
+                Are you sure you want to delete <span className="font-semibold text-[var(--text-main)]">"{bottle.name}"</span>? All installed programs and prefix files will be permanently deleted.
+              </p>
+            </div>
+            <div className="flex gap-2 justify-center pt-2">
+              <button
+                onClick={() => setConfirmDeleteBottle(false)}
+                className="px-4 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[var(--text-main)] text-[12px] font-semibold hover:bg-[var(--bg-surface)] transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  setConfirmDeleteBottle(false);
+                  try {
+                    await deleteBottle(bottle.id);
+                    onRefreshState();
+                    onBottleDeleted();
+                  } catch (e) {
+                    setError((e as FusionErrorPayload).message || "Delete failed.");
+                  }
+                }}
+                className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-[12px] font-semibold transition-colors cursor-pointer shadow-xs"
+              >
+                Delete Permanently
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal: Delete Snapshot */}
+      {confirmDeleteSnapshotId && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] p-6 shadow-2xl space-y-4 text-center animate-in fade-in zoom-in-95 duration-100">
+            <div className="w-12 h-12 rounded-full bg-red-500/10 text-red-500 mx-auto flex items-center justify-center">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-[15px] font-bold text-[var(--text-main)]">Delete Snapshot?</h3>
+              <p className="text-[12px] text-[var(--text-muted)] mt-1.5 leading-relaxed">
+                This will permanently delete the snapshot archive from your disk.
+              </p>
+            </div>
+            <div className="flex gap-2 justify-center pt-2">
+              <button
+                onClick={() => setConfirmDeleteSnapshotId(null)}
+                className="px-4 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[var(--text-main)] text-[12px] font-semibold hover:bg-[var(--bg-surface)] transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  const id = confirmDeleteSnapshotId;
+                  setConfirmDeleteSnapshotId(null);
+                  try {
+                    await deleteSnapshot(id);
+                    onRefreshState();
+                    setNotice("Snapshot deleted.");
+                  } catch (e) {
+                    setError((e as FusionErrorPayload).message || "Failed to delete snapshot.");
+                  }
+                }}
+                className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-[12px] font-semibold transition-colors cursor-pointer shadow-xs"
+              >
+                Delete
               </button>
             </div>
           </div>

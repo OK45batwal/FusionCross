@@ -335,6 +335,7 @@ mod tests {
             compatibility: None,
             profile: None,
             icon_data: None,
+            launch_arguments: None,
         });
         s
     }

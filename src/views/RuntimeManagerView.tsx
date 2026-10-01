@@ -132,7 +132,7 @@ export const RuntimeManagerView: React.FC<RuntimeManagerViewProps> = ({
             <Boxes className="w-5 h-5 text-accent-400" /> Runtime Engine Manager
           </h1>
           <p className="text-[12px] text-graphite-400">
-            PRD §32 · Wine Stable, Wine Staging, Wine-GE & Proton-GE runtime management
+            Wine Stable, Wine Staging, Wine-GE & Proton-GE runtime management
           </p>
         </div>
       </div>
@@ -254,7 +254,7 @@ export const RuntimeManagerView: React.FC<RuntimeManagerViewProps> = ({
       {/* Import Custom Runtime Archive */}
       <div className="rounded-xl border border-graphite-600 bg-graphite-900 p-5 space-y-4">
         <h2 className="text-[12px] font-mono font-bold text-graphite-400 uppercase tracking-wider flex items-center gap-2">
-          <Upload className="w-4 h-4 text-accent-400" /> Import Custom Runtime Archive (PRD §55)
+          <Upload className="w-4 h-4 text-accent-400" /> Import Custom Runtime Archive
         </h2>
         <p className="text-[12px] text-graphite-300">
           Import a custom Wine build archive (<span className="font-mono text-graphite-200">.tar.xz</span> or <span className="font-mono text-graphite-200">.tar.gz</span>). FusionCross automatically verifies, unpacks, and registers it safely.

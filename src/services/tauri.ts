@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-/** Structured backend errors (PRD §51) — `{ code, message, action? }`. */
+/** Structured backend errors — `{ code, message, action? }`. */
 export interface FusionErrorPayload {
   code: string;
   message: string;
@@ -51,6 +51,7 @@ export interface Application {
   compatibility?: number;
   profile?: string;
   icon_data?: string | null;
+  launch_arguments?: string | null;
 }
 
 export interface Runtime {
@@ -127,6 +128,14 @@ export interface RunningInfo {
   pid: number;
   started_at: number;
   elapsed_secs: number;
+  log_path?: string | null;
+}
+
+export interface LogEntry {
+  filename: string;
+  path: string;
+  size_bytes: number;
+  modified_at: number;
 }
 
 export interface Recommendation {
@@ -202,6 +211,20 @@ export const registerApplication = (
 ) => invoke<Application>("register_application", { bottleId, name, executablePath, category });
 export const unregisterApplication = (appId: string) =>
   invoke<void>("unregister_application", { appId });
+export const updateApplication = (
+  appId: string,
+  params: {
+    name?: string;
+    launchArguments?: string;
+    category?: string;
+  }
+) =>
+  invoke<Application>("update_application", {
+    appId,
+    name: params.name,
+    launchArguments: params.launchArguments,
+    category: params.category,
+  });
 
 export const runInstaller = (installerPath: string, bottleId: string) =>
   invoke<string>("run_installer", { installerPath, bottleId });
@@ -211,6 +234,12 @@ export const launchApplication = (appId: string) => invoke<RunningInfo>("launch_
 export const stopApplication = (appId: string) => invoke<void>("stop_application", { appId });
 export const listRunning = () => invoke<RunningInfo[]>("list_running");
 export const toggleFavorite = (appId: string) => invoke<void>("toggle_favorite", { appId });
+
+export const listApplicationLogs = (appId?: string) =>
+  invoke<LogEntry[]>("list_application_logs", { appId });
+export const readLogFile = (logPath: string) =>
+  invoke<string>("read_log_file", { logPath });
+export const openLogsDirectory = () => invoke<void>("open_logs_directory");
 
 export const getRecommendation = (name: string) => invoke<Recommendation>("get_recommendation", { name });
 export const runDiagnostics = (appId: string) => invoke<DiagnosticCheck[]>("run_diagnostics", { appId });
@@ -226,7 +255,11 @@ export const importRuntime = (name: string, archivePath: string) =>
 export const downloadRuntime = (runtimeId: string) =>
   invoke<string>("download_runtime", { runtimeId });
 export const removeRuntime = (runtimeId: string) => invoke<void>("remove_runtime", { runtimeId });
+
 export const setSafeMode = (enabled: boolean) => invoke<void>("set_safe_mode", { enabled });
+export const setSetting = (key: string, value: string) =>
+  invoke<void>("set_setting", { key, value });
+export const getSettings = () => invoke<[string, string][]>("get_settings");
 export const exportAppBundle = (appId: string) => invoke<string>("export_app_bundle", { appId });
 
 export interface GameCatalogItem {
@@ -243,6 +276,7 @@ export interface GameCatalogItem {
   dependencies: string[];
   launch_arguments: string[];
   installer_url?: string | null;
+  cover_url?: string | null;
   notes: string;
   anti_cheat_status: "Supported" | "Singleplayer Only" | "Kernel Driver Incompatible" | string;
 }

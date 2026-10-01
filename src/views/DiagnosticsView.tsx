@@ -74,7 +74,7 @@ export const DiagnosticsView: React.FC<DiagnosticsViewProps> = ({
             <Activity className="w-5 h-5 text-warn" /> Diagnostics & Auto-Fix Engine
           </h1>
           <p className="text-[12px] text-graphite-400">
-            PRD §36–37 · 3-Part Error Diagnosis (*What happened / Why / What can I do*) with 1-click Auto-Fix
+            Intelligent Error Diagnosis with 1-Click Automated Repair
           </p>
         </div>
       </div>
@@ -160,7 +160,7 @@ export const DiagnosticsView: React.FC<DiagnosticsViewProps> = ({
                     <div className="space-y-1 font-mono text-[12px]">
                       <h3 className="font-bold text-graphite-100 text-[13px]">{check.label}</h3>
 
-                      {/* Enforce PRD §78 3-part layout */}
+                      {/* 3-part layout */}
                       <div className="space-y-1 pt-1">
                         <p className="text-graphite-300">
                           <span className="text-graphite-400 font-semibold">What happened: </span>

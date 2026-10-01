@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Sidebar, ViewId } from "./components/Sidebar";
 import { CommandPalette } from "./components/CommandPalette";
 import { BottleWorkspaceView } from "./views/BottleWorkspaceView";
@@ -27,6 +27,7 @@ import {
 import { RefreshCw, X, FlaskConical } from "lucide-react";
 import { GlobalDropZone } from "./components/GlobalDropZone";
 import { DroppedFileModal } from "./components/DroppedFileModal";
+import { ToastContainer, ToastItem } from "./components/Toast";
 
 export function App() {
   const [currentView, setCurrentView] = useState<ViewId>("all_apps");
@@ -41,7 +42,8 @@ export function App() {
   const [templates, setTemplates] = useState<BottleTemplate[]>([]);
   const [runningInfo, setRunningInfo] = useState<RunningInfo[]>([]);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const [globalError, setGlobalError] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Create Bottle Modal state
   const [showCreateBottleModal, setShowCreateBottleModal] = useState(false);
@@ -53,12 +55,25 @@ export function App() {
   const [droppedFilePath, setDroppedFilePath] = useState<string | null>(null);
   const [droppedTargetBottleId, setDroppedTargetBottleId] = useState<string>("");
 
+  const addToast = useCallback(
+    (type: ToastItem["type"], message: string, title?: string) => {
+      const id = Math.random().toString(36).substring(2, 9);
+      setToasts((prev) => [...prev.slice(-4), { id, type, message, title }]);
+    },
+    []
+  );
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem("fusioncross-theme", theme);
   }, [theme]);
 
-  const refreshState = async () => {
+  // Full state refresh (system info, templates, app state, running processes)
+  const refreshState = useCallback(async () => {
     try {
       const [sys, st, tmpl, run] = await Promise.all([
         getSystemInfo().catch(() => null),
@@ -69,28 +84,51 @@ export function App() {
       if (sys) setSystemInfo(sys);
       if (st) {
         setState(st);
-        // Automatically default selectedBottleId if none selected yet
-        if (!selectedBottleId && st.bottles.length > 0) {
-          setSelectedBottleId(st.bottles[0].id);
-        }
+        setSelectedBottleId((prev) => {
+          if (!prev && st.bottles.length > 0) return st.bottles[0].id;
+          if (prev && !st.bottles.some((b) => b.id === prev)) {
+            return st.bottles.length > 0 ? st.bottles[0].id : null;
+          }
+          return prev;
+        });
       }
       if (tmpl) setTemplates(tmpl);
       if (run) setRunningInfo(run);
-      setGlobalError(null);
     } catch (e) {
-      setGlobalError((e as FusionErrorPayload).message || String(e));
+      addToast("error", (e as FusionErrorPayload).message || String(e), "Sync Failed");
     }
-  };
+  }, [addToast]);
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- async polling, setState only fires after await
-    refreshState();
-    const interval = setInterval(refreshState, 4000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Lightweight recurring poll (only dynamic app state & running process telemetry)
+  const pollDynamicState = useCallback(async () => {
+    try {
+      const [st, run] = await Promise.all([
+        getState().catch(() => null),
+        listRunning().catch(() => []),
+      ]);
+      if (st) {
+        setState(st);
+        setSelectedBottleId((prev) => {
+          if (!prev && st.bottles.length > 0) return st.bottles[0].id;
+          if (prev && !st.bottles.some((b) => b.id === prev)) {
+            return st.bottles.length > 0 ? st.bottles[0].id : null;
+          }
+          return prev;
+        });
+      }
+      if (run) setRunningInfo(run);
+    } catch {
+      // Quiet background polling
+    }
   }, []);
 
-  // Global Hotkey ⌘ K listener for Command Palette (PRD §5)
+  useEffect(() => {
+    refreshState();
+    const interval = setInterval(pollDynamicState, 3500);
+    return () => clearInterval(interval);
+  }, [refreshState, pollDynamicState]);
+
+  // Global Hotkey ⌘ K listener for Command Palette
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -102,30 +140,39 @@ export function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    await refreshState();
+    setIsSyncing(false);
+    addToast("success", "Application state synchronized successfully.", "Synced");
+  };
+
   const handleLaunchApp = async (appId: string) => {
     try {
       await launchApplication(appId);
-      await refreshState();
+      addToast("info", "Starting application process...", "Launching");
+      await pollDynamicState();
     } catch (e) {
       const err = e as FusionErrorPayload;
-      setGlobalError(`Launch failed: ${err.message || "Failed to launch process."}`);
+      addToast("error", err.message || "Failed to launch process.", "Launch Failed");
     }
   };
 
   const handleStopApp = async (appId: string) => {
     try {
       await stopApplication(appId);
-      await refreshState();
+      addToast("info", "Stopping application process...", "Stopping");
+      await pollDynamicState();
     } catch (e) {
       const err = e as FusionErrorPayload;
-      setGlobalError(`Stop failed: ${err.message || "Failed to stop process."}`);
+      addToast("error", err.message || "Failed to stop process.", "Stop Failed");
     }
   };
 
   const handleToggleFavorite = async (appId: string) => {
     try {
       await toggleFavorite(appId);
-      await refreshState();
+      await pollDynamicState();
     } catch {
       // silent
     }
@@ -149,20 +196,55 @@ export function App() {
       setNewBottleName("");
       setSelectedBottleId(b.id);
       setCurrentView("bottle");
+      addToast("success", `Bottle "${b.name}" created successfully.`, "Bottle Ready");
       await refreshState();
     } catch (e) {
-      setGlobalError((e as FusionErrorPayload).message || "Failed to create bottle.");
+      addToast("error", (e as FusionErrorPayload).message || "Failed to create bottle.", "Creation Failed");
     } finally {
       setCreatingBottle(false);
     }
   };
 
-  const selectedBottle =
-    state?.bottles.find((b) => b.id === selectedBottleId) ||
-    (state?.bottles.length ? state.bottles[0] : null);
+  if (!state) {
+    return (
+      <div className="flex h-screen w-screen bg-[var(--bg-main)] text-[var(--text-main)] font-sans select-none overflow-hidden">
+        {/* Skeleton Sidebar */}
+        <div className="w-64 border-r border-[var(--border-color)] bg-[var(--bg-surface)] p-4 flex flex-col gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-7 h-7 rounded-lg bg-[var(--bg-elevated)] animate-pulse" />
+            <div className="h-4 w-28 bg-[var(--bg-elevated)] rounded animate-pulse" />
+          </div>
+          <div className="space-y-2 mt-4">
+            <div className="h-7 bg-[var(--bg-elevated)] rounded-lg animate-pulse" />
+            <div className="h-7 bg-[var(--bg-elevated)] rounded-lg animate-pulse" />
+            <div className="h-7 bg-[var(--bg-elevated)] rounded-lg animate-pulse" />
+          </div>
+          <div className="mt-6 space-y-2">
+            <div className="h-3 w-16 bg-[var(--bg-elevated)] rounded animate-pulse" />
+            <div className="h-7 bg-[var(--bg-elevated)] rounded-lg animate-pulse" />
+            <div className="h-7 bg-[var(--bg-elevated)] rounded-lg animate-pulse" />
+          </div>
+        </div>
+        {/* Skeleton Main Content */}
+        <div className="flex-1 flex flex-col p-6 space-y-6">
+          <div className="h-9 w-48 bg-[var(--bg-elevated)] rounded animate-pulse" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="h-32 bg-[var(--bg-elevated)] rounded-xl animate-pulse" />
+            <div className="h-32 bg-[var(--bg-elevated)] rounded-xl animate-pulse" />
+            <div className="h-32 bg-[var(--bg-elevated)] rounded-xl animate-pulse" />
+          </div>
+          <div className="h-64 bg-[var(--bg-elevated)] rounded-xl animate-pulse" />
+        </div>
+      </div>
+    );
+  }
 
-  const totalAppsCount = state?.applications.length || 0;
-  const favoritesCount = state?.applications.filter((a) => a.favorite).length || 0;
+  const selectedBottle =
+    state.bottles.find((b) => b.id === selectedBottleId) ||
+    (state.bottles.length ? state.bottles[0] : null);
+
+  const totalAppsCount = state.applications.length;
+  const favoritesCount = state.applications.filter((a) => a.favorite).length;
 
   return (
     <div className="flex h-screen w-screen bg-[var(--bg-main)] text-[var(--text-main)] font-sans select-none overflow-hidden transition-colors duration-200">
@@ -214,25 +296,16 @@ export function App() {
             )}
 
             <button
-              onClick={refreshState}
-              className="hover:text-[var(--text-main)] transition-colors flex items-center gap-1 cursor-pointer"
+              onClick={handleManualSync}
+              disabled={isSyncing}
+              className="hover:text-[var(--text-main)] transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               title="Refresh State"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Sync</span>
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin" : ""}`} />
+              <span>{isSyncing ? "Syncing..." : "Sync"}</span>
             </button>
           </div>
         </header>
-
-        {/* Global Error Banner */}
-        {globalError && (
-          <div className="px-6 py-2 bg-red-500/10 border-b border-red-500/20 text-red-500 font-mono text-[11px] flex items-center justify-between">
-            <span>⚠ {globalError}</span>
-            <button onClick={() => setGlobalError(null)} className="hover:underline cursor-pointer">
-              Dismiss
-            </button>
-          </div>
-        )}
 
         {/* Main Content View Switcher */}
         <div className="flex-1 overflow-hidden flex flex-col">
@@ -445,6 +518,9 @@ export function App() {
           }}
         />
       )}
+
+      {/* Notifications Toast Container */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

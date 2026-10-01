@@ -29,6 +29,7 @@ pub fn dirs(app: &AppHandle) -> Dirs {
         snapshots: base.join("snapshots"),
         downloads: base.join("downloads"),
         libraries,
+        logs: base.join("logs"),
         state: base.join("state.json"),
     }
 }
@@ -43,17 +44,19 @@ pub struct Dirs {
     pub snapshots: PathBuf,
     pub downloads: PathBuf,
     pub libraries: PathBuf,
+    pub logs: PathBuf,
     pub state: PathBuf,
 }
 
 impl Dirs {
-    fn ensure(&self) -> Result<(), FusionError> {
+    pub fn ensure(&self) -> Result<(), FusionError> {
         for d in [
             &self.bottles,
             &self.runtimes,
             &self.snapshots,
             &self.downloads,
             &self.libraries,
+            &self.logs,
         ] {
             std::fs::create_dir_all(d).map_err(|_| FusionError::PermissionDenied)?;
         }
@@ -149,6 +152,7 @@ impl FusionState {
                         compatibility: Some(rec.compatibility),
                         profile: Some(rec.profile.to_string()),
                         icon_data,
+                        launch_arguments: None,
                     });
                 }
             }

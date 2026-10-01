@@ -24,6 +24,7 @@ import {
   scanAllBottles,
   revealInFinder,
   unregisterApplication,
+  updateApplication,
 } from "../services/tauri";
 import { ViewId } from "../components/Sidebar";
 
@@ -57,6 +58,30 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
   const [exportStatus, setExportStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const [scanning, setScanning] = useState(false);
   const [menuAppId, setMenuAppId] = useState<string | null>(null);
+  const [appLaunchArgs, setAppLaunchArgs] = useState("");
+  const [saveArgsSuccess, setSaveArgsSuccess] = useState(false);
+
+  useEffect(() => {
+    if (selectedApp) {
+      setAppLaunchArgs(selectedApp.launch_arguments || "");
+      setSaveArgsSuccess(false);
+    }
+  }, [selectedApp]);
+
+  const handleSaveLaunchArgs = async () => {
+    if (!selectedApp) return;
+    try {
+      const updated = await updateApplication(selectedApp.id, {
+        launchArguments: appLaunchArgs,
+      });
+      setSelectedApp(updated);
+      setSaveArgsSuccess(true);
+      setTimeout(() => setSaveArgsSuccess(false), 2000);
+      if (onRefreshState) await onRefreshState();
+    } catch {
+      // handled
+    }
+  };
 
   useEffect(() => {
     const handleCloseMenu = () => setMenuAppId(null);
@@ -76,9 +101,12 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
     }
   };
 
+  const hasAutoScannedRef = React.useRef(false);
+
   useEffect(() => {
     let active = true;
-    if (applications.length === 0 && bottles.length > 0) {
+    if (!hasAutoScannedRef.current && applications.length === 0 && bottles.length > 0) {
+      hasAutoScannedRef.current = true;
       scanAllBottles()
         .then(() => {
           if (active && onRefreshState) {
@@ -90,14 +118,16 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
     return () => {
       active = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bottles.length, applications.length]);
+  }, [bottles.length, applications.length, onRefreshState]);
+
+  const [confirmDeleteApp, setConfirmDeleteApp] = useState<Application | null>(null);
 
   const handleUnregisterApp = async (appId: string) => {
     try {
       await unregisterApplication(appId);
       if (onRefreshState) await onRefreshState();
       if (selectedApp?.id === appId) setSelectedApp(null);
+      setConfirmDeleteApp(null);
     } catch {
       // handled
     }
@@ -401,7 +431,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
 
                         <button
                           onClick={() => {
-                            handleUnregisterApp(app.id);
+                            setConfirmDeleteApp(app);
                             setMenuAppId(null);
                           }}
                           className="w-full px-3 py-1.5 hover:bg-red-500/10 text-red-500 flex items-center gap-2 cursor-pointer transition-colors"
@@ -540,8 +570,47 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                 <span className="text-[var(--text-main)] font-semibold">{selectedApp.launch_count}</span>
               </div>
               <div>
+                <span className="text-[var(--text-muted)]">Play Time: </span>
+                <span className="text-[var(--text-main)] font-semibold">
+                  {selectedApp.play_time_mins > 0
+                    ? selectedApp.play_time_mins < 60
+                      ? `${selectedApp.play_time_mins} minutes`
+                      : `${(selectedApp.play_time_mins / 60).toFixed(1)} hours`
+                    : "0 minutes"}
+                </span>
+              </div>
+              <div>
                 <span className="text-[var(--text-muted)]">Compatibility Score: </span>
                 <span className="text-[var(--color-ok)] font-bold">{selectedApp.compatibility ?? 88}%</span>
+              </div>
+            </div>
+
+            {/* Launch Arguments Editor */}
+            <div className="rounded-xl bg-[var(--bg-elevated)] p-4 border border-[var(--border-color)] space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[12px] font-mono font-bold text-[var(--text-main)]">
+                  Launch Arguments
+                </span>
+                {saveArgsSuccess && (
+                  <span className="text-[10px] text-[var(--color-ok)] font-mono">
+                    ✓ Saved
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="e.g. -dx11 -novid -fullscreen"
+                  value={appLaunchArgs}
+                  onChange={(e) => setAppLaunchArgs(e.target.value)}
+                  className="flex-1 px-3 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] text-[var(--text-main)] font-mono text-[11px]"
+                />
+                <button
+                  onClick={handleSaveLaunchArgs}
+                  className="px-3 py-1.5 rounded-lg bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-[11px] font-semibold cursor-pointer transition-colors"
+                >
+                  Save
+                </button>
               </div>
             </div>
 
@@ -574,7 +643,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                 </button>
 
                 <button
-                  onClick={() => handleUnregisterApp(selectedApp.id)}
+                  onClick={() => setConfirmDeleteApp(selectedApp)}
                   className="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 text-[11px] font-mono flex items-center gap-1.5 border border-red-500/30 cursor-pointer transition-colors"
                 >
                   <Trash2 className="w-3.5 h-3.5" /> Remove from Shelf
@@ -632,6 +701,37 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                   </button>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Remove from Shelf Confirmation Modal */}
+      {confirmDeleteApp && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] p-6 shadow-2xl space-y-4 text-center animate-in fade-in zoom-in-95 duration-100">
+            <div className="w-12 h-12 rounded-full bg-red-500/10 text-red-500 mx-auto flex items-center justify-center">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-[15px] font-bold text-[var(--text-main)]">Remove from Shelf?</h3>
+              <p className="text-[12px] text-[var(--text-muted)] mt-1.5 leading-relaxed">
+                Are you sure you want to remove <span className="font-semibold text-[var(--text-main)]">"{confirmDeleteApp.name}"</span>? The files inside your bottle prefix will not be deleted.
+              </p>
+            </div>
+            <div className="flex gap-2 justify-center pt-2">
+              <button
+                onClick={() => setConfirmDeleteApp(null)}
+                className="px-4 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[var(--text-main)] text-[12px] font-semibold hover:bg-[var(--bg-surface)] transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleUnregisterApp(confirmDeleteApp.id)}
+                className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-[12px] font-semibold transition-colors cursor-pointer shadow-xs"
+              >
+                Remove
+              </button>
             </div>
           </div>
         </div>

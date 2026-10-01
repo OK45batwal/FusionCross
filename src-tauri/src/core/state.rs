@@ -123,6 +123,9 @@ pub struct Application {
     /// Base64 data URL of the application's embedded icon
     #[serde(default)]
     pub icon_data: Option<String>,
+    /// Custom command-line launch arguments (e.g. "-dx11", "-novid")
+    #[serde(default)]
+    pub launch_arguments: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
