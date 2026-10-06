@@ -45,30 +45,30 @@ const ToastCard: React.FC<{ toast: ToastItem; onDismiss: () => void }> = ({ toas
   const config = {
     error: {
       border: "border-red-500/30",
-      bg: "bg-[var(--bg-surface)]",
+      bg: "bg-(--bg-surface)",
       indicator: "bg-red-500",
       icon: <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />,
       defaultTitle: "Error",
     },
     success: {
       border: "border-emerald-500/30",
-      bg: "bg-[var(--bg-surface)]",
+      bg: "bg-(--bg-surface)",
       indicator: "bg-emerald-500",
       icon: <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />,
       defaultTitle: "Success",
     },
     warning: {
       border: "border-amber-500/30",
-      bg: "bg-[var(--bg-surface)]",
+      bg: "bg-(--bg-surface)",
       indicator: "bg-amber-500",
       icon: <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />,
       defaultTitle: "Notice",
     },
     info: {
-      border: "border-[var(--border-color)]",
-      bg: "bg-[var(--bg-surface)]",
-      indicator: "bg-[var(--accent-primary)]",
-      icon: <Info className="w-4 h-4 text-[var(--accent-primary)] shrink-0 mt-0.5" />,
+      border: "border-(--border-color)",
+      bg: "bg-(--bg-surface)",
+      indicator: "bg-(--accent-primary)",
+      icon: <Info className="w-4 h-4 text-(--accent-primary) shrink-0 mt-0.5" />,
       defaultTitle: "Notification",
     },
   }[toast.type];
@@ -80,16 +80,16 @@ const ToastCard: React.FC<{ toast: ToastItem; onDismiss: () => void }> = ({ toas
       <div className={`absolute left-0 top-0 bottom-0 w-1 ${config.indicator}`} />
       {config.icon}
       <div className="flex-1 min-w-0 pr-2">
-        <p className="font-semibold text-[var(--text-main)] text-[12px] leading-tight">
+        <p className="font-semibold text-(--text-main) text-[12px] leading-tight">
           {toast.title || config.defaultTitle}
         </p>
-        <p className="text-[var(--text-secondary)] text-[11px] mt-0.5 break-words leading-relaxed font-mono">
+        <p className="text-(--text-secondary) text-[11px] mt-0.5 break-words leading-relaxed font-mono">
           {toast.message}
         </p>
       </div>
       <button
         onClick={onDismiss}
-        className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-1 rounded-md hover:bg-[var(--bg-elevated)] transition-colors cursor-pointer shrink-0"
+        className="text-(--text-muted) hover:text-(--text-main) p-1 rounded-md hover:bg-(--bg-elevated) transition-colors cursor-pointer shrink-0"
         title="Dismiss"
       >
         <X className="w-3.5 h-3.5" />

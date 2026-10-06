@@ -126,13 +126,13 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
     switch (tier.toLowerCase()) {
       case "platinum":
         return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-[var(--color-ok-glow)] text-[var(--color-ok)] border border-[var(--color-ok)]/30 flex items-center gap-1">
+          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-(--color-ok-glow) text-ok border border-ok/30 flex items-center gap-1">
             <CheckCircle2 className="w-3 h-3" /> Platinum ({score}%)
           </span>
         );
       case "gold":
         return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-[var(--accent-primary)]/15 text-[var(--accent-primary)] border border-[var(--accent-primary)]/30 flex items-center gap-1">
+          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-(--accent-primary)/15 text-(--accent-primary) border border-(--accent-primary)/30 flex items-center gap-1">
             <Sparkles className="w-3 h-3" /> Gold ({score}%)
           </span>
         );
@@ -150,7 +150,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
         );
       default:
         return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-[var(--bg-elevated)] text-[var(--text-secondary)] border border-[var(--border-color)]">
+          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-(--bg-elevated) text-(--text-secondary) border border-(--border-color)">
             {tier} ({score}%)
           </span>
         );
@@ -158,42 +158,42 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
   };
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-[var(--bg-main)] text-[var(--text-main)] transition-colors duration-200">
+    <div className="flex-1 flex flex-col overflow-hidden bg-(--bg-main) text-(--text-main) transition-colors duration-200">
       {/* Top Banner / Hero Header */}
-      <div className="p-6 border-b border-[var(--border-color)] bg-[var(--bg-surface)] shrink-0">
+      <div className="p-6 border-b border-(--border-color) bg-(--bg-surface) shrink-0">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-[var(--accent-primary)]/10 border border-[var(--accent-primary)]/20 flex items-center justify-center text-[var(--accent-primary)]">
+              <div className="w-8 h-8 rounded-lg bg-(--accent-primary)/10 border border-(--accent-primary)/20 flex items-center justify-center text-(--accent-primary)">
                 <Gamepad2 className="w-4 h-4" />
               </div>
-              <h1 className="text-[18px] font-bold tracking-tight text-[var(--text-main)]">
+              <h1 className="text-[18px] font-bold tracking-tight text-(--text-main)">
                 Game & Software Catalog
               </h1>
-              <span className="px-2 py-0.5 text-[11px] font-mono rounded-full bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[var(--text-muted)]">
+              <span className="px-2 py-0.5 text-[11px] font-mono rounded-full bg-(--bg-elevated) border border-(--border-color) text-(--text-muted)">
                 {catalog.length} Tested Profiles
               </span>
             </div>
-            <p className="text-[12px] text-[var(--text-secondary)] mt-1.5 max-w-2xl leading-relaxed">
+            <p className="text-[12px] text-(--text-secondary) mt-1.5 max-w-2xl leading-relaxed">
               Verified Windows games, launchers, and creative apps optimized for Apple Silicon with Apple Game Porting Toolkit (D3DMetal), DXVK Vulkan, and Mach semaphores.
             </p>
           </div>
 
           {/* Search bar */}
           <div className="relative w-full md:w-72">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-(--text-muted)" />
             <input
               type="text"
               placeholder="Search 50+ games, developers, backends..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[12px] font-sans text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)] transition-colors"
+              className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-[12px] font-sans text-(--text-main) placeholder-(--text-muted) focus:outline-none focus:border-(--accent-primary) transition-colors"
             />
           </div>
         </div>
 
         {/* Categories Bar & Tier Filter */}
-        <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-3 border-t border-[var(--border-color)]/60">
+        <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-3 border-t border-(--border-color)/60">
           <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
             {categories.map((cat) => (
               <button
@@ -201,8 +201,8 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                 onClick={() => setSelectedCategory(cat.id)}
                 className={`px-3 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer ${
                   selectedCategory === cat.id
-                    ? "bg-[var(--accent-primary)] text-white font-semibold shadow-xs"
-                    : "bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-main)] border border-[var(--border-color)]"
+                    ? "bg-(--accent-primary) text-white font-semibold shadow-xs"
+                    : "bg-(--bg-elevated) text-(--text-secondary) hover:text-(--text-main) border border-(--border-color)"
                 }`}
               >
                 {cat.label}
@@ -211,15 +211,15 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5 text-[11px]">
-            <span className="text-[var(--text-muted)] font-mono">Rating:</span>
+            <span className="text-(--text-muted) font-mono">Rating:</span>
             {["all", "platinum", "gold", "silver", "blocked"].map((tier) => (
               <button
                 key={tier}
                 onClick={() => setSelectedTier(tier)}
                 className={`px-2 py-0.5 rounded capitalize font-mono text-[10px] transition-colors cursor-pointer ${
                   selectedTier === tier
-                    ? "bg-[var(--text-main)] text-[var(--bg-main)] font-bold"
-                    : "text-[var(--text-muted)] hover:text-[var(--text-main)]"
+                    ? "bg-(--text-main) text-(--bg-main) font-bold"
+                    : "text-(--text-muted) hover:text-(--text-main)"
                 }`}
               >
                 {tier}
@@ -252,11 +252,11 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
       <div className="flex-1 overflow-y-auto p-6">
         {filtered.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-3">
-            <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-color)] flex items-center justify-center text-[var(--text-muted)]">
+            <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border-color) flex items-center justify-center text-(--text-muted)">
               <Gamepad2 className="w-6 h-6" />
             </div>
-            <h3 className="text-[15px] font-bold text-[var(--text-main)]">No games matched your criteria</h3>
-            <p className="text-[12px] text-[var(--text-secondary)] max-w-sm">
+            <h3 className="text-[15px] font-bold text-(--text-main)">No games matched your criteria</h3>
+            <p className="text-[12px] text-(--text-secondary) max-w-sm">
               Try adjusting your search terms or selecting &quot;All Items&quot;.
             </p>
             <button
@@ -265,7 +265,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                 setSelectedCategory("all");
                 setSelectedTier("all");
               }}
-              className="px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[12px] text-[var(--text-main)] hover:bg-[var(--border-color)] transition-colors cursor-pointer"
+              className="px-3 py-1.5 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-[12px] text-(--text-main) hover:bg-(--border-color) transition-colors cursor-pointer"
             >
               Reset Filters
             </button>
@@ -279,37 +279,37 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                 <div
                   key={item.id}
                   onClick={() => setSelectedGame(item)}
-                  className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] hover:border-[var(--border-hover)] p-4.5 transition-all flex flex-col justify-between space-y-3.5 group shadow-xs cursor-pointer hover:-translate-y-0.5"
+                  className="rounded-xl border border-(--border-color) bg-(--bg-surface) hover:border-(--border-hover) p-4.5 transition-all flex flex-col justify-between space-y-3.5 group shadow-xs cursor-pointer hover:-translate-y-0.5"
                 >
                   {/* Card Header */}
                   <div>
                     <div className="flex items-start justify-between gap-2 mb-1.5">
                       <div>
-                        <h3 className="text-[14px] font-bold text-[var(--text-main)] group-hover:text-[var(--accent-primary)] transition-colors line-clamp-1">
+                        <h3 className="text-[14px] font-bold text-(--text-main) group-hover:text-(--accent-primary) transition-colors line-clamp-1">
                           {item.title}
                         </h3>
-                        <p className="text-[11px] text-[var(--text-muted)]">
+                        <p className="text-[11px] text-(--text-muted)">
                           {item.developer} · {item.category}
                         </p>
                       </div>
                       {getTierBadge(item.tier, item.compatibility)}
                     </div>
 
-                    <p className="text-[11px] text-[var(--text-secondary)] line-clamp-2 mt-2 leading-relaxed">
+                    <p className="text-[11px] text-(--text-secondary) line-clamp-2 mt-2 leading-relaxed">
                       {item.notes}
                     </p>
                   </div>
 
                   {/* Engine Specs Badges */}
-                  <div className="pt-2 border-t border-[var(--border-color)] flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
-                    <span className="px-2 py-0.5 rounded bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[var(--text-secondary)]">
+                  <div className="pt-2 border-t border-(--border-color) flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
+                    <span className="px-2 py-0.5 rounded bg-(--bg-elevated) border border-(--border-color) text-(--text-secondary)">
                       {item.graphics_backend === "d3dmetal" ? "D3DMetal (GPTK)" : item.graphics_backend.toUpperCase()}
                     </span>
-                    <span className="px-2 py-0.5 rounded bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[var(--text-muted)]">
+                    <span className="px-2 py-0.5 rounded bg-(--bg-elevated) border border-(--border-color) text-(--text-muted)">
                       {item.directx_version}
                     </span>
                     {item.msync_recommended && (
-                      <span className="px-1.5 py-0.5 rounded bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] font-semibold">
+                      <span className="px-1.5 py-0.5 rounded bg-(--accent-primary)/10 text-(--accent-primary) font-semibold">
                         MSync
                       </span>
                     )}
@@ -321,8 +321,8 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                   </div>
 
                   {/* Card Footer Actions */}
-                  <div className="pt-2 border-t border-[var(--border-color)] flex items-center justify-between">
-                    <span className="text-[10px] font-mono text-[var(--text-muted)]">
+                  <div className="pt-2 border-t border-(--border-color) flex items-center justify-between">
+                    <span className="text-[10px] font-mono text-(--text-muted)">
                       {item.dependencies.length > 0 ? `${item.dependencies.length} runtimes needed` : "Zero dependencies"}
                     </span>
 
@@ -334,7 +334,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                             handleInstallGame(item);
                           }}
                           disabled={isDownloading}
-                          className="px-3 py-1 rounded-md bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-[11px] font-medium flex items-center gap-1 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                          className="px-3 py-1 rounded-md bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[11px] font-medium flex items-center gap-1 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
                         >
                           {isDownloading ? (
                             <>
@@ -354,9 +354,9 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                             e.stopPropagation();
                             setSelectedGame(item);
                           }}
-                          className="px-2.5 py-1 rounded-md bg-[var(--bg-elevated)] hover:bg-[var(--border-color)] border border-[var(--border-color)] text-[var(--text-main)] text-[11px] font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                          className="px-2.5 py-1 rounded-md bg-(--bg-elevated) hover:bg-(--border-color) border border-(--border-color) text-(--text-main) text-[11px] font-medium flex items-center gap-1 transition-colors cursor-pointer"
                         >
-                          <Info className="w-3 h-3 text-[var(--accent-primary)]" />
+                          <Info className="w-3 h-3 text-(--accent-primary)" />
                           <span>View Recipe</span>
                         </button>
                       )}
@@ -372,24 +372,24 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
       {/* Game Detail & Recipe Modal */}
       {selectedGame && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-xl rounded-2xl border border-[var(--border-color)] bg-[var(--bg-surface)] p-6 shadow-2xl space-y-5 animate-scale-in">
+          <div className="w-full max-w-xl rounded-2xl border border-(--border-color) bg-(--bg-surface) p-6 shadow-2xl space-y-5 animate-scale-in">
             {/* Modal Header */}
             <div className="flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-[18px] font-bold text-[var(--text-main)]">
+                  <h2 className="text-[18px] font-bold text-(--text-main)">
                     {selectedGame.title}
                   </h2>
                   {getTierBadge(selectedGame.tier, selectedGame.compatibility)}
                 </div>
-                <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">
-                  Developer: <span className="text-[var(--text-main)] font-medium">{selectedGame.developer}</span> · {selectedGame.category}
+                <p className="text-[12px] text-(--text-secondary) mt-0.5">
+                  Developer: <span className="text-(--text-main) font-medium">{selectedGame.developer}</span> · {selectedGame.category}
                 </p>
               </div>
 
               <button
                 onClick={() => setSelectedGame(null)}
-                className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer"
+                className="p-1 rounded text-(--text-muted) hover:text-(--text-main) cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -419,45 +419,45 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
             ) : null}
 
             {/* Optimal Recipe Matrix */}
-            <div className="space-y-2 rounded-xl bg-[var(--bg-elevated)] p-4 border border-[var(--border-color)] font-mono text-[12px]">
-              <div className="text-[11px] font-sans font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">
+            <div className="space-y-2 rounded-xl bg-(--bg-elevated) p-4 border border-(--border-color) font-mono text-[12px]">
+              <div className="text-[11px] font-sans font-semibold text-(--text-muted) uppercase tracking-wider mb-2">
                 Optimal Wine & Hardware Configuration
               </div>
 
               <div className="grid grid-cols-2 gap-3 text-[11px]">
                 <div>
-                  <span className="text-[var(--text-muted)]">Graphics Translation: </span>
-                  <span className="text-[var(--accent-primary)] font-bold">
+                  <span className="text-(--text-muted)">Graphics Translation: </span>
+                  <span className="text-(--accent-primary) font-bold">
                     {selectedGame.graphics_backend === "d3dmetal" ? "D3DMetal (Apple GPTK)" : selectedGame.graphics_backend.toUpperCase()}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[var(--text-muted)]">DirectX Target: </span>
-                  <span className="text-[var(--text-main)] font-semibold">{selectedGame.directx_version}</span>
+                  <span className="text-(--text-muted)">DirectX Target: </span>
+                  <span className="text-(--text-main) font-semibold">{selectedGame.directx_version}</span>
                 </div>
                 <div>
-                  <span className="text-[var(--text-muted)]">Windows OS Mode: </span>
-                  <span className="text-[var(--text-main)] font-semibold">{selectedGame.windows_version.toUpperCase()}</span>
+                  <span className="text-(--text-muted)">Windows OS Mode: </span>
+                  <span className="text-(--text-main) font-semibold">{selectedGame.windows_version.toUpperCase()}</span>
                 </div>
                 <div>
-                  <span className="text-[var(--text-muted)]">Mach Synchronization: </span>
-                  <span className={selectedGame.msync_recommended ? "text-emerald-500 font-bold" : "text-[var(--text-muted)]"}>
+                  <span className="text-(--text-muted)">Mach Synchronization: </span>
+                  <span className={selectedGame.msync_recommended ? "text-emerald-500 font-bold" : "text-(--text-muted)"}>
                     {selectedGame.msync_recommended ? "MSync Enabled" : "Standard"}
                   </span>
                 </div>
               </div>
 
               {/* Dependencies & Launch args */}
-              <div className="pt-2 border-t border-[var(--border-color)] space-y-1.5 text-[11px]">
+              <div className="pt-2 border-t border-(--border-color) space-y-1.5 text-[11px]">
                 <div>
-                  <span className="text-[var(--text-muted)]">Required Dependencies: </span>
-                  <span className="text-[var(--text-main)]">
+                  <span className="text-(--text-muted)">Required Dependencies: </span>
+                  <span className="text-(--text-main)">
                     {selectedGame.dependencies.length > 0 ? selectedGame.dependencies.join(", ") : "None (Out of the box)"}
                   </span>
                 </div>
                 {selectedGame.launch_arguments.length > 0 && (
                   <div>
-                    <span className="text-[var(--text-muted)]">Recommended Launch Args: </span>
+                    <span className="text-(--text-muted)">Recommended Launch Args: </span>
                     <span className="text-amber-400 font-semibold">{selectedGame.launch_arguments.join(" ")}</span>
                   </div>
                 )}
@@ -466,22 +466,22 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
 
             {/* Notes Section */}
             <div className="space-y-1">
-              <h4 className="text-[12px] font-semibold text-[var(--text-main)]">Community Testing Notes</h4>
-              <p className="text-[12px] text-[var(--text-secondary)] leading-relaxed">
+              <h4 className="text-[12px] font-semibold text-(--text-main)">Community Testing Notes</h4>
+              <p className="text-[12px] text-(--text-secondary) leading-relaxed">
                 {selectedGame.notes}
               </p>
             </div>
 
             {/* Target Bottle Selection & Actions */}
-            <div className="pt-3 border-t border-[var(--border-color)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="pt-3 border-t border-(--border-color) flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2 flex-1 max-w-xs">
-                <label className="text-[11px] font-medium text-[var(--text-muted)] shrink-0">
+                <label className="text-[11px] font-medium text-(--text-muted) shrink-0">
                   Target Bottle:
                 </label>
                 <select
                   value={targetBottleId}
                   onChange={(e) => setTargetBottleId(e.target.value)}
-                  className="flex-1 bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[12px] rounded-lg px-2.5 py-1.5 text-[var(--text-main)] focus:outline-none focus:border-[var(--accent-primary)] truncate"
+                  className="flex-1 bg-(--bg-elevated) border border-(--border-color) text-[12px] rounded-lg px-2.5 py-1.5 text-(--text-main) focus:outline-none focus:border-(--accent-primary) truncate"
                 >
                   <option value="">Auto-create or pick default</option>
                   {bottles.map((b) => (
@@ -495,7 +495,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setSelectedGame(null)}
-                  className="px-3 py-1.5 rounded-lg border border-[var(--border-color)] text-[12px] font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] transition-colors cursor-pointer"
+                  className="px-3 py-1.5 rounded-lg border border-(--border-color) text-[12px] font-medium text-(--text-secondary) hover:bg-(--bg-elevated) transition-colors cursor-pointer"
                 >
                   Close
                 </button>
@@ -504,7 +504,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                   <button
                     onClick={() => handleInstallGame(selectedGame, targetBottleId)}
                     disabled={installingId === selectedGame.id}
-                    className="px-4 py-1.5 rounded-lg bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-[12px] font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                    className="px-4 py-1.5 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[12px] font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
                   >
                     {installingId === selectedGame.id ? (
                       <>
@@ -521,7 +521,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                 ) : (
                   <button
                     onClick={() => handleInstallGame(selectedGame, targetBottleId)}
-                    className="px-4 py-1.5 rounded-lg bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-[12px] font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                    className="px-4 py-1.5 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[12px] font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Setup Bottle & Install Game</span>

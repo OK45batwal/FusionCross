@@ -123,7 +123,10 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    refreshState();
+    const init = async () => {
+      await refreshState();
+    };
+    init();
     const interval = setInterval(pollDynamicState, 3500);
     return () => clearInterval(interval);
   }, [refreshState, pollDynamicState]);
@@ -207,33 +210,33 @@ export function App() {
 
   if (!state) {
     return (
-      <div className="flex h-screen w-screen bg-[var(--bg-main)] text-[var(--text-main)] font-sans select-none overflow-hidden">
+      <div className="flex h-screen w-screen bg-(--bg-main) text-(--text-main) font-sans select-none overflow-hidden">
         {/* Skeleton Sidebar */}
-        <div className="w-64 border-r border-[var(--border-color)] bg-[var(--bg-surface)] p-4 flex flex-col gap-4">
+        <div className="w-64 border-r border-(--border-color) bg-(--bg-surface) p-4 flex flex-col gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-7 h-7 rounded-lg bg-[var(--bg-elevated)] animate-pulse" />
-            <div className="h-4 w-28 bg-[var(--bg-elevated)] rounded animate-pulse" />
+            <div className="w-7 h-7 rounded-lg bg-(--bg-elevated) animate-pulse" />
+            <div className="h-4 w-28 bg-(--bg-elevated) rounded animate-pulse" />
           </div>
           <div className="space-y-2 mt-4">
-            <div className="h-7 bg-[var(--bg-elevated)] rounded-lg animate-pulse" />
-            <div className="h-7 bg-[var(--bg-elevated)] rounded-lg animate-pulse" />
-            <div className="h-7 bg-[var(--bg-elevated)] rounded-lg animate-pulse" />
+            <div className="h-7 bg-(--bg-elevated) rounded-lg animate-pulse" />
+            <div className="h-7 bg-(--bg-elevated) rounded-lg animate-pulse" />
+            <div className="h-7 bg-(--bg-elevated) rounded-lg animate-pulse" />
           </div>
           <div className="mt-6 space-y-2">
-            <div className="h-3 w-16 bg-[var(--bg-elevated)] rounded animate-pulse" />
-            <div className="h-7 bg-[var(--bg-elevated)] rounded-lg animate-pulse" />
-            <div className="h-7 bg-[var(--bg-elevated)] rounded-lg animate-pulse" />
+            <div className="h-3 w-16 bg-(--bg-elevated) rounded animate-pulse" />
+            <div className="h-7 bg-(--bg-elevated) rounded-lg animate-pulse" />
+            <div className="h-7 bg-(--bg-elevated) rounded-lg animate-pulse" />
           </div>
         </div>
         {/* Skeleton Main Content */}
         <div className="flex-1 flex flex-col p-6 space-y-6">
-          <div className="h-9 w-48 bg-[var(--bg-elevated)] rounded animate-pulse" />
+          <div className="h-9 w-48 bg-(--bg-elevated) rounded animate-pulse" />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="h-32 bg-[var(--bg-elevated)] rounded-xl animate-pulse" />
-            <div className="h-32 bg-[var(--bg-elevated)] rounded-xl animate-pulse" />
-            <div className="h-32 bg-[var(--bg-elevated)] rounded-xl animate-pulse" />
+            <div className="h-32 bg-(--bg-elevated) rounded-xl animate-pulse" />
+            <div className="h-32 bg-(--bg-elevated) rounded-xl animate-pulse" />
+            <div className="h-32 bg-(--bg-elevated) rounded-xl animate-pulse" />
           </div>
-          <div className="h-64 bg-[var(--bg-elevated)] rounded-xl animate-pulse" />
+          <div className="h-64 bg-(--bg-elevated) rounded-xl animate-pulse" />
         </div>
       </div>
     );
@@ -247,7 +250,7 @@ export function App() {
   const favoritesCount = state.applications.filter((a) => a.favorite).length;
 
   return (
-    <div className="flex h-screen w-screen bg-[var(--bg-main)] text-[var(--text-main)] font-sans select-none overflow-hidden transition-colors duration-200">
+    <div className="flex h-screen w-screen bg-(--bg-main) text-(--text-main) font-sans select-none overflow-hidden transition-colors duration-200">
       {/* Left Navigation Sidebar (CrossOver-style master layout) */}
       <Sidebar
         currentView={currentView}
@@ -265,11 +268,11 @@ export function App() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col overflow-hidden bg-[var(--bg-main)]">
+      <main className="flex-1 flex flex-col overflow-hidden bg-(--bg-main)">
         {/* Top Header Bar */}
-        <header className="h-11 shrink-0 px-6 flex items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-glass)] backdrop-blur-md text-[12px] font-sans">
-          <div className="flex items-center gap-2 text-[var(--text-muted)]">
-            <span className="font-semibold text-[var(--text-main)]">
+        <header className="h-11 shrink-0 px-6 flex items-center justify-between border-b border-(--border-color) bg-(--bg-glass) backdrop-blur-md text-[12px] font-sans">
+          <div className="flex items-center gap-2 text-(--text-muted)">
+            <span className="font-semibold text-(--text-main)">
               {currentView === "bottle" && selectedBottle
                 ? selectedBottle.name
                 : currentView === "all_apps"
@@ -288,7 +291,7 @@ export function App() {
             </span>
           </div>
 
-          <div className="flex items-center gap-4 text-[11px] font-mono text-[var(--text-muted)]">
+          <div className="flex items-center gap-4 text-[11px] font-mono text-(--text-muted)">
             {systemInfo && (
               <span className="hidden sm:inline">
                 macOS {systemInfo.os} · {systemInfo.arch}
@@ -298,7 +301,7 @@ export function App() {
             <button
               onClick={handleManualSync}
               disabled={isSyncing}
-              className="hover:text-[var(--text-main)] transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              className="hover:text-(--text-main) transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               title="Refresh State"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin" : ""}`} />
@@ -417,17 +420,17 @@ export function App() {
       {/* Global Modal: Create New Bottle */}
       {showCreateBottleModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] p-5 shadow-2xl space-y-4">
+          <div className="w-full max-w-md rounded-xl bg-(--bg-surface) border border-(--border-color) p-5 shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <FlaskConical className="w-4 h-4 text-[var(--accent-primary)]" />
-                <h3 className="text-[14px] font-semibold text-[var(--text-main)]">
+                <FlaskConical className="w-4 h-4 text-(--accent-primary)" />
+                <h3 className="text-[14px] font-semibold text-(--text-main)">
                   Create New Bottle Environment
                 </h3>
               </div>
               <button
                 onClick={() => setShowCreateBottleModal(false)}
-                className="text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer"
+                className="text-(--text-muted) hover:text-(--text-main) cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -435,7 +438,7 @@ export function App() {
 
             <div className="space-y-3">
               <div>
-                <label className="text-[11px] font-mono text-[var(--text-muted)] block mb-1">
+                <label className="text-[11px] font-mono text-(--text-muted) block mb-1">
                   Bottle Name
                 </label>
                 <input
@@ -443,12 +446,12 @@ export function App() {
                   placeholder="e.g. Steam, Cyberpunk 2077, Office 365"
                   value={newBottleName}
                   onChange={(e) => setNewBottleName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[12px] text-[var(--text-main)] focus:outline-none focus:border-[var(--accent-primary)]"
+                  className="w-full px-3 py-2 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-[12px] text-(--text-main) focus:outline-none focus:border-(--accent-primary)"
                 />
               </div>
 
               <div>
-                <label className="text-[11px] font-mono text-[var(--text-muted)] block mb-1">
+                <label className="text-[11px] font-mono text-(--text-muted) block mb-1">
                   Environment Template
                 </label>
                 <div className="space-y-1.5">
@@ -463,12 +466,12 @@ export function App() {
                       onClick={() => setSelectedTemplate(tmpl.id)}
                       className={`p-2.5 rounded-lg border cursor-pointer transition-colors ${
                         selectedTemplate === tmpl.id
-                          ? "bg-[var(--accent-primary)]/10 border-[var(--accent-primary)] text-[var(--text-main)]"
-                          : "bg-[var(--bg-elevated)] border-[var(--border-color)] hover:border-[var(--border-hover)] text-[var(--text-secondary)]"
+                          ? "bg-(--accent-primary)/10 border-(--accent-primary) text-(--text-main)"
+                          : "bg-(--bg-elevated) border-(--border-color) hover:border-(--border-hover) text-(--text-secondary)"
                       }`}
                     >
                       <p className="text-[12px] font-medium">{tmpl.label}</p>
-                      <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{tmpl.desc}</p>
+                      <p className="text-[10px] text-(--text-muted) mt-0.5">{tmpl.desc}</p>
                     </div>
                   ))}
                 </div>
@@ -478,14 +481,14 @@ export function App() {
             <div className="flex justify-end gap-2 pt-2">
               <button
                 onClick={() => setShowCreateBottleModal(false)}
-                className="px-3 py-1.5 rounded-lg border border-[var(--border-color)] text-[12px] font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] cursor-pointer"
+                className="px-3 py-1.5 rounded-lg border border-(--border-color) text-[12px] font-medium text-(--text-secondary) hover:bg-(--bg-elevated) cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={handleCreateBottle}
                 disabled={!newBottleName.trim() || creatingBottle}
-                className="px-4 py-1.5 rounded-lg bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] disabled:opacity-50 text-white text-[12px] font-medium cursor-pointer"
+                className="px-4 py-1.5 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) disabled:opacity-50 text-white text-[12px] font-medium cursor-pointer"
               >
                 {creatingBottle ? "Creating..." : "Create Bottle"}
               </button>

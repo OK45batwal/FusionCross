@@ -61,12 +61,11 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
   const [appLaunchArgs, setAppLaunchArgs] = useState("");
   const [saveArgsSuccess, setSaveArgsSuccess] = useState(false);
 
-  useEffect(() => {
-    if (selectedApp) {
-      setAppLaunchArgs(selectedApp.launch_arguments || "");
-      setSaveArgsSuccess(false);
-    }
-  }, [selectedApp]);
+  const handleSelectApp = (app: Application | null) => {
+    setSelectedApp(app);
+    setAppLaunchArgs(app?.launch_arguments || "");
+    setSaveArgsSuccess(false);
+  };
 
   const handleSaveLaunchArgs = async () => {
     if (!selectedApp) return;
@@ -126,7 +125,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
     try {
       await unregisterApplication(appId);
       if (onRefreshState) await onRefreshState();
-      if (selectedApp?.id === appId) setSelectedApp(null);
+      if (selectedApp?.id === appId) handleSelectApp(null);
       setConfirmDeleteApp(null);
     } catch {
       // handled
@@ -164,19 +163,19 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
   const isRunning = (appId: string) => runningInfo.some((r) => r.app_id === appId);
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-[var(--bg-main)] text-[var(--text-main)] transition-colors duration-300">
+    <div className="flex-1 flex flex-col overflow-hidden bg-(--bg-main) text-(--text-main) transition-colors duration-300">
       {/* Header controls */}
-      <div className="p-4 border-b border-[var(--border-color)] bg-[var(--bg-surface)] flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div className="p-4 border-b border-(--border-color) bg-(--bg-surface) flex flex-col md:flex-row md:items-center justify-between gap-3">
         {/* Search & Categories */}
         <div className="flex items-center gap-3 flex-1">
           <div className="relative flex-1 max-w-sm">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-(--text-muted)" />
             <input
               type="text"
               placeholder="Search applications..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[12px] font-mono text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)] transition-colors"
+              className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-[12px] font-mono text-(--text-main) placeholder-(--text-muted) focus:outline-none focus:border-(--accent-primary) transition-colors"
             />
           </div>
 
@@ -187,8 +186,8 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                 onClick={() => setSelectedCategory(cat)}
                 className={`px-2.5 py-1 rounded-md text-[11px] font-mono capitalize transition-all cursor-pointer ${
                   selectedCategory === cat
-                    ? "bg-[var(--accent-primary)] text-white font-semibold shadow-sm"
-                    : "bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[var(--text-main)] hover:border-[var(--border-hover)] border border-[var(--border-color)]"
+                    ? "bg-(--accent-primary) text-white font-semibold shadow-sm"
+                    : "bg-(--bg-elevated) text-(--text-secondary) hover:text-(--text-main) hover:border-(--border-hover) border border-(--border-color)"
                 }`}
               >
                 {cat}
@@ -199,11 +198,11 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
 
         {/* View Mode Toggle & Install CTA */}
         <div className="flex items-center gap-2">
-          <div className="flex items-center rounded-lg bg-[var(--bg-elevated)] p-1 border border-[var(--border-color)]">
+          <div className="flex items-center rounded-lg bg-(--bg-elevated) p-1 border border-(--border-color)">
             <button
               onClick={() => setViewMode("grid")}
               className={`p-1.5 rounded transition-colors cursor-pointer ${
-                viewMode === "grid" ? "bg-[var(--accent-primary)] text-white" : "text-[var(--text-muted)]"
+                viewMode === "grid" ? "bg-(--accent-primary) text-white" : "text-(--text-muted)"
               }`}
               title="Grid View"
             >
@@ -212,7 +211,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
             <button
               onClick={() => setViewMode("list")}
               className={`p-1.5 rounded transition-colors cursor-pointer ${
-                viewMode === "list" ? "bg-[var(--accent-primary)] text-white" : "text-[var(--text-muted)]"
+                viewMode === "list" ? "bg-(--accent-primary) text-white" : "text-(--text-muted)"
               }`}
               title="List View"
             >
@@ -223,16 +222,16 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
           <button
             onClick={handleScanAll}
             disabled={scanning}
-            className="px-2.5 py-1.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--border-color)] border border-[var(--border-color)] text-[var(--text-main)] text-[11px] font-mono flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+            className="px-2.5 py-1.5 rounded-lg bg-(--bg-elevated) hover:bg-(--border-color) border border-(--border-color) text-(--text-main) text-[11px] font-mono flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
             title="Scan all bottle C: drives for installed Windows applications"
           >
-            <RefreshCw className={`w-3.5 h-3.5 text-[var(--accent-primary)] ${scanning ? "animate-spin" : ""}`} />
+            <RefreshCw className={`w-3.5 h-3.5 text-(--accent-primary) ${scanning ? "animate-spin" : ""}`} />
             <span>{scanning ? "Scanning..." : "Scan Bottles"}</span>
           </button>
 
           <button
             onClick={() => onNavigate("installer")}
-            className="px-3 py-1.5 rounded-lg bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-[11px] font-mono font-bold flex items-center gap-1.5 shadow-sm cursor-pointer transition-all"
+            className="px-3 py-1.5 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[11px] font-mono font-bold flex items-center gap-1.5 shadow-sm cursor-pointer transition-all"
           >
             + Add Application
           </button>
@@ -243,26 +242,26 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
       <div className="flex-1 overflow-y-auto p-6">
         {filtered.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-4">
-            <div className="w-12 h-12 rounded-full bg-[var(--bg-elevated)] border border-[var(--border-color)] flex items-center justify-center text-[var(--text-muted)]">
+            <div className="w-12 h-12 rounded-full bg-(--bg-elevated) border border-(--border-color) flex items-center justify-center text-(--text-muted)">
               <AppWindow className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="text-[16px] font-bold text-[var(--text-main)]">No applications found</h3>
-              <p className="text-[12px] text-[var(--text-secondary)] mt-1 max-w-sm">
+              <h3 className="text-[16px] font-bold text-(--text-main)">No applications found</h3>
+              <p className="text-[12px] text-(--text-secondary) mt-1 max-w-sm">
                 Install a Windows application using the smart installer wizard or scan your bottles.
               </p>
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => onNavigate("installer")}
-                className="px-4 py-2 rounded-lg bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-[12px] font-mono font-bold shadow-md cursor-pointer transition-all"
+                className="px-4 py-2 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[12px] font-mono font-bold shadow-md cursor-pointer transition-all"
               >
                 Launch Smart Installer
               </button>
               <button
                 onClick={handleScanAll}
                 disabled={scanning}
-                className="px-4 py-2 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--border-color)] border border-[var(--border-color)] text-[var(--text-main)] text-[12px] font-mono font-bold shadow-xs cursor-pointer transition-all flex items-center gap-1.5 disabled:opacity-50"
+                className="px-4 py-2 rounded-lg bg-(--bg-elevated) hover:bg-(--border-color) border border-(--border-color) text-(--text-main) text-[12px] font-mono font-bold shadow-xs cursor-pointer transition-all flex items-center gap-1.5 disabled:opacity-50"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${scanning ? "animate-spin" : ""}`} />
                 <span>{scanning ? "Scanning..." : "Scan Bottles"}</span>
@@ -277,16 +276,16 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
               return (
                 <div
                   key={app.id}
-                  onClick={() => setSelectedApp(app)}
+                  onClick={() => handleSelectApp(app)}
                   onDoubleClick={(e) => {
                     e.stopPropagation();
                     if (active) onStopApp(app.id);
                     else onLaunchApp(app.id);
                   }}
-                  className="group relative flex flex-col items-center p-3.5 rounded-2xl border border-transparent hover:border-[var(--border-color)] hover:bg-[var(--bg-surface)] hover:shadow-sm transition-all duration-150 cursor-pointer select-none text-center"
+                  className="group relative flex flex-col items-center p-3.5 rounded-2xl border border-transparent hover:border-(--border-color) hover:bg-(--bg-surface) hover:shadow-sm transition-all duration-150 cursor-pointer select-none text-center"
                 >
                   {/* App Icon (macOS Launchpad / CrossOver style 64x64) */}
-                  <div className="relative w-16 h-16 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-color)] shadow-xs flex items-center justify-center overflow-hidden transition-transform duration-200 group-hover:scale-105">
+                  <div className="relative w-16 h-16 rounded-2xl bg-(--bg-elevated) border border-(--border-color) shadow-xs flex items-center justify-center overflow-hidden transition-transform duration-200 group-hover:scale-105">
                     {app.icon_data ? (
                       <img
                         src={app.icon_data}
@@ -294,7 +293,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                         className="w-full h-full object-contain p-2"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center font-bold text-[22px] text-[var(--accent-primary)] bg-gradient-to-br from-[var(--bg-elevated)] to-[var(--bg-surface)]">
+                      <div className="w-full h-full flex items-center justify-center font-bold text-[22px] text-(--accent-primary) bg-linear-to-br from-(--bg-elevated) to-(--bg-surface)">
                         {app.name.charAt(0).toUpperCase()}
                       </div>
                     )}
@@ -303,7 +302,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                     {active && (
                       <span
                         title="Application is running"
-                        className="absolute top-1 right-1 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[var(--bg-surface)] shadow-xs animate-pulse"
+                        className="absolute top-1 right-1 w-3 h-3 rounded-full bg-emerald-500 border-2 border-(--bg-surface) shadow-xs animate-pulse"
                       />
                     )}
 
@@ -325,7 +324,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                           <Square className="w-3.5 h-3.5 fill-current" />
                         </div>
                       ) : (
-                        <div className="w-8 h-8 rounded-full bg-[var(--accent-primary)] text-white flex items-center justify-center shadow-md">
+                        <div className="w-8 h-8 rounded-full bg-(--accent-primary) text-white flex items-center justify-center shadow-md">
                           <Play className="w-4 h-4 fill-current ml-0.5" />
                         </div>
                       )}
@@ -333,14 +332,14 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                   </div>
 
                   {/* App Title */}
-                  <div className="mt-2.5 max-w-[120px] w-full">
+                  <div className="mt-2.5 max-w-30 w-full">
                     <p
-                      className="text-[12.5px] font-medium text-[var(--text-main)] truncate leading-tight group-hover:text-[var(--accent-primary)] transition-colors"
+                      className="text-[12.5px] font-medium text-(--text-main) truncate leading-tight group-hover:text-(--accent-primary) transition-colors"
                       title={app.name}
                     >
                       {app.name}
                     </p>
-                    <p className="text-[10px] font-mono text-[var(--text-muted)] truncate mt-0.5">
+                    <p className="text-[10px] font-mono text-(--text-muted) truncate mt-0.5">
                       {getBottleName(app.bottle_id)}
                     </p>
                   </div>
@@ -352,8 +351,8 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                         e.stopPropagation();
                         setMenuAppId(isMenuOpen ? null : app.id);
                       }}
-                      className={`p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-elevated)] transition-colors cursor-pointer ${
-                        isMenuOpen ? "opacity-100 bg-[var(--bg-elevated)] text-[var(--text-main)]" : "opacity-0 group-hover:opacity-100"
+                      className={`p-1 rounded-md text-(--text-muted) hover:text-(--text-main) hover:bg-(--bg-elevated) transition-colors cursor-pointer ${
+                        isMenuOpen ? "opacity-100 bg-(--bg-elevated) text-(--text-main)" : "opacity-0 group-hover:opacity-100"
                       }`}
                       title="Options"
                     >
@@ -364,7 +363,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                     {isMenuOpen && (
                       <div
                         onClick={(e) => e.stopPropagation()}
-                        className="absolute right-0 top-7 w-48 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-color)] shadow-xl py-1 z-30 text-left text-[12px] font-mono animate-in fade-in zoom-in-95 duration-100"
+                        className="absolute right-0 top-7 w-48 rounded-xl bg-(--bg-elevated) border border-(--border-color) shadow-xl py-1 z-30 text-left text-[12px] font-mono animate-in fade-in zoom-in-95 duration-100"
                       >
                         {active ? (
                           <button
@@ -383,9 +382,9 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                               onLaunchApp(app.id);
                               setMenuAppId(null);
                             }}
-                            className="w-full px-3 py-1.5 hover:bg-[var(--bg-surface)] text-[var(--text-main)] flex items-center gap-2 cursor-pointer transition-colors"
+                            className="w-full px-3 py-1.5 hover:bg-(--bg-surface) text-(--text-main) flex items-center gap-2 cursor-pointer transition-colors"
                           >
-                            <Play className="w-3.5 h-3.5 fill-current text-[var(--accent-primary)]" />
+                            <Play className="w-3.5 h-3.5 fill-current text-(--accent-primary)" />
                             <span>Launch Application</span>
                           </button>
                         )}
@@ -395,9 +394,9 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                             onToggleFavorite(app.id);
                             setMenuAppId(null);
                           }}
-                          className="w-full px-3 py-1.5 hover:bg-[var(--bg-surface)] text-[var(--text-main)] flex items-center gap-2 cursor-pointer transition-colors"
+                          className="w-full px-3 py-1.5 hover:bg-(--bg-surface) text-(--text-main) flex items-center gap-2 cursor-pointer transition-colors"
                         >
-                          <Heart className={`w-3.5 h-3.5 ${app.favorite ? "fill-red-500 text-red-500" : "text-[var(--text-muted)]"}`} />
+                          <Heart className={`w-3.5 h-3.5 ${app.favorite ? "fill-red-500 text-red-500" : "text-(--text-muted)"}`} />
                           <span>{app.favorite ? "Favorited" : "Favorite"}</span>
                         </button>
 
@@ -410,9 +409,9 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                               // ignore
                             }
                           }}
-                          className="w-full px-3 py-1.5 hover:bg-[var(--bg-surface)] text-[var(--text-main)] flex items-center gap-2 cursor-pointer transition-colors"
+                          className="w-full px-3 py-1.5 hover:bg-(--bg-surface) text-(--text-main) flex items-center gap-2 cursor-pointer transition-colors"
                         >
-                          <ExternalLink className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                          <ExternalLink className="w-3.5 h-3.5 text-(--text-muted)" />
                           <span>Export as Mac App</span>
                         </button>
 
@@ -421,13 +420,13 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                             handleReveal(app.executable_path);
                             setMenuAppId(null);
                           }}
-                          className="w-full px-3 py-1.5 hover:bg-[var(--bg-surface)] text-[var(--text-main)] flex items-center gap-2 cursor-pointer transition-colors"
+                          className="w-full px-3 py-1.5 hover:bg-(--bg-surface) text-(--text-main) flex items-center gap-2 cursor-pointer transition-colors"
                         >
-                          <FolderOpen className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                          <FolderOpen className="w-3.5 h-3.5 text-(--text-muted)" />
                           <span>Reveal in Finder</span>
                         </button>
 
-                        <div className="my-1 border-t border-[var(--border-color)]" />
+                        <div className="my-1 border-t border-(--border-color)" />
 
                         <button
                           onClick={() => {
@@ -448,39 +447,39 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
           </div>
         ) : (
           /* List Mode */
-          <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] overflow-hidden divide-y divide-[var(--border-color)]">
+          <div className="rounded-xl border border-(--border-color) bg-(--bg-surface) overflow-hidden divide-y divide-(--border-color)">
             {filtered.map((app) => {
               const active = isRunning(app.id);
               const score = app.compatibility ?? 88;
               return (
                 <div
                   key={app.id}
-                  onClick={() => setSelectedApp(app)}
-                  className="p-3 hover:bg-[var(--bg-elevated)] transition-colors flex items-center justify-between cursor-pointer"
+                  onClick={() => handleSelectApp(app)}
+                  className="p-3 hover:bg-(--bg-elevated) transition-colors flex items-center justify-between cursor-pointer"
                 >
                   <div className="flex items-center gap-3">
                     {app.icon_data ? (
                       <img
                         src={app.icon_data}
                         alt={app.name}
-                        className="w-8 h-8 rounded-lg object-contain bg-[var(--bg-elevated)] p-1 border border-[var(--border-color)] shrink-0 shadow-xs"
+                        className="w-8 h-8 rounded-lg object-contain bg-(--bg-elevated) p-1 border border-(--border-color) shrink-0 shadow-xs"
                       />
                     ) : (
-                      <span className="w-8 h-8 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] flex items-center justify-center font-mono font-bold text-[var(--accent-primary)] text-[13px] shrink-0">
+                      <span className="w-8 h-8 rounded-lg bg-(--bg-elevated) border border-(--border-color) flex items-center justify-center font-mono font-bold text-(--accent-primary) text-[13px] shrink-0">
                         {app.name.charAt(0).toUpperCase()}
                       </span>
                     )}
                     <div>
-                      <h4 className="text-[13px] font-bold text-[var(--text-main)]">{app.name}</h4>
-                      <p className="text-[11px] font-mono text-[var(--text-secondary)]">
+                      <h4 className="text-[13px] font-bold text-(--text-main)">{app.name}</h4>
+                      <p className="text-[11px] font-mono text-(--text-secondary)">
                         {app.category} · Bottle: {getBottleName(app.bottle_id)}
                       </p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-4">
-                    <span className="text-[11px] font-mono text-[var(--text-secondary)]">
-                      Score: <span className="text-[var(--color-ok)] font-semibold">{score}%</span>
+                    <span className="text-[11px] font-mono text-(--text-secondary)">
+                      Score: <span className="text-ok font-semibold">{score}%</span>
                     </span>
 
                     <button
@@ -489,7 +488,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                         onToggleFavorite(app.id);
                       }}
                       className={`p-1 rounded ${
-                        app.favorite ? "text-red-500" : "text-[var(--text-muted)] hover:text-[var(--text-main)]"
+                        app.favorite ? "text-red-500" : "text-(--text-muted) hover:text-(--text-main)"
                       }`}
                     >
                       <Heart className={`w-4 h-4 ${app.favorite ? "fill-current" : ""}`} />
@@ -511,7 +510,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                           e.stopPropagation();
                           onLaunchApp(app.id);
                         }}
-                        className="px-3 py-1 rounded bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-[11px] font-mono font-bold flex items-center gap-1"
+                        className="px-3 py-1 rounded bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[11px] font-mono font-bold flex items-center gap-1"
                       >
                         <Play className="w-3 h-3 fill-current" /> LAUNCH
                       </button>
@@ -527,51 +526,51 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
       {/* Application Detail Modal */}
       {selectedApp && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-2xl border border-[var(--border-color)] bg-[var(--bg-surface)] p-6 shadow-2xl space-y-5">
+          <div className="w-full max-w-lg rounded-2xl border border-(--border-color) bg-(--bg-surface) p-6 shadow-2xl space-y-5">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
                 {selectedApp.icon_data ? (
                   <img
                     src={selectedApp.icon_data}
                     alt={selectedApp.name}
-                    className="w-12 h-12 rounded-xl object-contain bg-[var(--bg-elevated)] p-1.5 border border-[var(--border-color)] shadow-sm shrink-0"
+                    className="w-12 h-12 rounded-xl object-contain bg-(--bg-elevated) p-1.5 border border-(--border-color) shadow-sm shrink-0"
                   />
                 ) : (
-                  <span className="w-10 h-10 rounded-xl bg-[var(--accent-primary)]/10 border border-[var(--accent-primary)]/30 flex items-center justify-center font-mono font-bold text-[var(--accent-primary)] text-[18px] shrink-0">
+                  <span className="w-10 h-10 rounded-xl bg-(--accent-primary)/10 border border-(--accent-primary)/30 flex items-center justify-center font-mono font-bold text-(--accent-primary) text-[18px] shrink-0">
                     {selectedApp.name.charAt(0).toUpperCase()}
                   </span>
                 )}
                 <div>
-                  <h3 className="text-[18px] font-bold text-[var(--text-main)]">{selectedApp.name}</h3>
-                  <p className="text-[12px] font-mono text-[var(--text-secondary)]">
+                  <h3 className="text-[18px] font-bold text-(--text-main)">{selectedApp.name}</h3>
+                  <p className="text-[12px] font-mono text-(--text-secondary)">
                     Category: {selectedApp.category}
                   </p>
                 </div>
               </div>
               <button
-                onClick={() => setSelectedApp(null)}
-                className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer"
+                onClick={() => handleSelectApp(null)}
+                className="p-1 rounded text-(--text-muted) hover:text-(--text-main) cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-2 rounded-xl bg-[var(--bg-elevated)] p-4 border border-[var(--border-color)] font-mono text-[12px]">
+            <div className="space-y-2 rounded-xl bg-(--bg-elevated) p-4 border border-(--border-color) font-mono text-[12px]">
               <div>
-                <span className="text-[var(--text-muted)]">Bottle: </span>
-                <span className="text-[var(--text-main)] font-semibold">{getBottleName(selectedApp.bottle_id)}</span>
+                <span className="text-(--text-muted)">Bottle: </span>
+                <span className="text-(--text-main) font-semibold">{getBottleName(selectedApp.bottle_id)}</span>
               </div>
               <div className="truncate">
-                <span className="text-[var(--text-muted)]">Executable Path: </span>
-                <span className="text-[var(--accent-primary)] font-semibold">{selectedApp.executable_path}</span>
+                <span className="text-(--text-muted)">Executable Path: </span>
+                <span className="text-(--accent-primary) font-semibold">{selectedApp.executable_path}</span>
               </div>
               <div>
-                <span className="text-[var(--text-muted)]">Launch Count: </span>
-                <span className="text-[var(--text-main)] font-semibold">{selectedApp.launch_count}</span>
+                <span className="text-(--text-muted)">Launch Count: </span>
+                <span className="text-(--text-main) font-semibold">{selectedApp.launch_count}</span>
               </div>
               <div>
-                <span className="text-[var(--text-muted)]">Play Time: </span>
-                <span className="text-[var(--text-main)] font-semibold">
+                <span className="text-(--text-muted)">Play Time: </span>
+                <span className="text-(--text-main) font-semibold">
                   {selectedApp.play_time_mins > 0
                     ? selectedApp.play_time_mins < 60
                       ? `${selectedApp.play_time_mins} minutes`
@@ -580,19 +579,19 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                 </span>
               </div>
               <div>
-                <span className="text-[var(--text-muted)]">Compatibility Score: </span>
-                <span className="text-[var(--color-ok)] font-bold">{selectedApp.compatibility ?? 88}%</span>
+                <span className="text-(--text-muted)">Compatibility Score: </span>
+                <span className="text-ok font-bold">{selectedApp.compatibility ?? 88}%</span>
               </div>
             </div>
 
             {/* Launch Arguments Editor */}
-            <div className="rounded-xl bg-[var(--bg-elevated)] p-4 border border-[var(--border-color)] space-y-2">
+            <div className="rounded-xl bg-(--bg-elevated) p-4 border border-(--border-color) space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[12px] font-mono font-bold text-[var(--text-main)]">
+                <span className="text-[12px] font-mono font-bold text-(--text-main)">
                   Launch Arguments
                 </span>
                 {saveArgsSuccess && (
-                  <span className="text-[10px] text-[var(--color-ok)] font-mono">
+                  <span className="text-[10px] text-ok font-mono">
                     ✓ Saved
                   </span>
                 )}
@@ -603,11 +602,11 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                   placeholder="e.g. -dx11 -novid -fullscreen"
                   value={appLaunchArgs}
                   onChange={(e) => setAppLaunchArgs(e.target.value)}
-                  className="flex-1 px-3 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] text-[var(--text-main)] font-mono text-[11px]"
+                  className="flex-1 px-3 py-1.5 rounded-lg bg-(--bg-surface) border border-(--border-color) text-(--text-main) font-mono text-[11px]"
                 />
                 <button
                   onClick={handleSaveLaunchArgs}
-                  className="px-3 py-1.5 rounded-lg bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-[11px] font-semibold cursor-pointer transition-colors"
+                  className="px-3 py-1.5 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[11px] font-semibold cursor-pointer transition-colors"
                 >
                   Save
                 </button>
@@ -619,10 +618,10 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => {
-                    setSelectedApp(null);
+                    handleSelectApp(null);
                     onNavigate("diagnostics");
                   }}
-                  className="px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--border-color)] text-[var(--text-main)] text-[11px] font-mono flex items-center gap-1.5 border border-[var(--border-color)] cursor-pointer transition-colors"
+                  className="px-3 py-1.5 rounded-lg bg-(--bg-elevated) hover:bg-(--border-color) text-(--text-main) text-[11px] font-mono flex items-center gap-1.5 border border-(--border-color) cursor-pointer transition-colors"
                 >
                   <Activity className="w-3.5 h-3.5 text-amber-500" /> Diagnostics
                 </button>
@@ -637,9 +636,9 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                       setExportStatus({ ok: false, text: `Export failed: ${String(e)}` });
                     }
                   }}
-                  className="px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--border-color)] text-[var(--text-main)] text-[11px] font-mono flex items-center gap-1.5 border border-[var(--border-color)] cursor-pointer transition-colors"
+                  className="px-3 py-1.5 rounded-lg bg-(--bg-elevated) hover:bg-(--border-color) text-(--text-main) text-[11px] font-mono flex items-center gap-1.5 border border-(--border-color) cursor-pointer transition-colors"
                 >
-                  <Share className="w-3.5 h-3.5 text-[var(--accent-primary)]" /> Export .app
+                  <Share className="w-3.5 h-3.5 text-(--accent-primary)" /> Export .app
                 </button>
 
                 <button
@@ -654,7 +653,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                 <div
                   className={`px-3 py-2 rounded-lg border font-mono text-[11px] ${
                     exportStatus.ok
-                      ? "border-[var(--color-ok)]/40 bg-[var(--color-ok-glow)] text-[var(--color-ok)]"
+                      ? "border-ok/40 bg-(--color-ok-glow) text-ok"
                       : "border-red-500/40 bg-red-500/10 text-red-500"
                   }`}
                 >
@@ -672,7 +671,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                   className={`px-3 py-1.5 rounded-lg text-[11px] font-mono flex items-center gap-1 border cursor-pointer ${
                     selectedApp.favorite
                       ? "bg-red-500/10 border-red-500/30 text-red-500"
-                      : "bg-[var(--bg-elevated)] border-[var(--border-color)] text-[var(--text-secondary)]"
+                      : "bg-(--bg-elevated) border-(--border-color) text-(--text-secondary)"
                   }`}
                 >
                   <Heart className={`w-3.5 h-3.5 ${selectedApp.favorite ? "fill-current" : ""}`} />
@@ -683,7 +682,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                   <button
                     onClick={() => {
                       onStopApp(selectedApp.id);
-                      setSelectedApp(null);
+                      handleSelectApp(null);
                     }}
                     className="px-4 py-1.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-500 text-[11px] font-mono font-bold flex items-center gap-1.5 cursor-pointer"
                   >
@@ -693,9 +692,9 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                   <button
                     onClick={() => {
                       onLaunchApp(selectedApp.id);
-                      setSelectedApp(null);
+                      handleSelectApp(null);
                     }}
-                    className="px-4 py-1.5 rounded-lg bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-[11px] font-mono font-bold flex items-center gap-1.5 shadow-md cursor-pointer"
+                    className="px-4 py-1.5 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[11px] font-mono font-bold flex items-center gap-1.5 shadow-md cursor-pointer"
                   >
                     <Play className="w-3.5 h-3.5 fill-current" /> LAUNCH
                   </button>
@@ -709,20 +708,20 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
       {/* Remove from Shelf Confirmation Modal */}
       {confirmDeleteApp && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] p-6 shadow-2xl space-y-4 text-center animate-in fade-in zoom-in-95 duration-100">
+          <div className="w-full max-w-sm rounded-2xl bg-(--bg-surface) border border-(--border-color) p-6 shadow-2xl space-y-4 text-center animate-in fade-in zoom-in-95 duration-100">
             <div className="w-12 h-12 rounded-full bg-red-500/10 text-red-500 mx-auto flex items-center justify-center">
               <Trash2 className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="text-[15px] font-bold text-[var(--text-main)]">Remove from Shelf?</h3>
-              <p className="text-[12px] text-[var(--text-muted)] mt-1.5 leading-relaxed">
-                Are you sure you want to remove <span className="font-semibold text-[var(--text-main)]">"{confirmDeleteApp.name}"</span>? The files inside your bottle prefix will not be deleted.
+              <h3 className="text-[15px] font-bold text-(--text-main)">Remove from Shelf?</h3>
+              <p className="text-[12px] text-(--text-muted) mt-1.5 leading-relaxed">
+                Are you sure you want to remove <span className="font-semibold text-(--text-main)">"{confirmDeleteApp.name}"</span>? The files inside your bottle prefix will not be deleted.
               </p>
             </div>
             <div className="flex gap-2 justify-center pt-2">
               <button
                 onClick={() => setConfirmDeleteApp(null)}
-                className="px-4 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[var(--text-main)] text-[12px] font-semibold hover:bg-[var(--bg-surface)] transition-colors cursor-pointer"
+                className="px-4 py-2 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-(--text-main) text-[12px] font-semibold hover:bg-(--bg-surface) transition-colors cursor-pointer"
               >
                 Cancel
               </button>

@@ -44,62 +44,62 @@ export const CompatibilityView: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 max-w-5xl mx-auto space-y-6 text-[var(--text-main)]">
+    <div className="flex-1 overflow-y-auto p-6 max-w-5xl mx-auto space-y-6 text-(--text-main)">
       {/* Title */}
-      <div className="flex items-center justify-between pb-4 border-b border-[var(--border-color)]">
+      <div className="flex items-center justify-between pb-4 border-b border-(--border-color)">
         <div>
-          <h1 className="text-[20px] font-bold text-[var(--text-main)] flex items-center gap-2">
-            <Cpu className="w-5 h-5 text-[var(--accent-primary)]" />
+          <h1 className="text-[20px] font-bold text-(--text-main) flex items-center gap-2">
+            <Cpu className="w-5 h-5 text-(--accent-primary)" />
             Compatibility Engine & Recipes
           </h1>
-          <p className="text-[12px] text-[var(--text-secondary)] mt-1">
+          <p className="text-[12px] text-(--text-secondary) mt-1">
             Automated translation recipes matching Windows games & software to optimal Apple Silicon D3DMetal (GPTK), DXVK, and MSync settings.
           </p>
         </div>
       </div>
 
       {/* Interactive Recommendation Evaluator */}
-      <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] p-5 space-y-4 shadow-xs">
-        <h2 className="text-[12px] font-mono font-bold text-[var(--text-muted)] uppercase tracking-wider flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-[var(--accent-primary)]" />
+      <div className="rounded-xl border border-(--border-color) bg-(--bg-surface) p-5 space-y-4 shadow-xs">
+        <h2 className="text-[12px] font-mono font-bold text-(--text-muted) uppercase tracking-wider flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-(--accent-primary)" />
           Test Any Windows Game or Executable
         </h2>
 
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-(--text-muted)" />
             <input
               type="text"
               placeholder="Type any game name e.g. Cyberpunk, Elden Ring, GTA, Valorant, Skyrim, Photoshop..."
               value={testAppName}
               onChange={(e) => setTestAppName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleTestRecommendation()}
-              className="w-full pl-9 pr-3 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[12px] font-sans text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)]"
+              className="w-full pl-9 pr-3 py-2 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-[12px] font-sans text-(--text-main) placeholder-(--text-muted) focus:outline-none focus:border-(--accent-primary)"
             />
           </div>
           <button
             onClick={handleTestRecommendation}
-            className="px-4 py-2 rounded-lg bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white font-medium text-[12px] shadow-xs cursor-pointer transition-colors"
+            className="px-4 py-2 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white font-medium text-[12px] shadow-xs cursor-pointer transition-colors"
           >
             Evaluate
           </button>
         </div>
 
         {testedRecommendation && (
-          <div className="rounded-xl bg-[var(--bg-elevated)] p-4.5 border border-[var(--border-color)] space-y-3 animate-fade-in">
+          <div className="rounded-xl bg-(--bg-elevated) p-4.5 border border-(--border-color) space-y-3 animate-fade-in">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="font-bold text-[14px] text-[var(--text-main)]">
+                <span className="font-bold text-[14px] text-(--text-main)">
                   Matched Recipe: {testedRecommendation.profile.toUpperCase()}
                 </span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] font-semibold">
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-(--accent-primary)/10 text-(--accent-primary) font-semibold">
                   Recipe Found
                 </span>
               </div>
               <span
                 className={`font-bold font-mono text-[14px] px-2.5 py-0.5 rounded-full ${
                   testedRecommendation.compatibility >= 85
-                    ? "bg-[var(--color-ok-glow)] text-[var(--color-ok)] border border-[var(--color-ok)]/30"
+                    ? "bg-(--color-ok-glow) text-ok border border-ok/30"
                     : testedRecommendation.compatibility >= 70
                     ? "bg-amber-500/10 text-amber-500 border border-amber-500/30"
                     : "bg-red-500/10 text-red-500 border border-red-500/30"
@@ -109,37 +109,37 @@ export const CompatibilityView: React.FC = () => {
               </span>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2 border-t border-[var(--border-color)]/60 text-[11px] font-mono">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2 border-t border-(--border-color)/60 text-[11px] font-mono">
               <div>
-                <span className="text-[var(--text-muted)] block">Wine Runtime:</span>
-                <span className="text-[var(--accent-primary)] font-semibold">
+                <span className="text-(--text-muted) block">Wine Runtime:</span>
+                <span className="text-(--accent-primary) font-semibold">
                   {testedRecommendation.runtime_hint}
                 </span>
               </div>
               <div>
-                <span className="text-[var(--text-muted)] block">Graphics Engine:</span>
-                <span className="text-[var(--color-ok)] font-semibold">
+                <span className="text-(--text-muted) block">Graphics Engine:</span>
+                <span className="text-ok font-semibold">
                   {testedRecommendation.graphics === "d3dmetal" ? "D3DMetal (GPTK)" : testedRecommendation.graphics.toUpperCase()}
                 </span>
               </div>
               <div>
-                <span className="text-[var(--text-muted)] block">Target Windows:</span>
-                <span className="text-[var(--text-main)] font-semibold">
+                <span className="text-(--text-muted) block">Target Windows:</span>
+                <span className="text-(--text-main) font-semibold">
                   {testedRecommendation.windows_version.toUpperCase()}
                 </span>
               </div>
               <div>
-                <span className="text-[var(--text-muted)] block">Dependencies:</span>
-                <span className="text-[var(--text-secondary)] font-semibold">
+                <span className="text-(--text-muted) block">Dependencies:</span>
+                <span className="text-(--text-secondary) font-semibold">
                   {testedRecommendation.dependencies.length > 0 ? testedRecommendation.dependencies.join(", ") : "None"}
                 </span>
               </div>
             </div>
 
             {testedRecommendation.notes.length > 0 && (
-              <div className="pt-2 border-t border-[var(--border-color)]/60 text-[11px]">
+              <div className="pt-2 border-t border-(--border-color)/60 text-[11px]">
                 <span className="text-amber-500 font-semibold">Community Guidance: </span>
-                <span className="text-[var(--text-secondary)]">{testedRecommendation.notes.join(" ")}</span>
+                <span className="text-(--text-secondary)">{testedRecommendation.notes.join(" ")}</span>
               </div>
             )}
           </div>
@@ -147,14 +147,14 @@ export const CompatibilityView: React.FC = () => {
       </div>
 
       {/* Anti-Cheat Transparency Card */}
-      <div className="p-4 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] space-y-2.5">
+      <div className="p-4 rounded-xl bg-(--bg-surface) border border-(--border-color) space-y-2.5">
         <div className="flex items-center gap-2">
           <ShieldCheck className="w-4 h-4 text-emerald-500" />
-          <h3 className="text-[13px] font-semibold text-[var(--text-main)]">
+          <h3 className="text-[13px] font-semibold text-(--text-main)">
             macOS Anti-Cheat Architecture Transparency
           </h3>
         </div>
-        <p className="text-[12px] text-[var(--text-secondary)] leading-relaxed">
+        <p className="text-[12px] text-(--text-secondary) leading-relaxed">
           Windows games that use user-space anti-cheat (Valve VAC, Blizzard Warden, Easy Anti-Cheat in offline mode) run smoothly. Games requiring Windows <strong>ring-0 kernel drivers</strong> (Riot Vanguard, BattlEye kernel mode) cannot execute under macOS kernel security policy. FusionCross identifies these titles immediately to save you time.
         </p>
       </div>
@@ -162,10 +162,10 @@ export const CompatibilityView: React.FC = () => {
       {/* Featured Profiles Section */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-[12px] font-mono font-bold text-[var(--text-muted)] uppercase tracking-wider">
+          <h2 className="text-[12px] font-mono font-bold text-(--text-muted) uppercase tracking-wider">
             Verified Game & Launcher Recipes
           </h2>
-          <span className="text-[11px] font-mono text-[var(--text-muted)]">
+          <span className="text-[11px] font-mono text-(--text-muted)">
             {profiles.length} Verified Highlights
           </span>
         </div>
@@ -174,35 +174,35 @@ export const CompatibilityView: React.FC = () => {
           {profiles.map(({ name, rec }) => (
             <div
               key={name}
-              className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] hover:border-[var(--border-hover)] p-4 space-y-3 flex flex-col justify-between transition-all shadow-xs"
+              className="rounded-xl border border-(--border-color) bg-(--bg-surface) hover:border-(--border-hover) p-4 space-y-3 flex flex-col justify-between transition-all shadow-xs"
             >
               <div>
                 <div className="flex items-start justify-between gap-2">
-                  <h3 className="text-[13px] font-bold text-[var(--text-main)] truncate max-w-[170px]">
+                  <h3 className="text-[13px] font-bold text-(--text-main) truncate max-w-42.5">
                     {name}
                   </h3>
                   <span
                     className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
                       rec.compatibility >= 85
-                        ? "bg-[var(--color-ok-glow)] text-[var(--color-ok)] border border-[var(--color-ok)]/30"
+                        ? "bg-(--color-ok-glow) text-ok border border-ok/30"
                         : "bg-amber-500/10 text-amber-500 border border-amber-500/30"
                     }`}
                   >
                     {rec.compatibility}%
                   </span>
                 </div>
-                <p className="text-[11px] font-mono text-[var(--text-muted)] mt-1">
-                  Engine: <span className="text-[var(--accent-primary)] font-semibold">{rec.graphics === "d3dmetal" ? "D3DMetal (GPTK)" : rec.graphics.toUpperCase()}</span>
+                <p className="text-[11px] font-mono text-(--text-muted) mt-1">
+                  Engine: <span className="text-(--accent-primary) font-semibold">{rec.graphics === "d3dmetal" ? "D3DMetal (GPTK)" : rec.graphics.toUpperCase()}</span>
                 </p>
               </div>
 
-              <div className="pt-2 border-t border-[var(--border-color)]/60 font-mono text-[11px] space-y-1">
-                <p className="text-[var(--text-secondary)]">
-                  <span className="text-[var(--text-muted)]">Runtime: </span>
+              <div className="pt-2 border-t border-(--border-color)/60 font-mono text-[11px] space-y-1">
+                <p className="text-(--text-secondary)">
+                  <span className="text-(--text-muted)">Runtime: </span>
                   {rec.runtime_hint}
                 </p>
-                <p className="text-[var(--text-secondary)]">
-                  <span className="text-[var(--text-muted)]">Runtimes: </span>
+                <p className="text-(--text-secondary)">
+                  <span className="text-(--text-muted)">Runtimes: </span>
                   {rec.dependencies.length > 0 ? rec.dependencies.join(", ") : "None"}
                 </p>
               </div>

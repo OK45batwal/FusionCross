@@ -355,40 +355,40 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
   const bottleSnapshots = snapshots.filter((s) => s.bottle_id === bottle.id);
 
   return (
-    <div className="flex-1 flex overflow-hidden bg-[var(--bg-main)]">
+    <div className="flex-1 flex overflow-hidden bg-(--bg-main)">
       {/* Center Main Stage (Bottle Header + Applications) */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Bottle Master Toolbar / Header */}
-        <div className="px-6 py-4 border-b border-[var(--border-color)] bg-[var(--bg-surface)] shrink-0 space-y-3">
+        <div className="px-6 py-4 border-b border-(--border-color) bg-(--bg-surface) shrink-0 space-y-3">
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
               <div className="flex items-center gap-2.5">
-                <h1 className="text-[18px] font-semibold text-[var(--text-main)] truncate tracking-tight">
+                <h1 className="text-[18px] font-semibold text-(--text-main) truncate tracking-tight">
                   {bottle.name}
                 </h1>
                 <span
                   className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-medium border ${
                     isBottleRunning
-                      ? "bg-[var(--color-ok-glow)] text-[var(--color-ok)] border-[var(--color-ok)]/30"
-                      : "bg-[var(--bg-elevated)] text-[var(--text-muted)] border-[var(--border-color)]"
+                      ? "bg-(--color-ok-glow) text-ok border-ok/30"
+                      : "bg-(--bg-elevated) text-(--text-muted) border-(--border-color)"
                   }`}
                 >
                   <span
                     className={`w-1.5 h-1.5 rounded-full ${
-                      isBottleRunning ? "bg-[var(--color-ok)] animate-pulse" : "bg-[var(--text-muted)]"
+                      isBottleRunning ? "bg-ok animate-pulse" : "bg-(--text-muted)"
                     }`}
                   />
                   {isBottleRunning ? `Running (${runningAppsInBottle.length})` : "Ready"}
                 </span>
               </div>
-              <div className="flex items-center gap-2 mt-1 text-[11px] font-mono text-[var(--text-muted)]">
+              <div className="flex items-center gap-2 mt-1 text-[11px] font-mono text-(--text-muted)">
                 <span>{bottle.windows_version}</span>
                 <span>·</span>
                 <span>{bottle.graphics.toUpperCase()}</span>
                 {bottle.msync_enabled && (
                   <>
                     <span>·</span>
-                    <span className="text-[var(--accent-primary)] font-semibold">MSync Active</span>
+                    <span className="text-(--accent-primary) font-semibold">MSync Active</span>
                   </>
                 )}
                 {bottle.retina_mode && (
@@ -404,25 +404,25 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
             <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={() => setShowRunCommandModal(true)}
-                className="px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--border-color)] border border-[var(--border-color)] text-[var(--text-main)] text-[12px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="px-3 py-1.5 rounded-lg bg-(--bg-elevated) hover:bg-(--border-color) border border-(--border-color) text-(--text-main) text-[12px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
                 title="Run an arbitrary command or Windows executable inside this bottle"
               >
-                <Terminal className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                <Terminal className="w-3.5 h-3.5 text-(--accent-primary)" />
                 <span>Run Command...</span>
               </button>
 
               <button
                 onClick={handleOpenCDrive}
-                className="px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--border-color)] border border-[var(--border-color)] text-[var(--text-main)] text-[12px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="px-3 py-1.5 rounded-lg bg-(--bg-elevated) hover:bg-(--border-color) border border-(--border-color) text-(--text-main) text-[12px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
                 title="Open the bottle's virtual C: Drive in macOS Finder"
               >
-                <FolderOpen className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+                <FolderOpen className="w-3.5 h-3.5 text-(--accent-primary)" />
                 <span>Open C: Drive</span>
               </button>
 
               <button
                 onClick={() => onOpenInstaller(bottle.id)}
-                className="px-3 py-1.5 rounded-lg bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-[12px] font-medium flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                className="px-3 py-1.5 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[12px] font-medium flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
                 title="Install Windows software directly into this bottle"
               >
                 <Download className="w-3.5 h-3.5" />
@@ -465,7 +465,7 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
         {/* Applications List Area */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           <div className="flex items-center justify-between gap-4">
-            <h2 className="text-[13px] font-mono uppercase tracking-wider text-[var(--text-muted)] font-semibold">
+            <h2 className="text-[13px] font-mono uppercase tracking-wider text-(--text-muted) font-semibold">
               Installed Applications ({bottleApps.length})
             </h2>
 
@@ -473,22 +473,22 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
               <button
                 onClick={handleScanBottle}
                 disabled={scanning}
-                className="px-2.5 py-1 rounded-md bg-[var(--bg-elevated)] hover:bg-[var(--border-color)] border border-[var(--border-color)] text-[var(--text-main)] text-[11px] font-mono flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                className="px-2.5 py-1 rounded-md bg-(--bg-elevated) hover:bg-(--border-color) border border-(--border-color) text-(--text-main) text-[11px] font-mono flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
                 title="Scan prefix for installed .exe files"
               >
-                <RefreshCw className={`w-3.5 h-3.5 text-[var(--accent-primary)] ${scanning ? "animate-spin" : ""}`} />
+                <RefreshCw className={`w-3.5 h-3.5 text-(--accent-primary) ${scanning ? "animate-spin" : ""}`} />
                 <span>{scanning ? "Scanning..." : "Scan for Apps"}</span>
               </button>
 
               {bottleApps.length > 0 && (
                 <div className="relative w-64">
-                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-(--text-muted)" />
                   <input
                     type="text"
                     placeholder="Filter programs in bottle..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="w-full pl-8 pr-3 py-1 rounded-md bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[12px] text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)]"
+                    className="w-full pl-8 pr-3 py-1 rounded-md bg-(--bg-elevated) border border-(--border-color) text-[12px] text-(--text-main) placeholder-(--text-muted) focus:outline-none focus:border-(--accent-primary)"
                   />
                 </div>
               )}
@@ -497,22 +497,22 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
 
           {bottleApps.length === 0 ? (
             /* Empty State */
-            <div className="rounded-xl border border-dashed border-[var(--border-color)] p-12 text-center flex flex-col items-center justify-center space-y-3 bg-[var(--bg-surface)]/50">
-              <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-color)] flex items-center justify-center text-[var(--text-muted)]">
+            <div className="rounded-xl border border-dashed border-(--border-color) p-12 text-center flex flex-col items-center justify-center space-y-3 bg-(--bg-surface)/50">
+              <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border-color) flex items-center justify-center text-(--text-muted)">
                 <PackagePlus className="w-6 h-6" />
               </div>
               <div className="space-y-1 max-w-sm">
-                <h3 className="text-[14px] font-semibold text-[var(--text-main)]">
+                <h3 className="text-[14px] font-semibold text-(--text-main)">
                   No programs installed in {bottle.name}
                 </h3>
-                <p className="text-[12px] text-[var(--text-muted)] leading-relaxed">
-                  Drag & drop any Windows installer (<span className="font-mono text-[var(--text-main)]">.exe</span>, <span className="font-mono text-[var(--text-main)]">.msi</span>) anywhere into this window, or choose an option below.
+                <p className="text-[12px] text-(--text-muted) leading-relaxed">
+                  Drag & drop any Windows installer (<span className="font-mono text-(--text-main)">.exe</span>, <span className="font-mono text-(--text-main)">.msi</span>) anywhere into this window, or choose an option below.
                 </p>
               </div>
               <div className="pt-2 flex items-center gap-2">
                 <button
                   onClick={() => onOpenInstaller(bottle.id)}
-                  className="px-4 py-2 rounded-lg bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-[12px] font-medium flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[12px] font-medium flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Install Software</span>
@@ -520,14 +520,14 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
                 <button
                   onClick={handleScanBottle}
                   disabled={scanning}
-                  className="px-4 py-2 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--border-color)] border border-[var(--border-color)] text-[var(--text-main)] text-[12px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                  className="px-4 py-2 rounded-lg bg-(--bg-elevated) hover:bg-(--border-color) border border-(--border-color) text-(--text-main) text-[12px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${scanning ? "animate-spin" : ""}`} />
                   <span>{scanning ? "Scanning..." : "Scan Bottle"}</span>
                 </button>
                 <button
                   onClick={() => setShowRunCommandModal(true)}
-                  className="px-4 py-2 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--border-color)] border border-[var(--border-color)] text-[var(--text-main)] text-[12px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-lg bg-(--bg-elevated) hover:bg-(--border-color) border border-(--border-color) text-(--text-main) text-[12px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <Terminal className="w-3.5 h-3.5" />
                   <span>Run Command</span>
@@ -544,10 +544,10 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
                   <div
                     key={app.id}
                     onDoubleClick={() => onLaunchApp(app.id)}
-                    className="group relative flex flex-col items-center p-3.5 rounded-2xl border border-transparent hover:border-[var(--border-color)] hover:bg-[var(--bg-surface)] hover:shadow-sm transition-all duration-150 cursor-pointer select-none text-center"
+                    className="group relative flex flex-col items-center p-3.5 rounded-2xl border border-transparent hover:border-(--border-color) hover:bg-(--bg-surface) hover:shadow-sm transition-all duration-150 cursor-pointer select-none text-center"
                   >
                     {/* App Icon (macOS Launchpad / CrossOver style 64x64) */}
-                    <div className="relative w-16 h-16 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-color)] shadow-xs flex items-center justify-center overflow-hidden transition-transform duration-200 group-hover:scale-105">
+                    <div className="relative w-16 h-16 rounded-2xl bg-(--bg-elevated) border border-(--border-color) shadow-xs flex items-center justify-center overflow-hidden transition-transform duration-200 group-hover:scale-105">
                       {app.icon_data ? (
                         <img
                           src={app.icon_data}
@@ -555,7 +555,7 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
                           className="w-full h-full object-contain p-2"
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center font-bold text-[22px] text-[var(--accent-primary)] bg-gradient-to-br from-[var(--bg-elevated)] to-[var(--bg-surface)]">
+                        <div className="w-full h-full flex items-center justify-center font-bold text-[22px] text-(--accent-primary) bg-linear-to-br from-(--bg-elevated) to-(--bg-surface)">
                           {app.name.charAt(0).toUpperCase()}
                         </div>
                       )}
@@ -564,7 +564,7 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
                       {isRunning && (
                         <span
                           title="Application is running"
-                          className="absolute top-1 right-1 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[var(--bg-surface)] shadow-xs animate-pulse"
+                          className="absolute top-1 right-1 w-3 h-3 rounded-full bg-emerald-500 border-2 border-(--bg-surface) shadow-xs animate-pulse"
                         />
                       )}
 
@@ -586,7 +586,7 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
                             <Square className="w-3.5 h-3.5 fill-current" />
                           </div>
                         ) : (
-                          <div className="w-8 h-8 rounded-full bg-[var(--accent-primary)] text-white flex items-center justify-center shadow-md">
+                          <div className="w-8 h-8 rounded-full bg-(--accent-primary) text-white flex items-center justify-center shadow-md">
                             <Play className="w-4 h-4 fill-current ml-0.5" />
                           </div>
                         )}
@@ -594,14 +594,14 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
                     </div>
 
                     {/* App Title */}
-                    <div className="mt-2.5 max-w-[120px] w-full">
+                    <div className="mt-2.5 max-w-30 w-full">
                       <p
-                        className="text-[12.5px] font-medium text-[var(--text-main)] truncate leading-tight group-hover:text-[var(--accent-primary)] transition-colors"
+                        className="text-[12.5px] font-medium text-(--text-main) truncate leading-tight group-hover:text-(--accent-primary) transition-colors"
                         title={app.name}
                       >
                         {app.name}
                       </p>
-                      <p className="text-[10px] font-mono text-[var(--text-muted)] capitalize truncate mt-0.5">
+                      <p className="text-[10px] font-mono text-(--text-muted) capitalize truncate mt-0.5">
                         {app.category}
                       </p>
                     </div>
@@ -613,8 +613,8 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
                           e.stopPropagation();
                           setMenuAppId(isMenuOpen ? null : app.id);
                         }}
-                        className={`p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-elevated)] transition-colors cursor-pointer ${
-                          isMenuOpen ? "opacity-100 bg-[var(--bg-elevated)] text-[var(--text-main)]" : "opacity-0 group-hover:opacity-100"
+                        className={`p-1 rounded-md text-(--text-muted) hover:text-(--text-main) hover:bg-(--bg-elevated) transition-colors cursor-pointer ${
+                          isMenuOpen ? "opacity-100 bg-(--bg-elevated) text-(--text-main)" : "opacity-0 group-hover:opacity-100"
                         }`}
                         title="Options"
                       >
@@ -625,7 +625,7 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
                       {isMenuOpen && (
                         <div
                           onClick={(e) => e.stopPropagation()}
-                          className="absolute right-0 top-7 w-48 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-color)] shadow-xl py-1 z-30 text-left text-[12px] font-mono animate-in fade-in zoom-in-95 duration-100"
+                          className="absolute right-0 top-7 w-48 rounded-xl bg-(--bg-elevated) border border-(--border-color) shadow-xl py-1 z-30 text-left text-[12px] font-mono animate-in fade-in zoom-in-95 duration-100"
                         >
                           {isRunning ? (
                             <button
@@ -644,9 +644,9 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
                                 onLaunchApp(app.id);
                                 setMenuAppId(null);
                               }}
-                              className="w-full px-3 py-1.5 hover:bg-[var(--bg-surface)] text-[var(--text-main)] flex items-center gap-2 cursor-pointer transition-colors"
+                              className="w-full px-3 py-1.5 hover:bg-(--bg-surface) text-(--text-main) flex items-center gap-2 cursor-pointer transition-colors"
                             >
-                              <Play className="w-3.5 h-3.5 fill-current text-[var(--accent-primary)]" />
+                              <Play className="w-3.5 h-3.5 fill-current text-(--accent-primary)" />
                               <span>Launch Application</span>
                             </button>
                           )}
@@ -656,9 +656,9 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
                               onToggleFavorite(app.id);
                               setMenuAppId(null);
                             }}
-                            className="w-full px-3 py-1.5 hover:bg-[var(--bg-surface)] text-[var(--text-main)] flex items-center gap-2 cursor-pointer transition-colors"
+                            className="w-full px-3 py-1.5 hover:bg-(--bg-surface) text-(--text-main) flex items-center gap-2 cursor-pointer transition-colors"
                           >
-                            <Heart className={`w-3.5 h-3.5 ${app.favorite ? "fill-red-500 text-red-500" : "text-[var(--text-muted)]"}`} />
+                            <Heart className={`w-3.5 h-3.5 ${app.favorite ? "fill-red-500 text-red-500" : "text-(--text-muted)"}`} />
                             <span>{app.favorite ? "Favorited" : "Favorite"}</span>
                           </button>
 
@@ -667,9 +667,9 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
                               handleExportApp(app.id, app.name);
                               setMenuAppId(null);
                             }}
-                            className="w-full px-3 py-1.5 hover:bg-[var(--bg-surface)] text-[var(--text-main)] flex items-center gap-2 cursor-pointer transition-colors"
+                            className="w-full px-3 py-1.5 hover:bg-(--bg-surface) text-(--text-main) flex items-center gap-2 cursor-pointer transition-colors"
                           >
-                            <ExternalLink className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                            <ExternalLink className="w-3.5 h-3.5 text-(--text-muted)" />
                             <span>Export as Mac App</span>
                           </button>
 
@@ -678,13 +678,13 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
                               handleReveal(app.executable_path);
                               setMenuAppId(null);
                             }}
-                            className="w-full px-3 py-1.5 hover:bg-[var(--bg-surface)] text-[var(--text-main)] flex items-center gap-2 cursor-pointer transition-colors"
+                            className="w-full px-3 py-1.5 hover:bg-(--bg-surface) text-(--text-main) flex items-center gap-2 cursor-pointer transition-colors"
                           >
-                            <FolderOpen className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                            <FolderOpen className="w-3.5 h-3.5 text-(--text-muted)" />
                             <span>Reveal in Finder</span>
                           </button>
 
-                          <div className="my-1 border-t border-[var(--border-color)]" />
+                          <div className="my-1 border-t border-(--border-color)" />
 
                           <button
                             onClick={() => {
@@ -708,10 +708,10 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
       </div>
 
       {/* Right Inspector Panel (CrossOver's Control Panels & Settings) */}
-      <aside className="w-[300px] shrink-0 border-l border-[var(--border-color)] bg-[var(--bg-surface)] flex flex-col overflow-y-auto select-none transition-colors duration-200">
-        <div className="p-4 border-b border-[var(--border-color)]">
-          <h2 className="text-[12px] font-mono uppercase tracking-wider text-[var(--text-muted)] font-semibold flex items-center gap-2">
-            <Sliders className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
+      <aside className="w-75 shrink-0 border-l border-(--border-color) bg-(--bg-surface) flex flex-col overflow-y-auto select-none transition-colors duration-200">
+        <div className="p-4 border-b border-(--border-color)">
+          <h2 className="text-[12px] font-mono uppercase tracking-wider text-(--text-muted) font-semibold flex items-center gap-2">
+            <Sliders className="w-3.5 h-3.5 text-(--accent-primary)" />
             <span>Bottle Settings</span>
           </h2>
         </div>
@@ -719,7 +719,7 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
         <div className="p-4 space-y-6 flex-1 text-[12px]">
           {/* Graphics Translation Engine */}
           <div className="space-y-2">
-            <label className="text-[11px] font-mono text-[var(--text-muted)] uppercase tracking-wider block">
+            <label className="text-[11px] font-mono text-(--text-muted) uppercase tracking-wider block">
               Graphics Backend
             </label>
             <div className="grid grid-cols-2 gap-1.5">
@@ -731,8 +731,8 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
                     onClick={() => handleGraphicsChange(g)}
                     className={`py-1.5 px-2 rounded-md font-mono text-[11px] text-center border transition-all cursor-pointer ${
                       isCurrent
-                        ? "bg-[var(--accent-primary)] text-white font-semibold border-[var(--accent-primary)] shadow-xs"
-                        : "bg-[var(--bg-elevated)] text-[var(--text-secondary)] border-[var(--border-color)] hover:border-[var(--border-hover)]"
+                        ? "bg-(--accent-primary) text-white font-semibold border-(--accent-primary) shadow-xs"
+                        : "bg-(--bg-elevated) text-(--text-secondary) border-(--border-color) hover:border-(--border-hover)"
                     }`}
                   >
                     {g === "d3dmetal" ? "D3DMetal (GPTK)" : g.toUpperCase()}
@@ -744,20 +744,20 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
 
           {/* Quick Hardware & Optimization Toggles */}
           <div className="space-y-2.5">
-            <label className="text-[11px] font-mono text-[var(--text-muted)] uppercase tracking-wider block">
+            <label className="text-[11px] font-mono text-(--text-muted) uppercase tracking-wider block">
               Optimizations
             </label>
 
             {/* MSync Toggle */}
-            <div className="flex items-center justify-between p-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)]">
+            <div className="flex items-center justify-between p-2 rounded-lg bg-(--bg-elevated) border border-(--border-color)">
               <div>
-                <p className="font-medium text-[12px] text-[var(--text-main)]">MSync (Mach Sync)</p>
-                <p className="text-[10px] text-[var(--text-muted)]">Darwin kernel semaphores</p>
+                <p className="font-medium text-[12px] text-(--text-main)">MSync (Mach Sync)</p>
+                <p className="text-[10px] text-(--text-muted)">Darwin kernel semaphores</p>
               </div>
               <button
                 onClick={() => handleToggleSetting("msync_enabled", bottle.msync_enabled)}
                 className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${
-                  bottle.msync_enabled ? "bg-[var(--accent-primary)]" : "bg-zinc-600"
+                  bottle.msync_enabled ? "bg-(--accent-primary)" : "bg-zinc-600"
                 }`}
               >
                 <span
@@ -769,15 +769,15 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
             </div>
 
             {/* Performance HUD Toggle */}
-            <div className="flex items-center justify-between p-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)]">
+            <div className="flex items-center justify-between p-2 rounded-lg bg-(--bg-elevated) border border-(--border-color)">
               <div>
-                <p className="font-medium text-[12px] text-[var(--text-main)]">Performance HUD</p>
-                <p className="text-[10px] text-[var(--text-muted)]">Metal FPS & frametimes overlay</p>
+                <p className="font-medium text-[12px] text-(--text-main)">Performance HUD</p>
+                <p className="text-[10px] text-(--text-muted)">Metal FPS & frametimes overlay</p>
               </div>
               <button
                 onClick={() => handleToggleSetting("performance_hud", bottle.performance_hud)}
                 className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${
-                  bottle.performance_hud ? "bg-[var(--accent-primary)]" : "bg-zinc-600"
+                  bottle.performance_hud ? "bg-(--accent-primary)" : "bg-zinc-600"
                 }`}
               >
                 <span
@@ -789,15 +789,15 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
             </div>
 
             {/* Retina Mode Toggle */}
-            <div className="flex items-center justify-between p-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)]">
+            <div className="flex items-center justify-between p-2 rounded-lg bg-(--bg-elevated) border border-(--border-color)">
               <div>
-                <p className="font-medium text-[12px] text-[var(--text-main)]">High-Resolution (Retina)</p>
-                <p className="text-[10px] text-[var(--text-muted)]">DPI scaling for Retina displays</p>
+                <p className="font-medium text-[12px] text-(--text-main)">High-Resolution (Retina)</p>
+                <p className="text-[10px] text-(--text-muted)">DPI scaling for Retina displays</p>
               </div>
               <button
                 onClick={() => handleToggleSetting("retina_mode", bottle.retina_mode)}
                 className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${
-                  bottle.retina_mode ? "bg-[var(--accent-primary)]" : "bg-zinc-600"
+                  bottle.retina_mode ? "bg-(--accent-primary)" : "bg-zinc-600"
                 }`}
               >
                 <span
@@ -811,7 +811,7 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
 
           {/* Control Panels & Wine Tools (CrossOver Standard) */}
           <div className="space-y-1.5">
-            <label className="text-[11px] font-mono text-[var(--text-muted)] uppercase tracking-wider block">
+            <label className="text-[11px] font-mono text-(--text-muted) uppercase tracking-wider block">
               Control Panels & Tools
             </label>
             <div className="space-y-1">
@@ -825,30 +825,30 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
                 <button
                   key={tool.id}
                   onClick={() => handleLaunchTool(tool.id)}
-                  className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-main)] hover:bg-[var(--bg-elevated)] transition-colors cursor-pointer border border-transparent hover:border-[var(--border-color)]"
+                  className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-[12px] text-(--text-secondary) hover:text-(--text-main) hover:bg-(--bg-elevated) transition-colors cursor-pointer border border-transparent hover:border-(--border-color)"
                 >
                   <span>{tool.label}</span>
-                  <span className="font-mono text-[10px] text-[var(--text-muted)]">{tool.id}</span>
+                  <span className="font-mono text-[10px] text-(--text-muted)">{tool.id}</span>
                 </button>
               ))}
             </div>
           </div>
 
           {/* Gaming Essentials 1-Click Installer */}
-          <div className="p-3 rounded-xl bg-gradient-to-br from-[var(--accent-primary)]/10 via-[var(--bg-elevated)] to-[var(--bg-elevated)] border border-[var(--accent-primary)]/20 space-y-2">
+          <div className="p-3 rounded-xl bg-linear-to-br from-(--accent-primary)/10 via-(--bg-elevated) to-(--bg-elevated) border border-(--accent-primary)/20 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="font-semibold text-[12px] text-[var(--text-main)] flex items-center gap-1.5">
-                <Zap className="w-3.5 h-3.5 text-[var(--accent-primary)] fill-current" /> Gaming Essentials
+              <span className="font-semibold text-[12px] text-(--text-main) flex items-center gap-1.5">
+                <Zap className="w-3.5 h-3.5 text-(--accent-primary) fill-current" /> Gaming Essentials
               </span>
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--accent-primary)]/20 text-[var(--accent-primary)] font-semibold">1-Click</span>
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-(--accent-primary)/20 text-(--accent-primary) font-semibold">1-Click</span>
             </div>
-            <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+            <p className="text-[11px] text-(--text-muted) leading-relaxed">
               Installs DirectX 9, VC++ 2015-2022 runtimes, and CoreFonts to prevent DLL launch crashes.
             </p>
             <button
               onClick={handleInstallEssentials}
               disabled={installingEssentials}
-              className="w-full py-1.5 px-3 rounded-lg bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-[11px] font-mono font-bold flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-50"
+              className="w-full py-1.5 px-3 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[11px] font-mono font-bold flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-50"
             >
               {installingEssentials ? (
                 <>
@@ -865,29 +865,29 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
           </div>
 
           {/* Bottle Maintenance Actions */}
-          <div className="space-y-1.5 pt-2 border-t border-[var(--border-color)]">
-            <label className="text-[11px] font-mono text-[var(--text-muted)] uppercase tracking-wider block">
+          <div className="space-y-1.5 pt-2 border-t border-(--border-color)">
+            <label className="text-[11px] font-mono text-(--text-muted) uppercase tracking-wider block">
               Maintenance
             </label>
             <div className="space-y-1">
               <button
                 onClick={() => setShowWinetricksModal(true)}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-main)] hover:bg-[var(--bg-elevated)] transition-colors cursor-pointer"
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[12px] text-(--text-secondary) hover:text-(--text-main) hover:bg-(--bg-elevated) transition-colors cursor-pointer"
               >
-                <PackagePlus className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                <PackagePlus className="w-3.5 h-3.5 text-(--text-muted)" />
                 <span>Install Dependencies...</span>
               </button>
 
               <button
                 onClick={() => setShowSnapshotsModal(true)}
-                className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-main)] hover:bg-[var(--bg-elevated)] transition-colors cursor-pointer"
+                className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-[12px] text-(--text-secondary) hover:text-(--text-main) hover:bg-(--bg-elevated) transition-colors cursor-pointer"
               >
                 <div className="flex items-center gap-2">
-                  <Camera className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                  <Camera className="w-3.5 h-3.5 text-(--text-muted)" />
                   <span>Snapshots & Restore</span>
                 </div>
                 {bottleSnapshots.length > 0 && (
-                  <span className="text-[10px] font-mono px-1 rounded bg-[var(--bg-elevated)]">
+                  <span className="text-[10px] font-mono px-1 rounded bg-(--bg-elevated)">
                     {bottleSnapshots.length}
                   </span>
                 )}
@@ -895,25 +895,25 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
 
               <button
                 onClick={() => setShowCloneModal(true)}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-main)] hover:bg-[var(--bg-elevated)] transition-colors cursor-pointer"
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[12px] text-(--text-secondary) hover:text-(--text-main) hover:bg-(--bg-elevated) transition-colors cursor-pointer"
               >
-                <Copy className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                <Copy className="w-3.5 h-3.5 text-(--text-muted)" />
                 <span>Duplicate Bottle...</span>
               </button>
 
               <button
                 onClick={handleRepair}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-main)] hover:bg-[var(--bg-elevated)] transition-colors cursor-pointer"
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[12px] text-(--text-secondary) hover:text-(--text-main) hover:bg-(--bg-elevated) transition-colors cursor-pointer"
               >
-                <Wrench className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                <Wrench className="w-3.5 h-3.5 text-(--text-muted)" />
                 <span>Repair Prefix</span>
               </button>
 
               <button
                 onClick={handleOpenLogs}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-main)] hover:bg-[var(--bg-elevated)] transition-colors cursor-pointer"
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[12px] text-(--text-secondary) hover:text-(--text-main) hover:bg-(--bg-elevated) transition-colors cursor-pointer"
               >
-                <FileText className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                <FileText className="w-3.5 h-3.5 text-(--text-muted)" />
                 <span>View Bottle Logs...</span>
               </button>
 
@@ -932,14 +932,14 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
       {/* Modal: Run Command */}
       {showRunCommandModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] p-5 shadow-2xl space-y-4">
+          <div className="w-full max-w-md rounded-xl bg-(--bg-surface) border border-(--border-color) p-5 shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-[14px] font-semibold text-[var(--text-main)]">
+              <h3 className="text-[14px] font-semibold text-(--text-main)">
                 Run Command in {bottle.name}
               </h3>
               <button
                 onClick={() => setShowRunCommandModal(false)}
-                className="text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer"
+                className="text-(--text-muted) hover:text-(--text-main) cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -947,7 +947,7 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
 
             <div className="space-y-3">
               <div>
-                <label className="text-[11px] font-mono text-[var(--text-muted)] block mb-1">
+                <label className="text-[11px] font-mono text-(--text-muted) block mb-1">
                   Command or Executable
                 </label>
                 <input
@@ -955,12 +955,12 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
                   placeholder="e.g. notepad.exe, dxdiag.exe, C:\Games\game.exe"
                   value={runCmdInput}
                   onChange={(e) => setRunCmdInput(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[12px] font-mono text-[var(--text-main)] focus:outline-none focus:border-[var(--accent-primary)]"
+                  className="w-full px-3 py-2 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-[12px] font-mono text-(--text-main) focus:outline-none focus:border-(--accent-primary)"
                 />
               </div>
 
               <div>
-                <label className="text-[11px] font-mono text-[var(--text-muted)] block mb-1">
+                <label className="text-[11px] font-mono text-(--text-muted) block mb-1">
                   Arguments (Optional)
                 </label>
                 <input
@@ -968,7 +968,7 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
                   placeholder="e.g. -windowed -dx12"
                   value={runCmdArgs}
                   onChange={(e) => setRunCmdArgs(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[12px] font-mono text-[var(--text-main)] focus:outline-none focus:border-[var(--accent-primary)]"
+                  className="w-full px-3 py-2 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-[12px] font-mono text-(--text-main) focus:outline-none focus:border-(--accent-primary)"
                 />
               </div>
             </div>
@@ -976,14 +976,14 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
             <div className="flex justify-end gap-2 pt-2">
               <button
                 onClick={() => setShowRunCommandModal(false)}
-                className="px-3 py-1.5 rounded-lg border border-[var(--border-color)] text-[12px] font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] cursor-pointer"
+                className="px-3 py-1.5 rounded-lg border border-(--border-color) text-[12px] font-medium text-(--text-secondary) hover:bg-(--bg-elevated) cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={handleRunCommand}
                 disabled={!runCmdInput.trim()}
-                className="px-4 py-1.5 rounded-lg bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] disabled:opacity-50 text-white text-[12px] font-medium cursor-pointer"
+                className="px-4 py-1.5 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) disabled:opacity-50 text-white text-[12px] font-medium cursor-pointer"
               >
                 Run
               </button>
@@ -995,31 +995,31 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
       {/* Modal: Winetricks Dependencies */}
       {showWinetricksModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] p-5 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+          <div className="w-full max-w-lg rounded-xl bg-(--bg-surface) border border-(--border-color) p-5 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
             <div className="flex items-center justify-between">
-              <h3 className="text-[14px] font-semibold text-[var(--text-main)]">
+              <h3 className="text-[14px] font-semibold text-(--text-main)">
                 Install Windows Components ({bottle.name})
               </h3>
               <button
                 onClick={() => setShowWinetricksModal(false)}
-                className="text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer"
+                className="text-(--text-muted) hover:text-(--text-main) cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <p className="text-[12px] text-[var(--text-muted)]">
+            <p className="text-[12px] text-(--text-muted)">
               Select standard Windows runtime components to install into this bottle:
             </p>
 
             <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[var(--text-muted)]" />
+              <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-(--text-muted)" />
               <input
                 type="text"
                 placeholder="Search components (e.g. vcrun, dotnet, directx, fonts)..."
                 value={verbSearch}
                 onChange={(e) => setVerbSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[12px] text-[var(--text-main)]"
+                className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-[12px] text-(--text-main)"
               />
             </div>
 
@@ -1060,21 +1060,21 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
                   return (
                     <div
                       key={item.verb}
-                      className="p-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-elevated)] flex flex-col justify-between space-y-2"
+                      className="p-3 rounded-lg border border-(--border-color) bg-(--bg-elevated) flex flex-col justify-between space-y-2"
                     >
                       <div>
-                        <p className="font-medium text-[12px] text-[var(--text-main)]">{item.label}</p>
-                        <p className="text-[10px] text-[var(--text-muted)]">{item.desc}</p>
+                        <p className="font-medium text-[12px] text-(--text-main)">{item.label}</p>
+                        <p className="text-[10px] text-(--text-muted)">{item.desc}</p>
                       </div>
                       {isInstalled ? (
-                        <span className="text-[11px] font-mono text-[var(--color-ok)] flex items-center gap-1">
+                        <span className="text-[11px] font-mono text-ok flex items-center gap-1">
                           <CheckCircle className="w-3.5 h-3.5" /> Installed
                         </span>
                       ) : (
                         <button
                           onClick={() => handleInstallVerb(item.verb)}
                           disabled={installingVerb}
-                          className="w-full py-1 rounded bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-[11px] font-medium transition-colors cursor-pointer disabled:opacity-50"
+                          className="w-full py-1 rounded bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[11px] font-medium transition-colors cursor-pointer disabled:opacity-50"
                         >
                           Install
                         </button>
@@ -1085,8 +1085,8 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
             </div>
 
             {/* Custom Verb Input */}
-            <div className="pt-2 border-t border-[var(--border-color)] space-y-2">
-              <label className="text-[11px] font-mono text-[var(--text-muted)] block">
+            <div className="pt-2 border-t border-(--border-color) space-y-2">
+              <label className="text-[11px] font-mono text-(--text-muted) block">
                 Custom Winetricks Verb
               </label>
               <div className="flex gap-2">
@@ -1095,12 +1095,12 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
                   placeholder="e.g. xna40, mfc42, physx"
                   value={customVerb}
                   onChange={(e) => setCustomVerb(e.target.value)}
-                  className="flex-1 px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[12px] font-mono text-[var(--text-main)] focus:outline-none"
+                  className="flex-1 px-3 py-1.5 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-[12px] font-mono text-(--text-main) focus:outline-none"
                 />
                 <button
                   onClick={() => handleInstallVerb(customVerb)}
                   disabled={!customVerb.trim() || installingVerb}
-                  className="px-3 py-1.5 rounded-lg bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] disabled:opacity-50 text-white text-[12px] font-medium cursor-pointer"
+                  className="px-3 py-1.5 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) disabled:opacity-50 text-white text-[12px] font-medium cursor-pointer"
                 >
                   Install Verb
                 </button>
@@ -1113,14 +1113,14 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
       {/* Modal: Snapshots */}
       {showSnapshotsModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] p-5 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+          <div className="w-full max-w-lg rounded-xl bg-(--bg-surface) border border-(--border-color) p-5 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
             <div className="flex items-center justify-between">
-              <h3 className="text-[14px] font-semibold text-[var(--text-main)]">
+              <h3 className="text-[14px] font-semibold text-(--text-main)">
                 Bottle Snapshots ({bottle.name})
               </h3>
               <button
                 onClick={() => setShowSnapshotsModal(false)}
-                className="text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer"
+                className="text-(--text-muted) hover:text-(--text-main) cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1133,12 +1133,12 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
                 placeholder="Snapshot label (e.g. Fresh Win10 clean state)"
                 value={newSnapshotName}
                 onChange={(e) => setNewSnapshotName(e.target.value)}
-                className="flex-1 px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[12px] text-[var(--text-main)] focus:outline-none"
+                className="flex-1 px-3 py-1.5 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-[12px] text-(--text-main) focus:outline-none"
               />
               <button
                 onClick={handleCreateSnapshot}
                 disabled={!newSnapshotName.trim()}
-                className="px-3 py-1.5 rounded-lg bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] disabled:opacity-50 text-white text-[12px] font-medium flex items-center gap-1 cursor-pointer"
+                className="px-3 py-1.5 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) disabled:opacity-50 text-white text-[12px] font-medium flex items-center gap-1 cursor-pointer"
               >
                 <Camera className="w-3.5 h-3.5" />
                 <span>Save State</span>
@@ -1148,18 +1148,18 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
             {/* List of Snapshots */}
             <div className="flex-1 overflow-y-auto space-y-2 max-h-60 pt-2">
               {bottleSnapshots.length === 0 ? (
-                <p className="text-[12px] text-[var(--text-muted)] italic text-center py-6">
+                <p className="text-[12px] text-(--text-muted) italic text-center py-6">
                   No snapshots created yet.
                 </p>
               ) : (
                 bottleSnapshots.map((snap) => (
                   <div
                     key={snap.id}
-                    className="p-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-elevated)] flex items-center justify-between gap-3"
+                    className="p-3 rounded-lg border border-(--border-color) bg-(--bg-elevated) flex items-center justify-between gap-3"
                   >
                     <div>
-                      <p className="font-semibold text-[12px] text-[var(--text-main)]">{snap.name}</p>
-                      <p className="text-[10px] font-mono text-[var(--text-muted)]">
+                      <p className="font-semibold text-[12px] text-(--text-main)">{snap.name}</p>
+                      <p className="text-[10px] font-mono text-(--text-muted)">
                         {(snap.size_bytes / (1024 * 1024)).toFixed(1)} MB
                       </p>
                     </div>
@@ -1167,7 +1167,7 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleRestoreSnapshot(snap.id)}
-                        className="px-2.5 py-1 rounded bg-[var(--bg-surface)] hover:bg-[var(--border-color)] border border-[var(--border-color)] text-[11px] font-medium text-[var(--text-main)] cursor-pointer"
+                        className="px-2.5 py-1 rounded bg-(--bg-surface) hover:bg-(--border-color) border border-(--border-color) text-[11px] font-medium text-(--text-main) cursor-pointer"
                       >
                         Restore
                       </button>
@@ -1190,42 +1190,42 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
       {/* Modal: Clone Bottle */}
       {showCloneModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] p-5 shadow-2xl space-y-4">
+          <div className="w-full max-w-md rounded-xl bg-(--bg-surface) border border-(--border-color) p-5 shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-[14px] font-semibold text-[var(--text-main)]">
+              <h3 className="text-[14px] font-semibold text-(--text-main)">
                 Duplicate {bottle.name}
               </h3>
               <button
                 onClick={() => setShowCloneModal(false)}
-                className="text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer"
+                className="text-(--text-muted) hover:text-(--text-main) cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="space-y-2">
-              <label className="text-[11px] font-mono text-[var(--text-muted)] block">
+              <label className="text-[11px] font-mono text-(--text-muted) block">
                 New Bottle Name
               </label>
               <input
                 type="text"
                 value={cloneName}
                 onChange={(e) => setCloneName(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[12px] text-[var(--text-main)] focus:outline-none focus:border-[var(--accent-primary)]"
+                className="w-full px-3 py-2 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-[12px] text-(--text-main) focus:outline-none focus:border-(--accent-primary)"
               />
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
               <button
                 onClick={() => setShowCloneModal(false)}
-                className="px-3 py-1.5 rounded-lg border border-[var(--border-color)] text-[12px] font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] cursor-pointer"
+                className="px-3 py-1.5 rounded-lg border border-(--border-color) text-[12px] font-medium text-(--text-secondary) hover:bg-(--bg-elevated) cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={handleClone}
                 disabled={!cloneName.trim()}
-                className="px-4 py-1.5 rounded-lg bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-[12px] font-medium cursor-pointer"
+                className="px-4 py-1.5 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[12px] font-medium cursor-pointer"
               >
                 Duplicate
               </button>
@@ -1237,16 +1237,16 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
       {/* Modal: Bottle Logs Viewer */}
       {showLogsModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-4xl h-[75vh] rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+          <div className="w-full max-w-4xl h-[75vh] rounded-2xl bg-(--bg-surface) border border-(--border-color) shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100">
             {/* Header */}
-            <div className="p-4 border-b border-[var(--border-color)] flex items-center justify-between">
+            <div className="p-4 border-b border-(--border-color) flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <FileText className="w-5 h-5 text-[var(--accent-primary)]" />
+                <FileText className="w-5 h-5 text-(--accent-primary)" />
                 <div>
-                  <h3 className="text-[14px] font-semibold text-[var(--text-main)]">
+                  <h3 className="text-[14px] font-semibold text-(--text-main)">
                     Application Logs — {bottle.name}
                   </h3>
-                  <p className="text-[11px] text-[var(--text-muted)] font-mono">
+                  <p className="text-[11px] text-(--text-muted) font-mono">
                     Captured standard output and error streams
                   </p>
                 </div>
@@ -1254,21 +1254,21 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => openLogsDirectory()}
-                  className="px-2.5 py-1.5 rounded-lg border border-[var(--border-color)] hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] text-[11px] font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
+                  className="px-2.5 py-1.5 rounded-lg border border-(--border-color) hover:bg-(--bg-elevated) text-(--text-secondary) text-[11px] font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <FolderOpen className="w-3.5 h-3.5" />
                   <span>Open Folder</span>
                 </button>
                 <button
                   onClick={handleOpenLogs}
-                  className="p-1.5 rounded-lg border border-[var(--border-color)] hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)] transition-colors cursor-pointer"
+                  className="p-1.5 rounded-lg border border-(--border-color) hover:bg-(--bg-elevated) text-(--text-secondary) transition-colors cursor-pointer"
                   title="Refresh logs"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${loadingLogs ? "animate-spin" : ""}`} />
                 </button>
                 <button
                   onClick={() => setShowLogsModal(false)}
-                  className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer"
+                  className="p-1.5 text-(--text-muted) hover:text-(--text-main) cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -1277,12 +1277,12 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
 
             {/* Split View */}
             <div className="flex-1 flex overflow-hidden">
-              <div className="w-64 border-r border-[var(--border-color)] bg-[var(--bg-surface)] overflow-y-auto p-2 space-y-1">
-                <p className="text-[10px] font-mono uppercase text-[var(--text-muted)] px-2 py-1">
+              <div className="w-64 border-r border-(--border-color) bg-(--bg-surface) overflow-y-auto p-2 space-y-1">
+                <p className="text-[10px] font-mono uppercase text-(--text-muted) px-2 py-1">
                   Log Files ({bottleLogs.length})
                 </p>
                 {bottleLogs.length === 0 ? (
-                  <p className="text-[11px] text-[var(--text-muted)] font-mono p-2">
+                  <p className="text-[11px] text-(--text-muted) font-mono p-2">
                     No logs recorded yet.
                   </p>
                 ) : (
@@ -1294,12 +1294,12 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
                         onClick={() => handleSelectLog(log.path)}
                         className={`w-full text-left p-2 rounded-lg text-[11px] font-mono transition-colors cursor-pointer ${
                           isSelected
-                            ? "bg-[var(--accent-primary)]/15 border border-[var(--accent-primary)]/40 text-[var(--text-main)]"
-                            : "hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)]"
+                            ? "bg-(--accent-primary)/15 border border-(--accent-primary)/40 text-(--text-main)"
+                            : "hover:bg-(--bg-elevated) text-(--text-secondary)"
                         }`}
                       >
                         <p className="truncate font-semibold">{log.filename}</p>
-                        <p className="text-[10px] text-[var(--text-muted)] mt-0.5">
+                        <p className="text-[10px] text-(--text-muted) mt-0.5">
                           {(log.size_bytes / 1024).toFixed(1)} KB
                         </p>
                       </button>
@@ -1319,20 +1319,20 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
       {/* Confirmation Modal: Delete Bottle */}
       {confirmDeleteBottle && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] p-6 shadow-2xl space-y-4 text-center animate-in fade-in zoom-in-95 duration-100">
+          <div className="w-full max-w-sm rounded-2xl bg-(--bg-surface) border border-(--border-color) p-6 shadow-2xl space-y-4 text-center animate-in fade-in zoom-in-95 duration-100">
             <div className="w-12 h-12 rounded-full bg-red-500/10 text-red-500 mx-auto flex items-center justify-center">
               <Trash2 className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="text-[15px] font-bold text-[var(--text-main)]">Delete Bottle?</h3>
-              <p className="text-[12px] text-[var(--text-muted)] mt-1.5 leading-relaxed">
-                Are you sure you want to delete <span className="font-semibold text-[var(--text-main)]">"{bottle.name}"</span>? All installed programs and prefix files will be permanently deleted.
+              <h3 className="text-[15px] font-bold text-(--text-main)">Delete Bottle?</h3>
+              <p className="text-[12px] text-(--text-muted) mt-1.5 leading-relaxed">
+                Are you sure you want to delete <span className="font-semibold text-(--text-main)">"{bottle.name}"</span>? All installed programs and prefix files will be permanently deleted.
               </p>
             </div>
             <div className="flex gap-2 justify-center pt-2">
               <button
                 onClick={() => setConfirmDeleteBottle(false)}
-                className="px-4 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[var(--text-main)] text-[12px] font-semibold hover:bg-[var(--bg-surface)] transition-colors cursor-pointer"
+                className="px-4 py-2 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-(--text-main) text-[12px] font-semibold hover:bg-(--bg-surface) transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -1359,20 +1359,20 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
       {/* Confirmation Modal: Delete Snapshot */}
       {confirmDeleteSnapshotId && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] p-6 shadow-2xl space-y-4 text-center animate-in fade-in zoom-in-95 duration-100">
+          <div className="w-full max-w-sm rounded-2xl bg-(--bg-surface) border border-(--border-color) p-6 shadow-2xl space-y-4 text-center animate-in fade-in zoom-in-95 duration-100">
             <div className="w-12 h-12 rounded-full bg-red-500/10 text-red-500 mx-auto flex items-center justify-center">
               <Trash2 className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="text-[15px] font-bold text-[var(--text-main)]">Delete Snapshot?</h3>
-              <p className="text-[12px] text-[var(--text-muted)] mt-1.5 leading-relaxed">
+              <h3 className="text-[15px] font-bold text-(--text-main)">Delete Snapshot?</h3>
+              <p className="text-[12px] text-(--text-muted) mt-1.5 leading-relaxed">
                 This will permanently delete the snapshot archive from your disk.
               </p>
             </div>
             <div className="flex gap-2 justify-center pt-2">
               <button
                 onClick={() => setConfirmDeleteSnapshotId(null)}
-                className="px-4 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[var(--text-main)] text-[12px] font-semibold hover:bg-[var(--bg-surface)] transition-colors cursor-pointer"
+                className="px-4 py-2 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-(--text-main) text-[12px] font-semibold hover:bg-(--bg-surface) transition-colors cursor-pointer"
               >
                 Cancel
               </button>
