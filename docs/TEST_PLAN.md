@@ -58,6 +58,22 @@ This document defines the complete verification methodology for FusionCross:
 
 ## 3. Unit Test Specifications
 
+### Reliability regression coverage
+
+Run `npm run verify` for lint, Rust formatting, strict Clippy, Rust tests, TypeScript checking, and the production frontend build. Run `npm run tauri build -- --debug --no-bundle` to check the desktop build.
+
+The reliability suite covers state backup recovery and corrupt-file preservation, refusal to overwrite newer schemas, rollback of failed metadata writes, repeated app discovery without duplicates, clone path boundaries and Wine symlinks, backend input validation, concurrent launch exclusion, process exit tracking, bounded completed-job history, and snapshot validation before replacing a live prefix.
+
+Manual checks still required before a release:
+
+- Clone a real Wine bottle and launch its copied application.
+- Import both `.tar.gz` and `.tar.xz` runtimes, then open the runtime manager.
+- With the app closed and a test library backed up, corrupt `state.json`; verify recovery from `state.json.bak` and the recovery notice. Verify startup refuses a future schema without modifying it.
+- Launch and stop a real Wine application, restart FusionCross, and verify its session statistics persist.
+- Restore a snapshot in a disposable bottle and check application launch afterward. Restore requires the tracked apps in that bottle to be stopped.
+
+Background jobs report worker failures and retain up to 100 completed results for one hour. Installer/download cancellation and tracking Wine processes started outside the application remain follow-up work.
+
 ### 3.1 State Persistence & Schema Migrations (`src-tauri/src/core/state.rs`)
 * **Test Objective:** Guarantee backward compatibility and non-destructive schema evolution as new Wine features are added.
 * **Test Cases:**
@@ -217,7 +233,7 @@ Before any tagged release or production DMG distribution, QA must verify:
 - [ ] **Frontend Build:** `npm run build` completes cleanly.
 - [ ] **Rust Formatting:** `cargo fmt --check` succeeds.
 - [ ] **Rust Clippy:** `cargo clippy --all-targets -- -D warnings` completes with 0 warnings.
-- [ ] **Automated Unit Tests:** `cargo test` passes all 27 unit tests.
+- [ ] **Automated Unit Tests:** `cargo test` passes all 50 unit tests.
 - [ ] **Binary Analysis Verification:** Tested with 32-bit and 64-bit PE executables.
 - [ ] **Diagnostics Auto-Fix:** Tested repair workflows for Rosetta 2 and prefix permissions.
 - [ ] **Package Verification:** `npm run tauri build` generates valid `FusionCross.app` and `.dmg`.

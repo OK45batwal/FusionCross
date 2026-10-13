@@ -15,7 +15,8 @@ fn app_data_dir(app: &AppHandle) -> Option<PathBuf> {
 pub fn dirs(app: &AppHandle) -> Dirs {
     let base = app_data_dir(app).unwrap_or_else(|| PathBuf::from("/tmp/fusioncross"));
     let home = std::env::var("HOME").unwrap_or_default();
-    let legacy_libraries = PathBuf::from(&home).join("Library/Application Support/FusionCross/libraries");
+    let legacy_libraries =
+        PathBuf::from(&home).join("Library/Application Support/FusionCross/libraries");
     let libraries = if legacy_libraries.exists() {
         legacy_libraries
     } else {
@@ -66,17 +67,15 @@ impl Dirs {
 
 /// Process-wide access to the versioned `AppState`. The backend is the source
 /// of truth (PRD §49); the frontend only mirrors it.
-pub struct FusionState(pub Mutex<AppState>);
+pub struct FusionState(pub Mutex<AppState>, PathBuf, pub Option<String>);
 
 impl FusionState {
-    /// Load or initialize state; corrupt files degrade to defaults.
-    pub fn load(app: &AppHandle) -> Self {
+    /// Recover a valid backup or stop startup while preserving unreadable data.
+    pub fn load(app: &AppHandle) -> Result<Self, Box<dyn std::error::Error>> {
         let d = dirs(app);
-        d.ensure().ok();
-        let mut state = match std::fs::read_to_string(&d.state) {
-            Ok(raw) => AppState::from_raw(&raw).unwrap_or_default(),
-            Err(_) => AppState::default(),
-        };
+        d.ensure()?;
+        let (mut state, notice) = crate::core::storage::load(&d.state)?;
+        let loaded = state.clone();
 
         // Reconcile any existing bottle prefixes found on disk
         if d.bottles.is_dir() {
@@ -85,6 +84,9 @@ impl FusionState {
                     let path = entry.path();
                     if path.is_dir() {
                         let id = entry.file_name().to_string_lossy().into_owned();
+                        if id.starts_with('.') {
+                            continue;
+                        }
                         let has_prefix =
                             path.join("drive_c").is_dir() || path.join("system.reg").is_file();
                         if has_prefix
@@ -125,47 +127,23 @@ impl FusionState {
         }
 
         // Auto-scan each bottle for installed executables into state.applications
-        for bottle in &state.bottles {
+        for bottle in state.bottles.clone() {
             let found = crate::wine::scanner::scan_prefix(std::path::Path::new(&bottle.path));
-            for exe in found {
-                let full_path = std::path::Path::new(&bottle.path)
-                    .join(&exe.rel_path)
-                    .to_string_lossy()
-                    .into_owned();
-                if !state.applications.iter().any(|a| {
-                    a.bottle_id == bottle.id
-                        && (a.executable_path == full_path || a.name == exe.name)
-                }) {
-                    let rec = crate::compatibility::recommend(&exe.name);
-                    let icon_data =
-                        crate::wine::icon::extract_icon_data_url(std::path::Path::new(&full_path));
-                    state.applications.push(crate::core::state::Application {
-                        id: crate::core::ids::new_id(),
-                        bottle_id: bottle.id.clone(),
-                        name: exe.name,
-                        executable_path: full_path,
-                        category: exe.category,
-                        favorite: false,
-                        launch_count: 0,
-                        play_time_mins: 0,
-                        last_played: None,
-                        compatibility: Some(rec.compatibility),
-                        profile: Some(rec.profile.to_string()),
-                        icon_data,
-                        launch_arguments: None,
-                    });
-                }
-            }
+            crate::commands::installers::register_discovered(
+                &mut state,
+                &bottle.id,
+                std::path::Path::new(&bottle.path),
+                &found,
+            );
         }
 
-        // Clean up any bogus applications (such as symlinks escaping to dosdevices/z:, non-existent files,
+        // Clean up bogus applications (such as symlinks escaping to dosdevices/z:,
         // or helper/installer/uninstaller binaries that should not appear on the user's shelf)
         state.applications.retain(|app| {
             let p = std::path::Path::new(&app.executable_path);
             !app.executable_path.contains("dosdevices/z:")
                 && !app.executable_path.contains("/opt/homebrew/")
                 && !app.executable_path.contains("/site-packages/")
-                && p.exists()
                 && !crate::wine::scanner::is_ignored_exe(p)
         });
 
@@ -178,27 +156,57 @@ impl FusionState {
             }
         }
 
-        let st = Self(Mutex::new(state));
-        st.save(app).ok();
-        st
+        if state != loaded || !d.state.exists() {
+            crate::core::storage::save(&d.state, &state)?;
+        }
+        let st = Self(Mutex::new(state), d.state, notice);
+        Ok(st)
     }
 
     pub fn with_state<R>(
         &self,
+        f: impl FnOnce(&AppState) -> Result<R, FusionError>,
+    ) -> Result<R, FusionError> {
+        let guard = self.0.lock().map_err(|_| FusionError::Unsupported)?;
+        f(&guard)
+    }
+
+    /// Persist before publishing a mutation, so a failed write cannot leave
+    /// the in-memory library ahead of what will survive a restart.
+    pub fn update<R>(
+        &self,
         f: impl FnOnce(&mut AppState) -> Result<R, FusionError>,
     ) -> Result<R, FusionError> {
         let mut guard = self.0.lock().map_err(|_| FusionError::Unsupported)?;
-        f(&mut guard)
-    }
-
-    pub fn save(&self, app: &AppHandle) -> Result<(), FusionError> {
-        let path = dirs(app).state;
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|_| FusionError::PermissionDenied)?;
+        let mut next = guard.clone();
+        let result = f(&mut next)?;
+        if next == *guard {
+            return Ok(result);
         }
-        let guard = self.0.lock().map_err(|_| FusionError::Unsupported)?;
-        let data = serde_json::to_string_pretty(&*guard).map_err(|_| FusionError::Unsupported)?;
-        std::fs::write(&path, data).map_err(|_| FusionError::PermissionDenied)
+        crate::core::storage::save(&self.1, &next).map_err(|_| FusionError::PermissionDenied)?;
+        *guard = next;
+        Ok(result)
+    }
+}
+
+/// Always put a background job into a terminal state when its worker panics
+/// or cannot be started, so polling never reports it as running forever.
+pub fn spawn_job(app: AppHandle, job_id: String, task: impl FnOnce() + Send + 'static) {
+    let worker_app = app.clone();
+    let worker_id = job_id.clone();
+    let result = std::thread::Builder::new().spawn(move || {
+        if std::panic::catch_unwind(std::panic::AssertUnwindSafe(task)).is_err() {
+            worker_app.state::<Jobs>().fail(
+                &worker_id,
+                "The background task stopped unexpectedly. Check the logs before retrying.".into(),
+            );
+        }
+    });
+    if let Err(error) = result {
+        app.state::<Jobs>().fail(
+            &job_id,
+            format!("Could not start the background task: {error}"),
+        );
     }
 }
 
@@ -218,6 +226,8 @@ pub struct Job {
     pub title: String,
     pub status: JobStatus,
     pub message: String,
+    #[serde(skip)]
+    finished_at: Option<std::time::Instant>,
 }
 
 #[derive(Default)]
@@ -226,33 +236,92 @@ pub struct Jobs(pub Mutex<HashMap<String, Job>>);
 impl Jobs {
     pub fn begin(&self, title: String) -> String {
         let id = crate::core::ids::new_id();
-        self.0.lock().unwrap().insert(
+        let mut jobs = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        Self::prune(&mut jobs);
+        jobs.insert(
             id.clone(),
             Job {
                 id: id.clone(),
                 title,
                 status: JobStatus::Running,
                 message: "working…".into(),
+                finished_at: None,
             },
         );
         id
     }
 
     pub fn finish(&self, id: &str, message: String) {
-        if let Some(j) = self.0.lock().unwrap().get_mut(id) {
+        if let Some(j) = self.0.lock().unwrap_or_else(|e| e.into_inner()).get_mut(id) {
             j.status = JobStatus::Done;
             j.message = message;
+            j.finished_at = Some(std::time::Instant::now());
         }
     }
 
     pub fn fail(&self, id: &str, message: String) {
-        if let Some(j) = self.0.lock().unwrap().get_mut(id) {
+        if let Some(j) = self.0.lock().unwrap_or_else(|e| e.into_inner()).get_mut(id) {
             j.status = JobStatus::Failed;
             j.message = message;
+            j.finished_at = Some(std::time::Instant::now());
         }
     }
 
     pub fn list(&self) -> Vec<Job> {
-        self.0.lock().unwrap().values().cloned().collect()
+        let mut jobs = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        Self::prune(&mut jobs);
+        jobs.values().cloned().collect()
+    }
+
+    fn prune(jobs: &mut HashMap<String, Job>) {
+        jobs.retain(|_, j| {
+            j.finished_at
+                .is_none_or(|t| t.elapsed() < std::time::Duration::from_secs(3600))
+        });
+        let mut completed: Vec<_> = jobs
+            .values()
+            .filter_map(|j| j.finished_at.map(|t| (j.id.clone(), t)))
+            .collect();
+        completed.sort_by_key(|(_, time)| *time);
+        let excess = completed.len().saturating_sub(100);
+        for (id, _) in completed.into_iter().take(excess) {
+            jobs.remove(&id);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn failed_persistence_does_not_publish_mutation() {
+        let dir =
+            std::env::temp_dir().join(format!("fc_transaction_{}", crate::core::ids::new_id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("state.json");
+        std::fs::write(&path, "broken").unwrap();
+        let state = FusionState(Mutex::new(AppState::default()), path, None);
+        assert!(state
+            .update(|s| {
+                s.settings.clear();
+                Ok(())
+            })
+            .is_err());
+        assert_eq!(state.0.lock().unwrap().settings.len(), 1);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn jobs_retain_active_work_and_bound_completed_history() {
+        let jobs = Jobs::default();
+        let active = jobs.begin("active".into());
+        for _ in 0..150 {
+            let id = jobs.begin("test".into());
+            jobs.finish(&id, "done".into());
+        }
+        let listed = jobs.list();
+        assert_eq!(listed.len(), 101);
+        assert!(listed.iter().any(|j| j.id == active));
     }
 }

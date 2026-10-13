@@ -108,7 +108,7 @@ pub fn download_runtime(
         return Err(FusionError::RuntimeVerificationFailed);
     }
     archives::verify_sha256(dest_pkg, sha256)?;
-    archives::extract_archive(dest_pkg, dest_dir)?;
+    install_from_archive(dest_pkg, dest_dir)?;
     std::fs::remove_file(dest_pkg).ok();
     Ok(())
 }
@@ -119,14 +119,24 @@ pub fn install_from_archive(archive: &Path, dest_dir: &Path) -> Result<String, F
     if archives::detect_kind(archive).is_none() {
         return Err(FusionError::ArchiveValidationFailed);
     }
-    archives::extract_archive(archive, dest_dir)?;
-    match probe_runtime_version(dest_dir) {
-        Ok(ver) => Ok(ver),
-        Err(_) => {
-            let _ = std::fs::remove_dir_all(dest_dir);
-            Err(FusionError::RuntimeVerificationFailed)
-        }
+    if dest_dir.exists() {
+        return Err(FusionError::InvalidPath);
     }
+    let parent = dest_dir.parent().ok_or(FusionError::InvalidPath)?;
+    std::fs::create_dir_all(parent).map_err(|_| FusionError::PermissionDenied)?;
+    let staging = parent.join(format!(".runtime-staging-{}", crate::core::ids::new_id()));
+
+    let result: Result<String, FusionError> = (|| {
+        archives::extract_archive(archive, &staging)?;
+        let version =
+            probe_runtime_version(&staging).map_err(|_| FusionError::RuntimeVerificationFailed)?;
+        std::fs::rename(&staging, dest_dir).map_err(|_| FusionError::PermissionDenied)?;
+        Ok(version)
+    })();
+    if result.is_err() {
+        std::fs::remove_dir_all(&staging).ok();
+    }
+    result
 }
 
 #[cfg(test)]

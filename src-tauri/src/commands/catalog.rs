@@ -35,7 +35,7 @@ pub fn install_catalog_game(
     let job_id = job.clone();
     let handle = app.clone();
 
-    std::thread::spawn(move || {
+    crate::manager::spawn_job(handle.clone(), job_id.clone(), move || {
         let jobs = handle.state::<Jobs>();
         let res = (|| -> Result<String, FusionError> {
             // 1. Determine or create target bottle
@@ -47,7 +47,7 @@ pub fn install_catalog_game(
                         Ok(s.bottles
                             .iter()
                             .find(|b| {
-                                b.name.to_lowercase().contains(&item.id)
+                                b.name.to_lowercase().contains(item.id)
                                     || b.name == "Gaming Bottle"
                                     || b.prefix_type == "gaming"
                             })

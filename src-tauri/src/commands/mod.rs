@@ -16,6 +16,7 @@ pub mod installers;
 pub mod runtimes;
 pub mod settings;
 pub mod snapshots;
+mod validation;
 
 // Re-export all commands for direct use in Tauri handler and external callers
 pub use applications::*;
@@ -36,14 +37,13 @@ pub fn now_ts() -> String {
 
 pub fn wine_binary_for(app: &AppHandle, runtime_id: &str) -> Result<String, FusionError> {
     let st = app.state::<FusionState>();
-    let rt = st
-        .0
-        .lock()
-        .map_err(|_| FusionError::Unsupported)?
-        .runtimes
-        .iter()
-        .find(|r| r.id == runtime_id)
-        .cloned();
+    let rt =
+        st.0.lock()
+            .map_err(|_| FusionError::Unsupported)?
+            .runtimes
+            .iter()
+            .find(|r| r.id == runtime_id)
+            .cloned();
 
     if let Some(r) = rt {
         if let Some(bin) = runtime::engine_binary(Path::new(&r.path)) {
@@ -135,6 +135,8 @@ pub fn build_wine_execution_context(
     safe_mode: bool,
 ) -> (Vec<(String, String)>, String) {
     let mut env = bottle.environment.clone();
+    // Older state files may still contain this reserved override.
+    env.retain(|(key, _)| key != "WINEPREFIX");
 
     // 1. Resolve Wine runtime root directory
     let bin_path = Path::new(wine_binary);
@@ -193,10 +195,7 @@ pub fn build_wine_execution_context(
     // 5. Diagnostics HUD
     if bottle.performance_hud && !safe_mode {
         env.push(("MTL_HUD_ENABLED".into(), "1".into()));
-        env.push((
-            "DXVK_HUD".into(),
-            "compiler,fps,frametimes,gpuload".into(),
-        ));
+        env.push(("DXVK_HUD".into(), "compiler,fps,frametimes,gpuload".into()));
     } else {
         env.push(("MTL_HUD_ENABLED".into(), "0".into()));
         env.push(("DXVK_HUD".into(), "0".into()));

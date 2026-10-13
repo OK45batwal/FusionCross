@@ -4,9 +4,7 @@ import {
   analyzeInstaller,
   InstallerAnalysis,
   extractInstallerIcon,
-  runCommandInBottle,
-  registerApplication,
-  scanBottle,
+  runInstaller,
   createBottle,
   FusionErrorPayload,
 } from "../services/tauri";
@@ -112,24 +110,8 @@ export function DroppedFileModal({
     setExecuting(true);
     setError(null);
     try {
-      // 1. Automatically register the program into the Applications Library
-      const appName = fileName.replace(/\.(exe|msi|bat|cmd)$/i, "");
-      await registerApplication(bottleId, appName, filePath, "applications");
-      await onRefresh();
-
-      // 2. Execute installer inside bottle
-      await runCommandInBottle(bottleId, filePath, []);
-      setActionSuccess(`Launched ${fileName} in bottle "${targetBottle?.name || 'Default'}" & added to Applications!`);
-      
-      // 3. Scan bottle prefix after delay for any newly extracted binaries (e.g. Steam.exe)
-      setTimeout(async () => {
-        try {
-          await scanBottle(bottleId);
-          await onRefresh();
-        } catch {
-          // ignore scan error
-        }
-      }, 3500);
+      const jobId = await runInstaller(filePath, bottleId);
+      setActionSuccess(`Installation queued for ${fileName} in "${targetBottle?.name || 'Default'}" (job ${jobId}).`);
 
       await onRefresh();
       onSelectBottle(bottleId);
@@ -139,27 +121,6 @@ export function DroppedFileModal({
     } catch (e) {
       const err = e as FusionErrorPayload;
       setError(err.message || "Failed to launch installer in bottle.");
-      setExecuting(false);
-    }
-  };
-
-  const handleRegisterApp = async () => {
-    if (!selectedBottleId && bottles.length === 0) return;
-    const bottleId = selectedBottleId || bottles[0]?.id;
-    setExecuting(true);
-    setError(null);
-    try {
-      const appName = fileName.replace(/\.(exe|msi)$/i, "");
-      await registerApplication(bottleId, appName, filePath, "applications");
-      setActionSuccess(`Added "${appName}" to bottle application launcher!`);
-      await onRefresh();
-      onSelectBottle(bottleId);
-      setTimeout(() => {
-        onClose();
-      }, 1500);
-    } catch (e) {
-      const err = e as FusionErrorPayload;
-      setError(err.message || "Failed to register application.");
       setExecuting(false);
     }
   };
@@ -322,16 +283,6 @@ export function DroppedFileModal({
               className="px-3 py-1.5 text-[12px] text-(--text-secondary) hover:text-(--text-primary) rounded-lg hover:bg-(--bg-hover) transition-colors"
             >
               Cancel
-            </button>
-
-            <button
-              type="button"
-              disabled={executing || bottles.length === 0}
-              onClick={handleRegisterApp}
-              className="px-3 py-1.5 text-[12px] bg-(--bg-subtle) hover:bg-(--bg-hover) border border-(--border-color) text-(--text-primary) rounded-lg flex items-center gap-1.5 transition-colors disabled:opacity-50"
-              title="Add to application shelf without executing now"
-            >
-              <Plus className="w-3.5 h-3.5" /> Add to Shelf
             </button>
 
             <button

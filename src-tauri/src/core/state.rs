@@ -34,7 +34,7 @@ fn default_created_at() -> String {
 ///
 /// The JSON on disk is never fully trusted: it is parsed as a raw `Value`,
 /// migrated forward, then sanitized into the typed struct.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AppState {
     pub schema_version: u32,
     pub applications: Vec<Application>,
@@ -57,7 +57,7 @@ impl Default for AppState {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Bottle {
     pub id: String,
     pub name: String,
@@ -99,7 +99,7 @@ impl Bottle {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Application {
     pub id: String,
     pub bottle_id: String,
@@ -128,7 +128,7 @@ pub struct Application {
     pub launch_arguments: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Runtime {
     pub id: String,
     pub name: String,
@@ -147,7 +147,7 @@ pub struct Runtime {
     pub size_bytes: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Snapshot {
     pub id: String,
     pub bottle_id: String,
@@ -178,15 +178,15 @@ fn migrate(value: &mut serde_json::Value) -> Result<(), String> {
     let mut version = value
         .get("schema_version")
         .and_then(|v| v.as_u64())
-        .unwrap_or(0) as u32;
+        .unwrap_or(0);
 
-    if version > CURRENT_SCHEMA_VERSION {
+    if version > u64::from(CURRENT_SCHEMA_VERSION) {
         return Err(format!(
             "state.json schema {version} is newer than this build ({CURRENT_SCHEMA_VERSION})"
         ));
     }
 
-    while version < CURRENT_SCHEMA_VERSION {
+    while version < u64::from(CURRENT_SCHEMA_VERSION) {
         match version {
             0 => {
                 let obj = value.as_object_mut().ok_or("state not an object")?;

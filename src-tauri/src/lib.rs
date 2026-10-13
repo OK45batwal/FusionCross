@@ -23,20 +23,19 @@ use tauri::Manager;
 fn record_session(app: &tauri::AppHandle, rec: process::SessionRecord) {
     use tauri::Manager;
     app.state::<manager::FusionState>()
-        .with_state(|s| {
+        .update(|s| {
             if let Some(a) = s.applications.iter_mut().find(|a| a.id == rec.app_id) {
                 a.play_time_mins += rec.duration_secs.div_ceil(60);
             }
             Ok(())
         })
-        .ok();
+        .unwrap_or_else(|error| eprintln!("Could not save session statistics: {error}"));
 }
 
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            let state = manager::FusionState::load(app.handle());
+            let state = manager::FusionState::load(app.handle())?;
             app.manage(state);
             let handle = app.handle().clone();
             app.manage(process::ProcessManager::new(Arc::new(
@@ -49,6 +48,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_state,
+            commands::get_recovery_notice,
             commands::get_system_info,
             commands::probe_runtime,
             commands::get_templates,
@@ -58,8 +58,8 @@ pub fn run() {
             commands::delete_bottle,
             commands::clone_bottle,
             commands::open_bottle_c_drive,
-            commands::reveal_in_finder,
-            commands::run_command_in_bottle,
+            commands::reveal_application_in_finder,
+            commands::run_executable_in_bottle,
             commands::update_bottle,
             commands::kill_bottle_processes,
             commands::launch_wine_tool,

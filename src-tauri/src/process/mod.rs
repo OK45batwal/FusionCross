@@ -80,6 +80,12 @@ impl ProcessManager {
         log_path: Option<&std::path::Path>,
     ) -> Result<RunningInfo, FusionError> {
         use std::os::unix::process::CommandExt;
+        // Reserve the app through spawn and insertion. Two IPC calls cannot
+        // both launch a child and overwrite each other's session.
+        let mut sessions_guard = self.sessions.lock().map_err(|_| FusionError::Unsupported)?;
+        if sessions_guard.contains_key(app_id) {
+            return Err(FusionError::AlreadyRunning);
+        }
         let mut cmd = std::process::Command::new(wine_binary);
         cmd.env("WINEPREFIX", prefix_path);
         cmd.env(
@@ -145,8 +151,7 @@ impl ProcessManager {
         };
 
         {
-            let mut sessions = self.sessions.lock().map_err(|_| FusionError::Unsupported)?;
-            sessions.insert(
+            sessions_guard.insert(
                 app_id.to_string(),
                 SessionState {
                     pid,
@@ -157,6 +162,7 @@ impl ProcessManager {
                 },
             );
         }
+        drop(sessions_guard);
 
         // Watcher: wait on child in background thread without holding mutex!
         let sessions = self.sessions.clone();
@@ -168,7 +174,7 @@ impl ProcessManager {
             let exit_code = status.and_then(|st| st.code());
 
             let (bottle_id, name, started) = {
-                let mut m = sessions.lock().unwrap();
+                let mut m = sessions.lock().unwrap_or_else(|e| e.into_inner());
                 match m.remove(&app_id_owned) {
                     Some(state) => (state.bottle_id, state.name, state.started_at),
                     None => return,
@@ -191,14 +197,24 @@ impl ProcessManager {
 
     /// Stop an app by killing its whole process group.
     pub fn stop(&self, app_id: &str) -> Result<(), FusionError> {
-        let pid = {
-            let m = self.sessions.lock().map_err(|_| FusionError::Unsupported)?;
-            m.get(app_id).map(|s| s.pid)
-        };
+        let m = self.sessions.lock().map_err(|_| FusionError::Unsupported)?;
+        let pid = m.get(app_id).map(|s| s.pid);
         match pid {
             Some(pid) => {
                 let rc = unsafe { libc::kill(-(pid as i32), libc::SIGTERM) };
                 if rc == 0 {
+                    let sessions = self.sessions.clone();
+                    let app_id = app_id.to_string();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(Duration::from_secs(3));
+                        let m = sessions.lock().unwrap_or_else(|e| e.into_inner());
+                        // Never kill a replacement launch of the same app.
+                        if m.get(&app_id).is_some_and(|s| s.pid == pid) {
+                            unsafe {
+                                libc::kill(-(pid as i32), libc::SIGKILL);
+                            }
+                        }
+                    });
                     Ok(())
                 } else {
                     Err(FusionError::LaunchFailed)
@@ -239,6 +255,49 @@ impl ProcessManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn concurrent_launch_is_tracked_once_and_stop_reaps_child() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let manager = Arc::new(ProcessManager::new(Arc::new(move |record| {
+            tx.send(record).unwrap();
+        })));
+        let barrier = Arc::new(std::sync::Barrier::new(3));
+        let handles: Vec<_> = (0..2)
+            .map(|_| {
+                let manager = manager.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    manager.spawn(
+                        "app",
+                        "bottle",
+                        "Test",
+                        "/bin/sleep",
+                        "/tmp",
+                        "30",
+                        &[],
+                        &[],
+                        "",
+                        None,
+                    )
+                })
+            })
+            .collect();
+        barrier.wait();
+        let results: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        assert_eq!(results.iter().filter(|r| r.is_ok()).count(), 1);
+        assert!(results
+            .iter()
+            .any(|r| matches!(r, Err(FusionError::AlreadyRunning))));
+        assert_eq!(manager.running().len(), 1);
+        manager.stop("app").unwrap();
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(5)).unwrap().app_id,
+            "app"
+        );
+        assert!(manager.running().is_empty());
+    }
 
     #[test]
     fn early_session_record_surfaces_duration() {

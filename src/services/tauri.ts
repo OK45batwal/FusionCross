@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
+export const getRecoveryNotice = () => invoke<string | null>("get_recovery_notice");
+
 /** Structured backend errors — `{ code, message, action? }`. */
 export interface FusionErrorPayload {
   code: string;
@@ -132,8 +134,8 @@ export interface RunningInfo {
 }
 
 export interface LogEntry {
+  id: string;
   filename: string;
-  path: string;
   size_bytes: number;
   modified_at: number;
 }
@@ -190,12 +192,13 @@ export const installBottleVerb = (bottleId: string, verb: string) =>
   invoke<string>("install_bottle_verb", { bottleId, verb });
 export const openBottleCDrive = (bottleId: string) =>
   invoke<void>("open_bottle_c_drive", { bottleId });
-export const revealInFinder = (path: string) => invoke<void>("reveal_in_finder", { path });
-export const runCommandInBottle = (
+export const revealApplicationInFinder = (appId: string) =>
+  invoke<void>("reveal_application_in_finder", { appId });
+export const runExecutableInBottle = (
   bottleId: string,
-  command: string,
+  executableRelPath: string,
   args: string[] = []
-) => invoke<void>("run_command_in_bottle", { bottleId, command, args });
+) => invoke<void>("run_executable_in_bottle", { bottleId, executableRelPath, args });
 export const repairBottle = (bottleId: string) => invoke<string>("repair_bottle", { bottleId });
 
 export const analyzeInstaller = (path: string) => invoke<InstallerAnalysis>("analyze_installer", { path });
@@ -206,9 +209,15 @@ export const installGamingEssentials = (bottleId: string) => invoke<string>("ins
 export const registerApplication = (
   bottleId: string,
   name: string,
-  executablePath: string,
+  executableRelPath: string,
   category: string
-) => invoke<Application>("register_application", { bottleId, name, executablePath, category });
+) =>
+  invoke<Application>("register_application", {
+    bottleId,
+    name,
+    executableRelPath,
+    category,
+  });
 export const unregisterApplication = (appId: string) =>
   invoke<void>("unregister_application", { appId });
 export const updateApplication = (
@@ -237,8 +246,7 @@ export const toggleFavorite = (appId: string) => invoke<void>("toggle_favorite",
 
 export const listApplicationLogs = (appId?: string) =>
   invoke<LogEntry[]>("list_application_logs", { appId });
-export const readLogFile = (logPath: string) =>
-  invoke<string>("read_log_file", { logPath });
+export const readLogFile = (logId: string) => invoke<string>("read_log_file", { logId });
 export const openLogsDirectory = () => invoke<void>("open_logs_directory");
 
 export const getRecommendation = (name: string) => invoke<Recommendation>("get_recommendation", { name });

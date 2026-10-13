@@ -35,11 +35,10 @@ pub fn create_snapshot(
         size_bytes: size,
         created_at: now_ts(),
     };
-    st.with_state(|s| {
+    st.update(|s| {
         s.snapshots.push(snapshot.clone());
         Ok(())
     })?;
-    st.save(&app)?;
     Ok(snapshot)
 }
 
@@ -62,7 +61,15 @@ pub fn restore_snapshot(app: AppHandle, snapshot_id: String) -> Result<(), Fusio
             .ok_or(FusionError::BottleNotFound)?;
         Ok((b, snap))
     })?;
-    crate::snapshots::restore_snapshot(&d.snapshots, Path::new(&snap.path), &bottle)?;
+    if app
+        .state::<crate::process::ProcessManager>()
+        .running()
+        .iter()
+        .any(|session| session.bottle_id == bottle.id)
+    {
+        return Err(FusionError::AlreadyRunning);
+    }
+    crate::snapshots::restore_snapshot(&d.bottles, &d.snapshots, Path::new(&snap.path), &bottle)?;
     Ok(())
 }
 
@@ -78,10 +85,9 @@ pub fn delete_snapshot(app: AppHandle, snapshot_id: String) -> Result<(), Fusion
             .ok_or(FusionError::Unsupported)
     })?;
     crate::snapshots::delete_snapshot(&d.snapshots, Path::new(&snap.path))?;
-    st.with_state(|s| {
+    st.update(|s| {
         s.snapshots.retain(|x| x.id != snapshot_id);
         Ok(())
     })?;
-    st.save(&app)?;
     Ok(())
 }

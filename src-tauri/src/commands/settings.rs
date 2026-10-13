@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
-use std::path::PathBuf;
 use serde::Serialize;
+use std::path::PathBuf;
 use tauri::{AppHandle, Manager, State};
 
 use crate::core::errors::FusionError;
@@ -24,6 +24,11 @@ pub fn get_state(state: State<'_, FusionState>) -> Result<AppState, FusionError>
         .lock()
         .map_err(|_| FusionError::Unsupported)?
         .clone())
+}
+
+#[tauri::command]
+pub fn get_recovery_notice(state: State<'_, FusionState>) -> Option<String> {
+    state.2.clone()
 }
 
 #[tauri::command]
@@ -61,7 +66,7 @@ pub fn get_templates() -> Result<Vec<serde_json::Value>, FusionError> {
 #[tauri::command]
 pub fn set_safe_mode(app: AppHandle, enabled: bool) -> Result<(), FusionError> {
     let st = app.state::<FusionState>();
-    st.with_state(|s| {
+    st.update(|s| {
         if let Some(slot) = s.settings.iter_mut().find(|(k, _)| k == "safe_mode") {
             slot.1 = if enabled { "on" } else { "off" }.into();
         } else {
@@ -71,23 +76,22 @@ pub fn set_safe_mode(app: AppHandle, enabled: bool) -> Result<(), FusionError> {
             ));
         }
         Ok(())
-    })?;
-    st.save(&app)
+    })
 }
 
 #[tauri::command]
 #[allow(dead_code)]
 pub fn set_setting(app: AppHandle, key: String, value: String) -> Result<(), FusionError> {
+    super::validation::setting(&key, &value)?;
     let st = app.state::<FusionState>();
-    st.with_state(|s| {
+    st.update(|s| {
         if let Some(slot) = s.settings.iter_mut().find(|(k, _)| k == &key) {
             slot.1 = value;
         } else {
             s.settings.push((key, value));
         }
         Ok(())
-    })?;
-    st.save(&app)
+    })
 }
 
 #[tauri::command]

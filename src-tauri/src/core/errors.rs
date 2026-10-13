@@ -11,6 +11,8 @@ pub enum FusionError {
     BottleNotFound,
     RuntimeNotFound,
     InvalidExecutable,
+    InvalidInput,
+    AlreadyRunning,
     DependencyMissing,
     GraphicsInitializationFailed,
     InstallationFailed,
@@ -31,6 +33,8 @@ impl FusionError {
             BottleNotFound => "BOTTLE_NOT_FOUND",
             RuntimeNotFound => "RUNTIME_NOT_FOUND",
             InvalidExecutable => "INVALID_EXECUTABLE",
+            InvalidInput => "INVALID_INPUT",
+            AlreadyRunning => "ALREADY_RUNNING",
             DependencyMissing => "DEPENDENCY_MISSING",
             GraphicsInitializationFailed => "GRAPHICS_INIT_FAILED",
             InstallationFailed => "INSTALLATION_FAILED",
@@ -65,6 +69,10 @@ impl std::fmt::Display for FusionError {
             BottleNotFound => "The bottle could not be found.",
             RuntimeNotFound => "A compatible runtime is missing.",
             InvalidExecutable => "The selected file is not a valid Windows executable.",
+            InvalidInput => {
+                "One or more values are invalid. Check the name, options, or environment variables."
+            }
+            AlreadyRunning => "This application is already running.",
             DependencyMissing => "A required dependency is missing.",
             GraphicsInitializationFailed => "The graphics backend failed to initialize.",
             InstallationFailed => "The installation failed.",

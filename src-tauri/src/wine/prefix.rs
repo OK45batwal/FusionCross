@@ -161,9 +161,16 @@ pub fn ensure_graphics_registry(prefix: &Path, _graphics: &str) -> Result<(), Fu
         if !section_content.contains("\"ShowCrashDialog\"") {
             let insert_offset = if let Some(time_idx) = rest[..next_section_offset].find("#time=") {
                 let after_time = &rest[time_idx..next_section_offset];
-                time_idx + after_time.find('\n').map(|i| i + 1).unwrap_or(after_time.len())
+                time_idx
+                    + after_time
+                        .find('\n')
+                        .map(|i| i + 1)
+                        .unwrap_or(after_time.len())
             } else {
-                rest[..next_section_offset].find('\n').map(|i| i + 1).unwrap_or(winedbg_target.len())
+                rest[..next_section_offset]
+                    .find('\n')
+                    .map(|i| i + 1)
+                    .unwrap_or(winedbg_target.len())
             };
             updated.insert_str(idx + insert_offset, "\"ShowCrashDialog\"=dword:00000000\n");
         }
@@ -186,9 +193,16 @@ pub fn ensure_graphics_registry(prefix: &Path, _graphics: &str) -> Result<(), Fu
         if !section_content.contains("\"GPUAccelWebViews\"") {
             let insert_offset = if let Some(time_idx) = rest[..next_section_offset].find("#time=") {
                 let after_time = &rest[time_idx..next_section_offset];
-                time_idx + after_time.find('\n').map(|i| i + 1).unwrap_or(after_time.len())
+                time_idx
+                    + after_time
+                        .find('\n')
+                        .map(|i| i + 1)
+                        .unwrap_or(after_time.len())
             } else {
-                rest[..next_section_offset].find('\n').map(|i| i + 1).unwrap_or(steam_target.len())
+                rest[..next_section_offset]
+                    .find('\n')
+                    .map(|i| i + 1)
+                    .unwrap_or(steam_target.len())
             };
             updated.insert_str(
                 idx + insert_offset,
@@ -210,10 +224,7 @@ pub fn ensure_graphics_registry(prefix: &Path, _graphics: &str) -> Result<(), Fu
                         "\"Debugger\"=\"winedbg --auto %ld %ld\"",
                         "\"Debugger\"=\"\"",
                     )
-                    .replace(
-                        "\"Auto\"=\"1\"",
-                        "\"Auto\"=\"0\"",
-                    );
+                    .replace("\"Auto\"=\"1\"", "\"Auto\"=\"0\"");
                 let _ = std::fs::write(&system_reg, sys_updated);
             }
         }
@@ -251,7 +262,10 @@ pub fn ensure_graphics_registry(prefix: &Path, _graphics: &str) -> Result<(), Fu
                 .unwrap_or(idx + target.len());
             updated.insert_str(end_of_line, overrides);
         } else {
-            let section = format!("\n[Software\\\\Wine\\\\DllOverrides] 1790614100\n#time=1dd4e9b00000000\n{}", overrides);
+            let section = format!(
+                "\n[Software\\\\Wine\\\\DllOverrides] 1790614100\n#time=1dd4e9b00000000\n{}",
+                overrides
+            );
             updated.push_str(&section);
         }
     }

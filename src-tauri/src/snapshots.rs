@@ -29,28 +29,52 @@ pub fn create_snapshot(
 /// Replace a bottle's contents with a snapshot (restore). Destructive but
 /// confined to the bottle's own directory.
 pub fn restore_snapshot(
+    bottles_base: &Path,
     snapshots_dir: &Path,
     snapshot_path: &Path,
     bottle: &Bottle,
 ) -> Result<(), FusionError> {
-    let _ = snapshots_dir;
-    let bottle_path = Path::new(&bottle.path);
-    if !bottle_path.exists() {
-        std::fs::create_dir_all(bottle_path).map_err(|_| FusionError::PermissionDenied)?;
+    let bottle_path = paths::safe_join(bottles_base, &bottle.id)?;
+    if !paths::same_file(&bottle_path, Path::new(&bottle.path))
+        || !paths::is_inside(snapshots_dir, snapshot_path)
+    {
+        return Err(FusionError::InvalidPath);
     }
-    for entry in std::fs::read_dir(bottle_path).map_err(|_| FusionError::PermissionDenied)? {
-        let entry = entry.map_err(|_| FusionError::PermissionDenied)?;
-        let p = entry.path();
-        if !paths::is_inside(bottle_path, &p) {
-            return Err(FusionError::InvalidPath);
+    let staging = paths::safe_join(bottles_base, &format!(".restore-{}", new_id()))?;
+    std::fs::create_dir(&staging).map_err(|_| FusionError::PermissionDenied)?;
+    if let Err(error) = archives::extract_archive(snapshot_path, &staging) {
+        let _ = std::fs::remove_dir_all(&staging);
+        return Err(error);
+    }
+
+    // Only replace the live prefix after the entire archive passes validation.
+    let previous = paths::safe_join(bottles_base, &format!(".previous-{}", new_id()))?;
+    let had_previous = bottle_path.exists();
+    if had_previous && std::fs::rename(&bottle_path, &previous).is_err() {
+        let _ = std::fs::remove_dir_all(&staging);
+        return Err(FusionError::PermissionDenied);
+    }
+    if std::fs::rename(&staging, &bottle_path).is_err() {
+        if had_previous {
+            if let Err(error) = std::fs::rename(&previous, &bottle_path) {
+                eprintln!(
+                    "Restore rollback failed ({error}); original bottle preserved at {}",
+                    previous.display()
+                );
+            }
         }
-        if p.is_dir() {
-            std::fs::remove_dir_all(&p).map_err(|_| FusionError::PermissionDenied)?;
-        } else {
-            std::fs::remove_file(&p).map_err(|_| FusionError::PermissionDenied)?;
+        let _ = std::fs::remove_dir_all(&staging);
+        return Err(FusionError::PermissionDenied);
+    }
+    if had_previous {
+        if let Err(error) = paths::safe_remove_all(bottles_base, &previous) {
+            eprintln!(
+                "Restored snapshot; old prefix remains at {}: {error}",
+                previous.display()
+            );
         }
     }
-    archives::extract_archive(snapshot_path, bottle_path)
+    Ok(())
 }
 
 /// Delete a stored snapshot file (sandbox-confined).
@@ -59,4 +83,42 @@ pub fn delete_snapshot(snapshots_dir: &Path, snapshot_path: &Path) -> Result<(),
         return Err(FusionError::InvalidPath);
     }
     std::fs::remove_file(snapshot_path).map_err(|_| FusionError::PermissionDenied)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn invalid_snapshot_preserves_live_prefix_and_valid_snapshot_replaces_it() {
+        let root = std::env::temp_dir().join(format!("fc_restore_{}", new_id()));
+        let bottles = root.join("bottles");
+        let snapshots = root.join("snapshots");
+        let prefix = bottles.join("test");
+        std::fs::create_dir_all(prefix.join("drive_c")).unwrap();
+        std::fs::create_dir_all(&snapshots).unwrap();
+        std::fs::write(prefix.join("drive_c/original.exe"), b"original").unwrap();
+        let bottle: Bottle =
+            serde_json::from_value(serde_json::json!({"id":"test", "name":"Test", "path":prefix}))
+                .unwrap();
+        let archive = snapshots.join("test.tar.gz");
+        std::fs::write(&archive, b"not an archive").unwrap();
+        assert!(restore_snapshot(&bottles, &snapshots, &archive, &bottle).is_err());
+        assert_eq!(
+            std::fs::read(prefix.join("drive_c/original.exe")).unwrap(),
+            b"original"
+        );
+        let source = root.join("source");
+        std::fs::create_dir_all(source.join("drive_c")).unwrap();
+        std::fs::write(source.join("drive_c/restored.exe"), b"restored").unwrap();
+        archives::create_tar_gz(&source, &archive).unwrap();
+        restore_snapshot(&bottles, &snapshots, &archive, &bottle).unwrap();
+        assert_eq!(
+            std::fs::read(prefix.join("drive_c/restored.exe")).unwrap(),
+            b"restored"
+        );
+        assert!(!prefix.join("drive_c/original.exe").exists());
+        assert_eq!(std::fs::read_dir(&bottles).unwrap().count(), 1);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }

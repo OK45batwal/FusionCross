@@ -22,7 +22,7 @@ import {
   RunningInfo,
   exportAppBundle,
   scanAllBottles,
-  revealInFinder,
+  revealApplicationInFinder,
   unregisterApplication,
   updateApplication,
 } from "../services/tauri";
@@ -132,9 +132,9 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
     }
   };
 
-  const handleReveal = async (path: string) => {
+  const handleReveal = async (appId: string) => {
     try {
-      await revealInFinder(path);
+      await revealApplicationInFinder(appId);
     } catch {
       // handled
     }
@@ -417,7 +417,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
 
                         <button
                           onClick={() => {
-                            handleReveal(app.executable_path);
+                            handleReveal(app.id);
                             setMenuAppId(null);
                           }}
                           className="w-full px-3 py-1.5 hover:bg-(--bg-surface) text-(--text-main) flex items-center gap-2 cursor-pointer transition-colors"

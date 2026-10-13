@@ -3,6 +3,9 @@ use std::path::{Path, PathBuf};
 
 use crate::core::errors::FusionError;
 
+const MAX_ARCHIVE_ENTRIES: usize = 20_000;
+const MAX_UNCOMPRESSED_ARCHIVE_BYTES: u64 = 8 * 1024 * 1024 * 1024;
+
 /// Verify a file's SHA-256 against an expected digest using the platform
 /// `shasum` binary. Non-matches are a hard error (PRD §54).
 #[allow(dead_code, unused)]
@@ -46,7 +49,16 @@ pub fn detect_kind(path: &Path) -> Option<ArchiveKind> {
 /// Extract an archive into `dest`, refusing any entry that would escape it.
 /// Symlinks are skipped (no path traversal, no surprising links inside a runtime).
 pub fn extract_archive(archive: &Path, dest: &Path) -> Result<(), FusionError> {
-    std::fs::create_dir_all(dest).map_err(|_| FusionError::PermissionDenied)?;
+    match std::fs::symlink_metadata(dest) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.file_type().is_dir() => {
+            return Err(FusionError::ArchiveValidationFailed);
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            std::fs::create_dir_all(dest).map_err(|_| FusionError::PermissionDenied)?;
+        }
+        Err(_) => return Err(FusionError::PermissionDenied),
+    }
     match detect_kind(archive).ok_or(FusionError::ArchiveValidationFailed)? {
         ArchiveKind::TarXz => extract_tar(decoder::xz(archive)?, archive, dest),
         ArchiveKind::TarGz => extract_tar(decoder::gz(archive)?, archive, dest),
@@ -75,11 +87,25 @@ fn extract_tar(
 ) -> Result<(), FusionError> {
     let mut ar = tar::Archive::new(reader);
     let dest_canon = dest.canonicalize().unwrap_or_else(|_| dest.to_path_buf());
+    let mut entry_count = 0usize;
+    let mut extracted_bytes = 0u64;
     for entry in ar
         .entries()
         .map_err(|_| FusionError::ArchiveValidationFailed)?
     {
         let mut entry = entry.map_err(|_| FusionError::ArchiveValidationFailed)?;
+        entry_count = entry_count
+            .checked_add(1)
+            .ok_or(FusionError::ArchiveValidationFailed)?;
+        if entry_count > MAX_ARCHIVE_ENTRIES {
+            return Err(FusionError::ArchiveValidationFailed);
+        }
+        extracted_bytes = extracted_bytes
+            .checked_add(entry.size())
+            .ok_or(FusionError::ArchiveValidationFailed)?;
+        if extracted_bytes > MAX_UNCOMPRESSED_ARCHIVE_BYTES {
+            return Err(FusionError::ArchiveValidationFailed);
+        }
         let path = entry
             .path()
             .map_err(|_| FusionError::ArchiveValidationFailed)?
@@ -104,13 +130,17 @@ fn extract_tar(
         }
         match entry.header().entry_type() {
             EntryType::Directory => {
-                std::fs::create_dir_all(&target)
-                    .map_err(|_| FusionError::ArchiveValidationFailed)?;
+                ensure_directory(&dest_canon, &target)?;
             }
             _ => {
                 if let Some(parent) = target.parent() {
-                    std::fs::create_dir_all(parent)
-                        .map_err(|_| FusionError::ArchiveValidationFailed)?;
+                    ensure_directory(&dest_canon, parent)?;
+                }
+                if std::fs::symlink_metadata(&target)
+                    .map(|metadata| metadata.file_type().is_symlink())
+                    .unwrap_or(false)
+                {
+                    return Err(FusionError::ArchiveValidationFailed);
                 }
                 entry
                     .unpack(&target)
@@ -119,6 +149,33 @@ fn extract_tar(
         }
     }
     let _ = archive;
+    Ok(())
+}
+
+/// Create every component beneath `dest` without following an existing
+/// symlink. This protects restore operations where `dest` already contains
+/// user-controlled Wine prefix data.
+fn ensure_directory(dest: &Path, target: &Path) -> Result<(), FusionError> {
+    let relative = target
+        .strip_prefix(dest)
+        .map_err(|_| FusionError::ArchiveValidationFailed)?;
+    let mut current = dest.to_path_buf();
+    for component in relative.components() {
+        let std::path::Component::Normal(segment) = component else {
+            return Err(FusionError::ArchiveValidationFailed);
+        };
+        current.push(segment);
+        match std::fs::symlink_metadata(&current) {
+            Ok(metadata) if metadata.file_type().is_symlink() || !metadata.file_type().is_dir() => {
+                return Err(FusionError::ArchiveValidationFailed);
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                std::fs::create_dir(&current).map_err(|_| FusionError::ArchiveValidationFailed)?;
+            }
+            Err(_) => return Err(FusionError::ArchiveValidationFailed),
+        }
+    }
     Ok(())
 }
 
@@ -179,6 +236,50 @@ mod tests {
         create_tar_gz(&src, &out).unwrap();
         extract_archive(&out, &dest).unwrap();
         assert!(dest.join("drive_c/hello.txt").exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn extraction_rejects_existing_symlinked_directories() {
+        use std::os::unix::fs::symlink;
+
+        let dir = std::env::temp_dir().join(format!("fc_tar_symlink_{}", new_id()));
+        let archive = dir.join("archive.tar.gz");
+        let destination = dir.join("destination");
+        let outside = dir.join("outside");
+        std::fs::create_dir_all(&destination).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        symlink(&outside, destination.join("escape")).unwrap();
+
+        let encoder = flate2::write::GzEncoder::new(
+            std::fs::File::create(&archive).unwrap(),
+            flate2::Compression::default(),
+        );
+        let mut builder = tar::Builder::new(encoder);
+        let content = b"must not escape".as_ref();
+        let mut header = tar::Header::new_gnu();
+        header.set_size(content.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        builder
+            .append_data(
+                &mut header,
+                "escape/blocked.txt",
+                &mut std::io::Cursor::new(content),
+            )
+            .unwrap();
+        builder.into_inner().unwrap().finish().unwrap();
+
+        let clean = dir.join("clean");
+        extract_archive(&archive, &clean).unwrap();
+        assert_eq!(
+            std::fs::read(clean.join("escape/blocked.txt")).unwrap(),
+            content
+        );
+
+        assert!(extract_archive(&archive, &destination).is_err());
+        assert!(!outside.join("blocked.txt").exists());
         std::fs::remove_dir_all(&dir).ok();
     }
 }

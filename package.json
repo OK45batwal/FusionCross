@@ -9,12 +9,12 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "lint": "eslint .",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "verify": "npm run lint && cargo fmt --manifest-path src-tauri/Cargo.toml -- --check && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml && npm run build"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-opener": "^2",
     "lucide-react": "^1.31.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

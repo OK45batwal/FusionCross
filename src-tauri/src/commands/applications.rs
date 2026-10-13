@@ -1,13 +1,14 @@
 #![allow(dead_code)]
 
+use serde::Serialize;
 use std::path::Path;
 use std::time::UNIX_EPOCH;
-use serde::Serialize;
 use tauri::{AppHandle, Manager};
 
 use crate::compatibility;
 use crate::core::errors::FusionError;
 use crate::core::ids::new_id;
+use crate::core::paths;
 use crate::core::state::Application;
 use crate::manager::{dirs, FusionState};
 use crate::process::{ProcessManager, RunningInfo};
@@ -18,8 +19,8 @@ use super::{build_wine_execution_context, now_ts, settings_bool, wine_binary_for
 #[derive(Debug, Clone, Serialize)]
 #[allow(dead_code)]
 pub struct LogEntry {
+    pub id: String,
     pub filename: String,
-    pub path: String,
     pub size_bytes: u64,
     pub modified_at: u64,
 }
@@ -45,28 +46,36 @@ pub fn launch_application(app: AppHandle, app_id: String) -> Result<RunningInfo,
 
     let pm = app.state::<ProcessManager>();
     if pm.is_running(&app_id) {
-        return Err(FusionError::LaunchFailed);
+        return Err(FusionError::AlreadyRunning);
     }
     let binary = wine_binary_for(&app, &bottle.runtime)?;
-    let prefix = Path::new(&bottle.path);
-    if !crate::wine::prefix::prefix_prepared(prefix) {
-        crate::wine::prefix::init_prefix(&binary, prefix)?;
+    let d = dirs(&app);
+    let prefix = paths::safe_join(&d.bottles, &bottle.id)?;
+    let executable_relative = Path::new(&application.executable_path)
+        .strip_prefix(Path::new(&bottle.path))
+        .or_else(|_| Path::new(&application.executable_path).strip_prefix(&prefix))
+        .map_err(|_| FusionError::InvalidPath)?
+        .to_str()
+        .ok_or(FusionError::InvalidPath)?;
+    let executable = paths::safe_file(&prefix, executable_relative)?;
+    if !crate::wine::prefix::prefix_prepared(&prefix) {
+        crate::wine::prefix::init_prefix(&binary, &prefix)?;
     }
-    deploy_graphics_libraries(&app, prefix);
-    crate::wine::prefix::ensure_graphics_registry(prefix, &bottle.graphics).ok();
+    deploy_graphics_libraries(&app, &prefix);
+    crate::wine::prefix::ensure_graphics_registry(&prefix, &bottle.graphics).ok();
 
     let safe = settings_bool(&app, "safe_mode");
     let (mut override_env, dll_overrides) = build_wine_execution_context(&binary, &bottle, safe);
 
     // Detect launch arguments: Unreal Engine games (like Raji) benefit from -dx11 to force D3D11 RHI
     let mut launch_args = Vec::new();
-    let lower_exe = application.executable_path.to_lowercase();
+    let lower_exe = executable.to_string_lossy().to_lowercase();
     let lower_name = application.name.to_lowercase();
     let is_unreal_engine = lower_exe.contains("raji")
         || lower_name.contains("raji")
         || lower_exe.ends_with("-win64-shipping.exe")
         || lower_exe.contains("ue4")
-        || Path::new(&application.executable_path)
+        || executable
             .parent()
             .and_then(|p| p.parent())
             .map(|p| p.join("Engine").exists())
@@ -88,12 +97,18 @@ pub fn launch_application(app: AppHandle, app_id: String) -> Result<RunningInfo,
         override_env.push(("CEF_USE_SANDBOX".into(), "0".into()));
 
         // Steam Wine / Proton environment variables
-        override_env.push(("STEAM_COMPAT_DATA_PATH".into(), bottle.path.clone()));
+        override_env.push((
+            "STEAM_COMPAT_DATA_PATH".into(),
+            prefix.to_string_lossy().into_owned(),
+        ));
         override_env.push(("SteamAppId".into(), "0".into()));
         override_env.push(("WINE_LARGE_ADDRESS_AWARE".into(), "1".into()));
-        override_env.push(("DXVK_STATE_CACHE_PATH".into(), bottle.path.clone()));
+        override_env.push((
+            "DXVK_STATE_CACHE_PATH".into(),
+            prefix.to_string_lossy().into_owned(),
+        ));
 
-        if let Some(parent) = Path::new(&application.executable_path).parent() {
+        if let Some(parent) = executable.parent() {
             override_env.push((
                 "STEAM_COMPAT_CLIENT_INSTALL_PATH".into(),
                 parent.to_string_lossy().into_owned(),
@@ -102,8 +117,10 @@ pub fn launch_application(app: AppHandle, app_id: String) -> Result<RunningInfo,
 
         // Clean stale htmlcache lockfiles that cause CEF IPC deadlocks and hangs
         for user in &["omkar", "steam", "default"] {
-            let lf = Path::new(&bottle.path)
-                .join(format!("drive_c/users/{}/AppData/Local/Steam/htmlcache/lockfile", user));
+            let lf = prefix.join(format!(
+                "drive_c/users/{}/AppData/Local/Steam/htmlcache/lockfile",
+                user
+            ));
             if lf.exists() {
                 let _ = std::fs::remove_file(lf);
             }
@@ -134,16 +151,17 @@ pub fn launch_application(app: AppHandle, app_id: String) -> Result<RunningInfo,
     }
 
     // Configure dedicated stdout/stderr log capture
-    let d = dirs(&app);
     let log_path = d.logs.join(format!("{}_{}.log", app_id, now_ts()));
+    let prefix_string = prefix.to_string_lossy().into_owned();
+    let executable_string = executable.to_string_lossy().into_owned();
 
     let info = pm.spawn(
         &app_id,
         &bottle.id,
         &application.name,
         &binary,
-        &bottle.path,
-        &application.executable_path,
+        &prefix_string,
+        &executable_string,
         &launch_args,
         &override_env,
         &dll_overrides,
@@ -151,7 +169,7 @@ pub fn launch_application(app: AppHandle, app_id: String) -> Result<RunningInfo,
     )?;
 
     // Record the launch.
-    st.with_state(|s| {
+    st.update(|s| {
         if let Some(a) = s.applications.iter_mut().find(|a| a.id == app_id) {
             a.launch_count += 1;
             a.last_played = Some(now_ts());
@@ -161,7 +179,6 @@ pub fn launch_application(app: AppHandle, app_id: String) -> Result<RunningInfo,
         }
         Ok(())
     })?;
-    st.save(&app)?;
     Ok(info)
 }
 
@@ -178,7 +195,7 @@ pub fn list_running(app: AppHandle) -> Result<Vec<RunningInfo>, FusionError> {
 #[tauri::command]
 pub fn toggle_favorite(app: AppHandle, app_id: String) -> Result<(), FusionError> {
     let st = app.state::<FusionState>();
-    st.with_state(|s| {
+    st.update(|s| {
         let a = s
             .applications
             .iter_mut()
@@ -186,8 +203,7 @@ pub fn toggle_favorite(app: AppHandle, app_id: String) -> Result<(), FusionError
             .ok_or(FusionError::ApplicationNotFound)?;
         a.favorite = !a.favorite;
         Ok(())
-    })?;
-    st.save(&app)
+    })
 }
 
 #[tauri::command]
@@ -195,15 +211,32 @@ pub fn register_application(
     app: AppHandle,
     bottle_id: String,
     name: String,
-    executable_path: String,
+    executable_rel_path: String,
     category: String,
 ) -> Result<Application, FusionError> {
+    super::validation::name(&name)?;
+    super::validation::choice(
+        &category,
+        &["games", "applications", "productivity", "utilities"],
+    )?;
     let st = app.state::<FusionState>();
+    st.with_state(|s| {
+        s.bottles
+            .iter()
+            .find(|b| b.id == bottle_id)
+            .ok_or(FusionError::BottleNotFound)
+            .map(|_| ())
+    })?;
+    let prefix = paths::safe_join(&dirs(&app).bottles, &bottle_id)?;
+    let executable_path = paths::safe_file(&prefix, &executable_rel_path)?
+        .to_string_lossy()
+        .into_owned();
     let rec = compatibility::recommend(&name);
     let icon_data = crate::wine::icon::extract_icon_data_url(Path::new(&executable_path));
-    let application = st.with_state(|s| {
+    let application = st.update(|s| {
         if let Some(existing) = s.applications.iter_mut().find(|a| {
-            a.bottle_id == bottle_id && (a.executable_path == executable_path || a.name == name)
+            a.bottle_id == bottle_id
+                && paths::same_file(Path::new(&a.executable_path), Path::new(&executable_path))
         }) {
             existing.executable_path = executable_path;
             existing.name = name;
@@ -230,18 +263,16 @@ pub fn register_application(
         s.applications.push(app.clone());
         Ok(app)
     })?;
-    st.save(&app)?;
     Ok(application)
 }
 
 #[tauri::command]
 pub fn unregister_application(app: AppHandle, app_id: String) -> Result<(), FusionError> {
     let st = app.state::<FusionState>();
-    st.with_state(|s| {
+    st.update(|s| {
         s.applications.retain(|a| a.id != app_id);
         Ok(())
     })?;
-    st.save(&app)?;
     Ok(())
 }
 
@@ -254,8 +285,20 @@ pub fn update_application(
     launch_arguments: Option<String>,
     category: Option<String>,
 ) -> Result<Application, FusionError> {
+    if let Some(value) = &name {
+        super::validation::name(value)?;
+    }
+    if let Some(value) = &category {
+        super::validation::choice(
+            value,
+            &["applications", "games", "productivity", "utilities"],
+        )?;
+    }
+    if launch_arguments.as_ref().is_some_and(|v| v.contains('\0')) {
+        return Err(FusionError::InvalidInput);
+    }
     let st = app.state::<FusionState>();
-    let updated = st.with_state(|s| {
+    let updated = st.update(|s| {
         let app = s
             .applications
             .iter_mut()
@@ -278,7 +321,6 @@ pub fn update_application(
         }
         Ok(app.clone())
     })?;
-    st.save(&app)?;
     Ok(updated)
 }
 
@@ -296,7 +338,10 @@ pub fn list_application_logs(
     if let Ok(dir_entries) = std::fs::read_dir(&d.logs) {
         for entry in dir_entries.flatten() {
             let path = entry.path();
-            if path.is_file() {
+            if let Ok(metadata) = std::fs::symlink_metadata(&path) {
+                if !metadata.file_type().is_file() {
+                    continue;
+                }
                 let filename = path
                     .file_name()
                     .unwrap_or_default()
@@ -315,8 +360,8 @@ pub fn list_application_logs(
                         .map(|d| d.as_secs())
                         .unwrap_or(0);
                     entries.push(LogEntry {
+                        id: filename.clone(),
                         filename,
-                        path: path.to_string_lossy().into_owned(),
                         size_bytes: meta.len(),
                         modified_at,
                     });
@@ -324,18 +369,15 @@ pub fn list_application_logs(
             }
         }
     }
-    entries.sort_by(|a, b| b.modified_at.cmp(&a.modified_at));
+    entries.sort_by_key(|entry| std::cmp::Reverse(entry.modified_at));
     Ok(entries)
 }
 
 #[tauri::command]
 #[allow(dead_code)]
-pub fn read_log_file(_app: AppHandle, log_path: String) -> Result<String, FusionError> {
-    let path = Path::new(&log_path);
-    if !path.exists() {
-        return Err(FusionError::ApplicationNotFound);
-    }
-    let metadata = std::fs::metadata(path).map_err(|_| FusionError::Unsupported)?;
+pub fn read_log_file(app: AppHandle, log_id: String) -> Result<String, FusionError> {
+    let path = resolve_log_file(&dirs(&app).logs, &log_id)?;
+    let metadata = std::fs::metadata(&path).map_err(|_| FusionError::Unsupported)?;
     let content = if metadata.len() > 200_000 {
         use std::io::{Read, Seek, SeekFrom};
         let mut f = std::fs::File::open(path).map_err(|_| FusionError::Unsupported)?;
@@ -348,4 +390,29 @@ pub fn read_log_file(_app: AppHandle, log_path: String) -> Result<String, Fusion
         std::fs::read_to_string(path).unwrap_or_default()
     };
     Ok(content)
+}
+
+fn resolve_log_file(logs_dir: &Path, log_id: &str) -> Result<std::path::PathBuf, FusionError> {
+    if !log_id.ends_with(".log") {
+        return Err(FusionError::InvalidPath);
+    }
+    paths::safe_file(logs_dir, log_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::ids::new_id;
+
+    #[test]
+    fn log_reader_is_confined_to_the_logs_directory() {
+        let logs = std::env::temp_dir().join(format!("fusioncross_logs_{}", new_id()));
+        std::fs::create_dir_all(&logs).unwrap();
+        std::fs::write(logs.join("app_1.log"), "ok").unwrap();
+
+        assert!(resolve_log_file(&logs, "app_1.log").is_ok());
+        assert!(resolve_log_file(&logs, "../state.json").is_err());
+        assert!(resolve_log_file(&logs, "/etc/passwd").is_err());
+        std::fs::remove_dir_all(logs).ok();
+    }
 }

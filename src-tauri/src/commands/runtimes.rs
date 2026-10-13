@@ -38,8 +38,8 @@ pub fn probe_runtime(
 #[tauri::command]
 pub fn get_runtimes(app: AppHandle) -> Result<Vec<serde_json::Value>, FusionError> {
     let st = app.state::<FusionState>();
-    let state = st.0.lock().map_err(|_| FusionError::Unsupported)?;
     let whisky_installed = wine_binary_for(&app, "whisky-wine").is_ok();
+    let state = st.0.lock().map_err(|_| FusionError::Unsupported)?;
 
     let mut list = Vec::new();
     list.push(serde_json::json!({
@@ -88,7 +88,7 @@ pub fn download_runtime(app: AppHandle, runtime_id: String) -> Result<String, Fu
     let job = jobs.begin(format!("Downloading {}", entry.name));
     let job_id = job.clone();
     let handle = app.clone();
-    std::thread::spawn(move || {
+    crate::manager::spawn_job(handle.clone(), job_id.clone(), move || {
         let d = dirs(&handle);
         let id = entry.id.clone();
         let name = entry.name.clone();
@@ -103,7 +103,7 @@ pub fn download_runtime(app: AppHandle, runtime_id: String) -> Result<String, Fu
             Ok(()) => {
                 let version = runtime::probe_runtime_version(&dest_dir).unwrap_or_default();
                 let rt = handle.state::<FusionState>();
-                let _ = rt.with_state(|s| {
+                let saved = rt.update(|s| {
                     s.runtimes.push(Runtime {
                         id: id.clone(),
                         name: name.clone(),
@@ -117,7 +117,13 @@ pub fn download_runtime(app: AppHandle, runtime_id: String) -> Result<String, Fu
                     });
                     Ok(())
                 });
-                let _ = rt.save(&handle);
+                if let Err(error) = saved {
+                    jobs.fail(
+                        &job_id,
+                        format!("Runtime installed, but saving its metadata failed: {error}"),
+                    );
+                    return;
+                }
                 jobs.finish(&job_id, format!("{name} installed (v{version})."));
             }
             Err(e) => jobs.fail(&job_id, format!("{name} — {e}")),
@@ -132,26 +138,25 @@ pub fn import_runtime(
     name: String,
     archive_path: String,
 ) -> Result<Runtime, FusionError> {
+    super::validation::name(&name)?;
     let d = dirs(&app);
     let source = Path::new(&archive_path);
     if !source.is_file() {
         return Err(FusionError::InvalidExecutable);
     }
-    let staged = d.downloads.join(format!("{}.pkg", new_id()));
-    let mut ext = source
-        .extension()
-        .map(|e| e.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    if ext.is_empty() {
-        ext = "tar.xz".into();
-    }
-    let staged = staged.with_extension(ext);
+    let extension = match crate::security::archives::detect_kind(source) {
+        Some(crate::security::archives::ArchiveKind::TarGz) => "tar.gz",
+        Some(crate::security::archives::ArchiveKind::TarXz) => "tar.xz",
+        _ => return Err(FusionError::ArchiveValidationFailed),
+    };
+    let staged = d.downloads.join(format!("{}.{}", new_id(), extension));
     std::fs::copy(source, &staged).map_err(|_| FusionError::InvalidExecutable)?;
 
     let id = new_id();
     let dest = d.runtimes.join(&id);
-    let version = crate::runtime::install_from_archive(&staged, &dest)?;
+    let result = crate::runtime::install_from_archive(&staged, &dest);
     std::fs::remove_file(&staged).ok();
+    let version = result?;
 
     let runtime = Runtime {
         id: id.clone(),
@@ -165,11 +170,10 @@ pub fn import_runtime(
         size_bytes: 0,
     };
     let st = app.state::<FusionState>();
-    st.with_state(|s| {
+    st.update(|s| {
         s.runtimes.push(runtime.clone());
         Ok(())
     })?;
-    st.save(&app)?;
     Ok(runtime)
 }
 
@@ -187,10 +191,9 @@ pub fn remove_runtime(app: AppHandle, runtime_id: String) -> Result<(), FusionEr
     if rt.downloaded && !rt.path.is_empty() {
         paths::safe_remove_all(&d.runtimes, Path::new(&rt.path))?;
     }
-    st.with_state(|s| {
+    st.update(|s| {
         s.runtimes.retain(|r| r.id != runtime_id);
         Ok(())
     })?;
-    st.save(&app)?;
     Ok(())
 }

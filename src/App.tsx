@@ -12,6 +12,7 @@ import { SettingsView } from "./views/SettingsView";
 import {
   getSystemInfo,
   getState,
+  getRecoveryNotice,
   getTemplates,
   createBottle,
   launchApplication,
@@ -44,6 +45,7 @@ export function App() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [recoveryNotice, setRecoveryNotice] = useState<string | null>(null);
 
   // Create Bottle Modal state
   const [showCreateBottleModal, setShowCreateBottleModal] = useState(false);
@@ -124,6 +126,7 @@ export function App() {
 
   useEffect(() => {
     const init = async () => {
+      setRecoveryNotice(await getRecoveryNotice().catch(() => null));
       await refreshState();
     };
     init();
@@ -269,6 +272,12 @@ export function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col overflow-hidden bg-(--bg-main)">
+        {recoveryNotice && (
+          <div role="alert" className="px-6 py-3 text-sm border-b border-(--border-color) bg-(--bg-surface)">
+            <p>{recoveryNotice}</p>
+            <button onClick={() => setRecoveryNotice(null)} className="mt-2 underline">Dismiss</button>
+          </div>
+        )}
         {/* Top Header Bar */}
         <header className="h-11 shrink-0 px-6 flex items-center justify-between border-b border-(--border-color) bg-(--bg-glass) backdrop-blur-md text-[12px] font-sans">
           <div className="flex items-center gap-2 text-(--text-muted)">

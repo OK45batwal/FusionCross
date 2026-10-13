@@ -30,8 +30,8 @@ import {
   Snapshot,
   LogEntry,
   openBottleCDrive,
-  revealInFinder,
-  runCommandInBottle,
+  revealApplicationInFinder,
+  runExecutableInBottle,
   killBottleProcesses,
   launchWineTool,
   installBottleVerb,
@@ -171,7 +171,7 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
     if (!runCmdInput.trim()) return;
     try {
       const args = runCmdArgs.trim() ? runCmdArgs.trim().split(" ") : [];
-      await runCommandInBottle(bottle.id, runCmdInput.trim(), args);
+      await runExecutableInBottle(bottle.id, runCmdInput.trim(), args);
       setShowRunCommandModal(false);
       setRunCmdInput("");
       setRunCmdArgs("");
@@ -256,7 +256,7 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
   const [confirmDeleteSnapshotId, setConfirmDeleteSnapshotId] = useState<string | null>(null);
   const [showLogsModal, setShowLogsModal] = useState(false);
   const [bottleLogs, setBottleLogs] = useState<LogEntry[]>([]);
-  const [selectedLogPath, setSelectedLogPath] = useState<string | null>(null);
+  const [selectedLogId, setSelectedLogId] = useState<string | null>(null);
   const [selectedLogContent, setSelectedLogContent] = useState<string | null>(null);
   const [loadingLogs, setLoadingLogs] = useState(false);
 
@@ -273,7 +273,7 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
       const listToUse = relevant.length > 0 ? relevant : logs;
       setBottleLogs(listToUse);
       if (listToUse.length > 0 && listToUse[0]) {
-        await handleSelectLog(listToUse[0].path);
+        await handleSelectLog(listToUse[0].id);
       } else {
         setSelectedLogContent("No execution logs recorded yet for this bottle.");
       }
@@ -284,10 +284,10 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
     }
   };
 
-  const handleSelectLog = async (path: string) => {
-    setSelectedLogPath(path);
+  const handleSelectLog = async (logId: string) => {
+    setSelectedLogId(logId);
     try {
-      const text = await readLogFile(path);
+      const text = await readLogFile(logId);
       setSelectedLogContent(text);
     } catch {
       setSelectedLogContent("Failed to read log file.");
@@ -307,9 +307,9 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
     }
   };
 
-  const handleReveal = async (path: string) => {
+  const handleReveal = async (appId: string) => {
     try {
-      await revealInFinder(path);
+      await revealApplicationInFinder(appId);
     } catch (e) {
       setError((e as FusionErrorPayload).message || "Reveal failed.");
     }
@@ -405,10 +405,10 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
               <button
                 onClick={() => setShowRunCommandModal(true)}
                 className="px-3 py-1.5 rounded-lg bg-(--bg-elevated) hover:bg-(--border-color) border border-(--border-color) text-(--text-main) text-[12px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
-                title="Run an arbitrary command or Windows executable inside this bottle"
+                title="Run a Windows executable already stored inside this bottle"
               >
                 <Terminal className="w-3.5 h-3.5 text-(--accent-primary)" />
-                <span>Run Command...</span>
+                <span>Run Program...</span>
               </button>
 
               <button
@@ -675,7 +675,7 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
 
                           <button
                             onClick={() => {
-                              handleReveal(app.executable_path);
+                              handleReveal(app.id);
                               setMenuAppId(null);
                             }}
                             className="w-full px-3 py-1.5 hover:bg-(--bg-surface) text-(--text-main) flex items-center gap-2 cursor-pointer transition-colors"
@@ -948,11 +948,11 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
             <div className="space-y-3">
               <div>
                 <label className="text-[11px] font-mono text-(--text-muted) block mb-1">
-                  Command or Executable
+                  Bottle Executable
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. notepad.exe, dxdiag.exe, C:\Games\game.exe"
+                  placeholder="e.g. drive_c/Program Files/App/App.exe"
                   value={runCmdInput}
                   onChange={(e) => setRunCmdInput(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-[12px] font-mono text-(--text-main) focus:outline-none focus:border-(--accent-primary)"
@@ -1287,11 +1287,11 @@ export const BottleWorkspaceView: React.FC<BottleWorkspaceViewProps> = ({
                   </p>
                 ) : (
                   bottleLogs.map((log) => {
-                    const isSelected = selectedLogPath === log.path;
+                    const isSelected = selectedLogId === log.id;
                     return (
                       <button
-                        key={log.path}
-                        onClick={() => handleSelectLog(log.path)}
+                        key={log.id}
+                        onClick={() => handleSelectLog(log.id)}
                         className={`w-full text-left p-2 rounded-lg text-[11px] font-mono transition-colors cursor-pointer ${
                           isSelected
                             ? "bg-(--accent-primary)/15 border border-(--accent-primary)/40 text-(--text-main)"

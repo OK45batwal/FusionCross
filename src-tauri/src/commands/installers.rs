@@ -6,7 +6,7 @@ use tauri::{AppHandle, Manager};
 use crate::compatibility;
 use crate::core::errors::FusionError;
 use crate::core::ids::new_id;
-use crate::core::state::Application;
+use crate::core::state::{AppState, Application};
 use crate::installer::{self, InstallerAnalysis};
 use crate::manager::{FusionState, Jobs};
 use crate::wine::scanner::{self, DiscoveredExe};
@@ -30,39 +30,10 @@ pub fn scan_bottle(app: AppHandle, bottle_id: String) -> Result<Vec<DiscoveredEx
             .ok_or(FusionError::BottleNotFound)
     })?;
     let found = scanner::scan_prefix(Path::new(&bottle.path));
-    st.with_state(|s| {
-        for exe in &found {
-            let full_path = Path::new(&bottle.path)
-                .join(&exe.rel_path)
-                .to_string_lossy()
-                .into_owned();
-            if !s
-                .applications
-                .iter()
-                .any(|a| a.bottle_id == bottle_id && a.executable_path == full_path)
-            {
-                let rec = compatibility::recommend(&exe.name);
-                let icon_data = crate::wine::icon::extract_icon_data_url(Path::new(&full_path));
-                s.applications.push(Application {
-                    id: new_id(),
-                    bottle_id: bottle_id.clone(),
-                    name: exe.name.clone(),
-                    executable_path: full_path,
-                    category: exe.category.clone(),
-                    favorite: false,
-                    launch_count: 0,
-                    play_time_mins: 0,
-                    last_played: None,
-                    compatibility: Some(rec.compatibility),
-                    profile: Some(rec.profile.to_string()),
-                    icon_data,
-                    launch_arguments: None,
-                });
-            }
-        }
+    st.update(|s| {
+        register_discovered(s, &bottle_id, Path::new(&bottle.path), &found);
         Ok(())
     })?;
-    st.save(&app)?;
     Ok(found)
 }
 
@@ -74,43 +45,12 @@ pub fn scan_all_bottles(app: AppHandle) -> Result<usize, FusionError> {
 
     for bottle in &bottles {
         let found = scanner::scan_prefix(Path::new(&bottle.path));
-        st.with_state(|s| {
-            for exe in &found {
-                let full_path = Path::new(&bottle.path)
-                    .join(&exe.rel_path)
-                    .to_string_lossy()
-                    .into_owned();
-                if !s.applications.iter().any(|a| {
-                    a.bottle_id == bottle.id
-                        && (a.executable_path == full_path || a.name == exe.name)
-                }) {
-                    let rec = compatibility::recommend(&exe.name);
-                    let icon_data = crate::wine::icon::extract_icon_data_url(Path::new(&full_path));
-                    s.applications.push(Application {
-                        id: new_id(),
-                        bottle_id: bottle.id.clone(),
-                        name: exe.name.clone(),
-                        executable_path: full_path,
-                        category: exe.category.clone(),
-                        favorite: false,
-                        launch_count: 0,
-                        play_time_mins: 0,
-                        last_played: None,
-                        compatibility: Some(rec.compatibility),
-                        profile: Some(rec.profile.to_string()),
-                        icon_data,
-                        launch_arguments: None,
-                    });
-                    total_added += 1;
-                }
-            }
+        st.update(|s| {
+            total_added += register_discovered(s, &bottle.id, Path::new(&bottle.path), &found);
             Ok(())
         })?;
     }
 
-    if total_added > 0 {
-        st.save(&app)?;
-    }
     Ok(total_added)
 }
 
@@ -131,7 +71,7 @@ pub fn run_installer(
     let job_id = job.clone();
     let handle = app.clone();
 
-    std::thread::spawn(move || {
+    crate::manager::spawn_job(handle.clone(), job_id.clone(), move || {
         let jobs = handle.state::<Jobs>();
         let outcome = install_job(&handle, &bottle_id, &installer_path, &analysis.file_name);
         match outcome {
@@ -184,41 +124,81 @@ pub fn install_job(
 
     // Discover whatever the installer laid down.
     let found = scanner::scan_prefix(prefix);
-    let mut registered = 0;
-    st.with_state(|s| {
-        for exe in &found {
-            if s.applications
-                .iter()
-                .any(|a| a.bottle_id == bottle_id && a.executable_path == exe.rel_path)
-            {
-                continue;
-            }
-            s.applications.push(Application {
-                id: new_id(),
-                bottle_id: bottle_id.to_string(),
-                name: exe.name.clone(),
-                executable_path: prefix.join(&exe.rel_path).to_string_lossy().into_owned(),
-                category: exe.category.clone(),
-                favorite: false,
-                launch_count: 0,
-                play_time_mins: 0,
-                last_played: None,
-                compatibility: None,
-                profile: None,
-                icon_data: crate::wine::icon::extract_icon_data_url(&prefix.join(&exe.rel_path)),
-                launch_arguments: None,
-            });
-            registered += 1;
-        }
-        Ok(())
-    })?;
-    st.save(app)?;
+    let registered = st.update(|s| Ok(register_discovered(s, bottle_id, prefix, &found)))?;
     Ok(format!(
         "Installed. Discovered {registered} application(s)."
     ))
 }
 
+pub(crate) fn register_discovered(
+    state: &mut AppState,
+    bottle_id: &str,
+    prefix: &Path,
+    found: &[DiscoveredExe],
+) -> usize {
+    let mut added = 0;
+    for exe in found {
+        let full_path = prefix.join(&exe.rel_path);
+        if state.applications.iter().any(|a| {
+            a.bottle_id == bottle_id
+                && crate::core::paths::same_file(Path::new(&a.executable_path), &full_path)
+        }) {
+            continue;
+        }
+        let rec = compatibility::recommend(&exe.name);
+        state.applications.push(Application {
+            id: new_id(),
+            bottle_id: bottle_id.into(),
+            name: exe.name.clone(),
+            executable_path: full_path.to_string_lossy().into_owned(),
+            category: exe.category.clone(),
+            favorite: false,
+            launch_count: 0,
+            play_time_mins: 0,
+            last_played: None,
+            compatibility: Some(rec.compatibility),
+            profile: Some(rec.profile.into()),
+            icon_data: crate::wine::icon::extract_icon_data_url(&full_path),
+            launch_arguments: None,
+        });
+        added += 1;
+    }
+    added
+}
+
 #[tauri::command]
 pub fn list_jobs(app: AppHandle) -> Result<Vec<crate::manager::Job>, FusionError> {
     Ok(app.state::<Jobs>().list())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn repeated_discovery_preserves_metadata_and_distinct_same_named_apps() {
+        let mut state = AppState::default();
+        let found = vec![
+            DiscoveredExe {
+                name: "Game".into(),
+                rel_path: "drive_c/One/game.exe".into(),
+                category: "games".into(),
+            },
+            DiscoveredExe {
+                name: "Game".into(),
+                rel_path: "drive_c/Two/game.exe".into(),
+                category: "games".into(),
+            },
+        ];
+        let prefix = Path::new("/nonexistent-fusioncross-test/bottle");
+        assert_eq!(register_discovered(&mut state, "bottle", prefix, &found), 2);
+        state.applications[0].favorite = true;
+        state.applications[0].play_time_mins = 42;
+        let id = state.applications[0].id.clone();
+        assert_eq!(register_discovered(&mut state, "bottle", prefix, &found), 0);
+        assert_eq!(state.applications.len(), 2);
+        assert_eq!(state.applications[0].id, id);
+        assert!(state.applications[0].favorite);
+        assert_eq!(state.applications[0].play_time_mins, 42);
+    }
 }

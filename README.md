@@ -154,7 +154,7 @@ npm run tauri dev
 
 ### 4. Quality Checks & Tests
 ```bash
-# Backend unit tests (32 tests)
+# Backend unit tests (50 tests)
 cargo test --manifest-path src-tauri/Cargo.toml
 
 # Formatting & Clippy linting

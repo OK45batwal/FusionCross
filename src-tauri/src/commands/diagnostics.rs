@@ -70,7 +70,7 @@ pub fn apply_fix(app: AppHandle, fix_id: String, app_id: String) -> Result<Strin
         }
         FixIntent::SwitchGraphics => {
             let st = app.state::<FusionState>();
-            st.with_state(|s| {
+            st.update(|s| {
                 let app2 = s
                     .applications
                     .iter()
@@ -86,12 +86,11 @@ pub fn apply_fix(app: AppHandle, fix_id: String, app_id: String) -> Result<Strin
                 b.graphics = "d3dmetal".to_string();
                 Ok(())
             })?;
-            st.save(&app)?;
             Ok("Switched graphics to D3DMetal (Apple GPTK) for full DirectX 11/12 hardware acceleration.".into())
         }
         FixIntent::EnableMsync => {
             let st = app.state::<FusionState>();
-            st.with_state(|s| {
+            st.update(|s| {
                 let app2 = s
                     .applications
                     .iter()
@@ -106,7 +105,6 @@ pub fn apply_fix(app: AppHandle, fix_id: String, app_id: String) -> Result<Strin
                 b.msync_enabled = true;
                 Ok(())
             })?;
-            st.save(&app)?;
             Ok("Enabled MSync fast synchronization for this bottle.".into())
         }
         FixIntent::InstallRosetta => {
