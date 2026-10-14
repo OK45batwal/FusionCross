@@ -36,3 +36,5 @@ dist-ssr
 
 # Release bundles
 release_bundle/
+playwright-report/
+test-results/

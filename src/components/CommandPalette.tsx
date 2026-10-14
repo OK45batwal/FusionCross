@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import { Modal } from "./Modal";
+import React, { useState } from "react";
 import {
   Search,
   Download,
@@ -38,16 +39,6 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 }) => {
   const [query, setQuery] = useState("");
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isOpen) {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
-
   if (!isOpen) return null;
 
   const filteredApps = applications.filter((a) =>
@@ -71,12 +62,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   ].filter((c) => c.label.toLowerCase().includes(query.toLowerCase()));
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-start justify-center pt-[10vh] px-4">
+    <Modal label="Command palette" onClose={onClose}>
       <div className="w-full max-w-155 rounded-xl border border-graphite-600 bg-graphite-900 shadow-2xl overflow-hidden flex flex-col max-h-[75vh]">
         {/* Search Input Bar */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-graphite-600/70 bg-graphite-950/60">
           <Search className="w-4 h-4 text-accent-400 shrink-0" />
           <input
+            aria-label="Search commands"
             autoFocus
             type="text"
             placeholder="Type a command or search applications, bottles, runtimes..."
@@ -85,6 +77,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             className="flex-1 bg-transparent border-none text-[13px] font-mono text-graphite-100 placeholder-graphite-400 focus:outline-none"
           />
           <button
+            aria-label="Close command palette"
             onClick={onClose}
             className="p-1 rounded text-graphite-400 hover:text-graphite-100 transition-colors"
           >
@@ -219,6 +212,6 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           <span>ESC to close</span>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 };

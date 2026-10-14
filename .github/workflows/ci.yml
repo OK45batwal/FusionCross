@@ -17,7 +17,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install JS deps
@@ -25,6 +25,14 @@ jobs:
 
       - name: Quality gates
         run: npm run verify
+
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+
+      - name: Browser integration tests
+        run: |
+          npx playwright install webkit
+          npm run test:e2e
 
       - name: Tauri debug build
         run: npm run tauri build -- --debug --no-bundle

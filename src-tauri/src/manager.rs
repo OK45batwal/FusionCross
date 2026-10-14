@@ -9,6 +9,13 @@ use crate::core::errors::FusionError;
 use crate::core::state::AppState;
 
 fn app_data_dir(app: &AppHandle) -> Option<PathBuf> {
+    // Disposable data directories for local debug smoke tests only.
+    #[cfg(debug_assertions)]
+    if let Some(path) = std::env::var_os("FUSIONCROSS_DATA_DIR").map(PathBuf::from) {
+        if path.is_absolute() && path.parent().is_some() {
+            return Some(path);
+        }
+    }
     app.path().app_data_dir().ok()
 }
 
@@ -213,11 +220,13 @@ pub fn spawn_job(app: AppHandle, job_id: String, task: impl FnOnce() + Send + 's
 /// Long-running jobs (installs, runtime downloads) run on a thread and report
 /// back here; the frontend polls while they spin.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "state", content = "message", rename_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
 pub enum JobStatus {
     Running,
     Done,
     Failed,
+    Cancelling,
+    Cancelled,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -226,6 +235,9 @@ pub struct Job {
     pub title: String,
     pub status: JobStatus,
     pub message: String,
+    pub can_cancel: bool,
+    #[serde(skip)]
+    control: Option<std::sync::Arc<crate::process::job::JobControl>>,
     #[serde(skip)]
     finished_at: Option<std::time::Instant>,
 }
@@ -245,16 +257,51 @@ impl Jobs {
                 title,
                 status: JobStatus::Running,
                 message: "working…".into(),
+                can_cancel: false,
+                control: None,
                 finished_at: None,
             },
         );
         id
     }
 
+    pub fn begin_cancellable(
+        &self,
+        title: String,
+    ) -> (String, std::sync::Arc<crate::process::job::JobControl>) {
+        let id = self.begin(title);
+        let control = std::sync::Arc::new(crate::process::job::JobControl::default());
+        if let Some(job) = self
+            .0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_mut(&id)
+        {
+            job.control = Some(control.clone());
+            job.can_cancel = true;
+        }
+        (id, control)
+    }
+
+    pub fn cancel(&self, id: &str) -> Result<(), FusionError> {
+        let mut jobs = self.0.lock().map_err(|_| FusionError::Unsupported)?;
+        let job = jobs.get_mut(id).ok_or(FusionError::InvalidInput)?;
+        if job.finished_at.is_some()
+            || !job.control.as_ref().is_some_and(|control| control.cancel())
+        {
+            return Err(FusionError::Unsupported);
+        }
+        job.status = JobStatus::Cancelling;
+        job.can_cancel = false;
+        job.message = "Stopping… Files already installed may remain.".into();
+        Ok(())
+    }
+
     pub fn finish(&self, id: &str, message: String) {
         if let Some(j) = self.0.lock().unwrap_or_else(|e| e.into_inner()).get_mut(id) {
             j.status = JobStatus::Done;
             j.message = message;
+            Self::terminal(j);
             j.finished_at = Some(std::time::Instant::now());
         }
     }
@@ -263,6 +310,7 @@ impl Jobs {
         if let Some(j) = self.0.lock().unwrap_or_else(|e| e.into_inner()).get_mut(id) {
             j.status = JobStatus::Failed;
             j.message = message;
+            Self::terminal(j);
             j.finished_at = Some(std::time::Instant::now());
         }
     }
@@ -270,6 +318,13 @@ impl Jobs {
     pub fn list(&self) -> Vec<Job> {
         let mut jobs = self.0.lock().unwrap_or_else(|e| e.into_inner());
         Self::prune(&mut jobs);
+        for job in jobs.values_mut() {
+            job.can_cancel = job.finished_at.is_none()
+                && job
+                    .control
+                    .as_ref()
+                    .is_some_and(|control| control.can_cancel());
+        }
         jobs.values().cloned().collect()
     }
 
@@ -288,11 +343,42 @@ impl Jobs {
             jobs.remove(&id);
         }
     }
+
+    fn terminal(job: &mut Job) {
+        job.can_cancel = false;
+        if let Some(control) = &job.control {
+            if control.seal().is_err() {
+                job.status = JobStatus::Cancelled;
+                job.message = FusionError::Cancelled.to_string();
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn job_status_contract_and_cancellation_are_visible_to_frontend() {
+        let jobs = Jobs::default();
+        let (id, control) = jobs.begin_cancellable("Install".into());
+        assert_eq!(
+            serde_json::to_value(&jobs.list()[0]).unwrap()["status"],
+            "running"
+        );
+        jobs.cancel(&id).unwrap();
+        assert!(control.check().is_err());
+        assert_eq!(
+            serde_json::to_value(&jobs.list()[0]).unwrap()["status"],
+            "cancelling"
+        );
+        jobs.fail(&id, "stopped".into());
+        let json = serde_json::to_value(&jobs.list()[0]).unwrap();
+        assert_eq!(json["status"], "cancelled");
+        assert_eq!(json["can_cancel"], false);
+        assert!(jobs.cancel(&id).is_err());
+    }
 
     #[test]
     fn failed_persistence_does_not_publish_mutation() {

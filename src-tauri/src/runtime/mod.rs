@@ -94,23 +94,40 @@ pub fn download_runtime(
     sha256: &str,
     dest_pkg: &Path,
     dest_dir: &Path,
+    control: &crate::process::job::JobControl,
 ) -> Result<(), FusionError> {
-    if url.is_empty() || sha256.is_empty() {
+    if !url.starts_with("https://")
+        || sha256.len() != 64
+        || !sha256.bytes().all(|b| b.is_ascii_hexdigit())
+    {
         return Err(FusionError::RuntimeVerificationFailed);
     }
-    let out = std::process::Command::new("curl")
-        .args(["-fL", "--max-time", "3600", "-o"])
-        .arg(dest_pkg)
-        .arg(url)
-        .status()
-        .map_err(|_| FusionError::RuntimeVerificationFailed)?;
-    if !out.success() {
-        return Err(FusionError::RuntimeVerificationFailed);
-    }
-    archives::verify_sha256(dest_pkg, sha256)?;
-    install_from_archive(dest_pkg, dest_dir)?;
+    let result = (|| {
+        let out = control.run(
+            std::process::Command::new("curl")
+                .args([
+                    "-fL",
+                    "--proto",
+                    "=https",
+                    "--proto-redir",
+                    "=https",
+                    "--max-time",
+                    "3600",
+                    "-o",
+                ])
+                .arg(dest_pkg)
+                .arg(url),
+        )?;
+        if !out.success() {
+            return Err(FusionError::RuntimeVerificationFailed);
+        }
+        archives::verify_sha256(dest_pkg, sha256)?;
+        control.seal()?; // Publishing the validated runtime is an indivisible final phase.
+        install_from_archive(dest_pkg, dest_dir)?;
+        Ok(())
+    })();
     std::fs::remove_file(dest_pkg).ok();
-    Ok(())
+    result
 }
 
 /// Install a runtime from an already-sourced archive (download cache or user
@@ -151,6 +168,23 @@ mod tests {
         assert!(entries
             .iter()
             .all(|e| !e.id.is_empty() && !e.name.is_empty()));
+    }
+
+    #[test]
+    fn rejects_unverified_downloads_before_starting_network_or_writing_files() {
+        let dir = std::env::temp_dir().join(format!("fc_unverified_{}", new_id()));
+        let control = crate::process::job::JobControl::default();
+        for (url, hash) in [
+            ("https://example.com/runtime.tar.gz", "".to_string()),
+            ("https://example.com/runtime.tar.gz", "x".repeat(64)),
+            ("http://example.com/runtime.tar.gz", "a".repeat(64)),
+        ] {
+            assert_eq!(
+                download_runtime(url, &hash, &dir.join("pkg"), &dir.join("out"), &control),
+                Err(FusionError::RuntimeVerificationFailed)
+            );
+        }
+        assert!(!dir.exists());
     }
 
     #[test]

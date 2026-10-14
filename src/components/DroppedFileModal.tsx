@@ -1,3 +1,4 @@
+import { Modal } from "./Modal";
 import { useState, useEffect } from "react";
 import {
   Bottle,
@@ -51,7 +52,7 @@ export function DroppedFileModal({
   const [newBottleName, setNewBottleName] = useState("");
 
   const fileName = filePath.split("/").pop() || filePath;
-  const isExeOrMsi = /\.(exe|msi|bat|cmd)$/i.test(fileName);
+  const isExeOrMsi = /\.(exe|msi)$/i.test(fileName);
 
   useEffect(() => {
     let active = true;
@@ -110,8 +111,8 @@ export function DroppedFileModal({
     setExecuting(true);
     setError(null);
     try {
-      const jobId = await runInstaller(filePath, bottleId);
-      setActionSuccess(`Installation queued for ${fileName} in "${targetBottle?.name || 'Default'}" (job ${jobId}).`);
+      await runInstaller(filePath, bottleId);
+      setActionSuccess(`Installation queued for ${fileName} in "${targetBottle?.name || 'Default'}".`);
 
       await onRefresh();
       onSelectBottle(bottleId);
@@ -126,7 +127,7 @@ export function DroppedFileModal({
   };
 
   return (
-    <div className="fixed inset-0 z-110 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+    <Modal label="Install Windows application" onClose={onClose}>
       <div className="bg-(--bg-card) border border-(--border-color) rounded-2xl max-w-lg w-full p-6 shadow-2xl shadow-black/40 text-left animate-scale-in">
         {/* Header */}
         <div className="flex items-start justify-between pb-4 border-b border-(--border-color)">
@@ -304,6 +305,6 @@ export function DroppedFileModal({
           </div>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import { waitForJob } from "../services/jobs";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Download,
   CheckCircle2,
@@ -18,7 +19,6 @@ import {
   getRecommendation,
   runInstaller,
   installCatalogGame,
-  listJobs,
   Bottle,
   InstallerAnalysis,
   Recommendation,
@@ -49,6 +49,8 @@ export const InstallerWizardView: React.FC<InstallerWizardViewProps> = ({
   onFinish,
   onRefreshState,
 }) => {
+  const lifetime = useRef(new AbortController());
+  useEffect(() => { lifetime.current = new AbortController(); return () => lifetime.current.abort(); }, []);
   const [step, setStep] = useState<number>(1);
   const [filePath, setFilePath] = useState<string>("");
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
@@ -137,78 +139,16 @@ export const InstallerWizardView: React.FC<InstallerWizardViewProps> = ({
         bottleId = created.id;
       }
 
-      // If preset with direct installer URL, trigger automated download & install
-      if (selectedPresetId && ["steam", "battlenet", "epicgames", "gog", "eaapp"].includes(selectedPresetId)) {
-        setInstallLog(`Downloading & installing ${recommendation?.profile || 'launcher'}...`);
-        const jobId = await installCatalogGame(selectedPresetId, bottleId);
-        
-        let outcome = "";
-        let failed = "";
-        for (let attempt = 0; attempt < 200; attempt++) {
-          await new Promise((r) => setTimeout(r, 1500));
-          const jobs = await listJobs();
-          const job = jobs.find((j) => j.id === jobId);
-          if (!job) continue;
-          if (job.status === "Done") {
-            outcome = job.message || "Installation finished successfully!";
-            break;
-          }
-          if (job.status === "Failed") {
-            failed = job.message || "Installation failed in bottle prefix.";
-            break;
-          }
-          setInstallLog(job.message || "Downloading & configuring Wine prefix...");
-        }
-
-        if (failed) {
-          setError(failed);
-          setStep(3);
-          return;
-        }
-
-        await onRefreshState();
-        setInstallLog(outcome || "Application installed into library!");
-        setStep(4);
-        return;
-      }
-
-      // Standard local file installer
-      const jobId = await runInstaller(filePath, bottleId);
-      setInstallLog("Installer running in Wine prefix. Polling for completion...");
-
-      let outcome = "";
-      let failed = "";
-      for (let attempt = 0; attempt < 200; attempt++) {
-        await new Promise((r) => setTimeout(r, 1500));
-        const jobs = await listJobs();
-        const job = jobs.find((j) => j.id === jobId);
-        if (!job) continue;
-        if (job.status === "Done") {
-          outcome = job.message || "Installer exited; application registered.";
-          break;
-        }
-        if (job.status === "Failed") {
-          failed = job.message || "Installation failed inside Wine prefix.";
-          break;
-        }
-        setInstallLog(job.message || "Installing...");
-      }
-
-      if (failed) {
-        setError(failed);
-        setStep(3);
-        return;
-      }
-      if (!outcome) {
-        setError("Installation timed out while polling the background job.");
-        setStep(3);
-        return;
-      }
+      const jobId = selectedPresetId && ["steam", "battlenet", "epicgames", "gog", "eaapp"].includes(selectedPresetId)
+        ? await installCatalogGame(selectedPresetId, bottleId)
+        : await runInstaller(filePath, bottleId);
+      const outcome = await waitForJob(jobId, lifetime.current.signal, setInstallLog);
 
       await onRefreshState();
       setInstallLog(outcome);
       setStep(4);
     } catch (e) {
+      if (lifetime.current.signal.aborted) return;
       const err = e as FusionErrorPayload;
       setError(err.message || "Installation failed inside Wine prefix.");
     } finally {

@@ -67,6 +67,7 @@ export interface Runtime {
   sha256?: string;
   size_bytes?: number;
   note?: string;
+  download_available?: boolean;
 }
 
 export interface Snapshot {
@@ -119,7 +120,8 @@ export interface DiscoveredExe {
 export interface Job {
   id: string;
   title: string;
-  status: "Running" | "Done" | "Failed" | string;
+  status: "running" | "done" | "failed" | "cancelling" | "cancelled";
+  can_cancel: boolean;
   message?: string;
 }
 
@@ -238,6 +240,7 @@ export const updateApplication = (
 export const runInstaller = (installerPath: string, bottleId: string) =>
   invoke<string>("run_installer", { installerPath, bottleId });
 export const listJobs = () => invoke<Job[]>("list_jobs");
+export const cancelJob = (jobId: string) => invoke<void>("cancel_job", { jobId });
 
 export const launchApplication = (appId: string) => invoke<RunningInfo>("launch_application", { appId });
 export const stopApplication = (appId: string) => invoke<void>("stop_application", { appId });

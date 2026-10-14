@@ -24,7 +24,7 @@ pub fn probe_runtime(
             .and_then(|o| {
                 crate::wine::engine::parse_wine_version(&String::from_utf8_lossy(&o.stdout))
             })
-            .unwrap_or_else(|| "11.0".into())
+            .unwrap_or_else(|| "not found".into())
     } else {
         let e = WineEngine::new(&engine);
         e.version().unwrap_or_else(|_| "not found".into())
@@ -46,9 +46,10 @@ pub fn get_runtimes(app: AppHandle) -> Result<Vec<serde_json::Value>, FusionErro
         "id": "whisky-wine",
         "name": "Whisky-Wine (Apple GPTK + DXVK + DXMT)",
         "category": "whisky",
-        "version": "11.0",
+        "version": "",
         "downloaded": whisky_installed,
-        "path": if whisky_installed { "Installed" } else { "" },
+        "path": "",
+        "download_available": false,
         "url": "https://github.com/frankea/Whisky/releases",
         "note": "Apple Game Porting Toolkit translation engine with DirectX 11/12 Metal support."
     }));
@@ -66,7 +67,8 @@ pub fn get_runtimes(app: AppHandle) -> Result<Vec<serde_json::Value>, FusionErro
             list.push(serde_json::json!({
                 "id": c.id, "name": c.name, "category": c.category,
                 "version": c.version, "downloaded": installed, "path": "",
-                "url": c.url, "sha256": c.sha256, "note": c.note
+                "url": c.url, "sha256": c.sha256, "note": c.note,
+                "download_available": c.url.starts_with("https://") && c.sha256.len() == 64 && c.sha256.bytes().all(|b| b.is_ascii_hexdigit())
             }));
         }
     }
@@ -85,7 +87,7 @@ pub fn download_runtime(app: AppHandle, runtime_id: String) -> Result<String, Fu
     }
 
     let jobs = app.state::<Jobs>();
-    let job = jobs.begin(format!("Downloading {}", entry.name));
+    let (job, control) = jobs.begin_cancellable(format!("Downloading {}", entry.name));
     let job_id = job.clone();
     let handle = app.clone();
     crate::manager::spawn_job(handle.clone(), job_id.clone(), move || {
@@ -95,10 +97,10 @@ pub fn download_runtime(app: AppHandle, runtime_id: String) -> Result<String, Fu
         let category = entry.category.to_string();
         let url = entry.url.to_string();
         let sha = entry.sha256.to_string();
-        let dest_pkg = d.downloads.join(format!("{id}.tar.xz"));
+        let dest_pkg = d.downloads.join(format!("{id}-{job_id}.tar.xz"));
         let dest_dir = d.runtimes.join(&id);
         let jobs = handle.state::<Jobs>();
-        let result = runtime::download_runtime(&url, &sha, &dest_pkg, &dest_dir);
+        let result = runtime::download_runtime(&url, &sha, &dest_pkg, &dest_dir, &control);
         match result {
             Ok(()) => {
                 let version = runtime::probe_runtime_version(&dest_dir).unwrap_or_default();

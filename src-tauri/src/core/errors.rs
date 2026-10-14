@@ -13,6 +13,7 @@ pub enum FusionError {
     InvalidExecutable,
     InvalidInput,
     AlreadyRunning,
+    Cancelled,
     DependencyMissing,
     GraphicsInitializationFailed,
     InstallationFailed,
@@ -35,6 +36,7 @@ impl FusionError {
             InvalidExecutable => "INVALID_EXECUTABLE",
             InvalidInput => "INVALID_INPUT",
             AlreadyRunning => "ALREADY_RUNNING",
+            Cancelled => "CANCELLED",
             DependencyMissing => "DEPENDENCY_MISSING",
             GraphicsInitializationFailed => "GRAPHICS_INIT_FAILED",
             InstallationFailed => "INSTALLATION_FAILED",
@@ -73,6 +75,9 @@ impl std::fmt::Display for FusionError {
                 "One or more values are invalid. Check the name, options, or environment variables."
             }
             AlreadyRunning => "This application is already running.",
+            Cancelled => {
+                "The operation was cancelled. Files already installed in the bottle may remain."
+            }
             DependencyMissing => "A required dependency is missing.",
             GraphicsInitializationFailed => "The graphics backend failed to initialize.",
             InstallationFailed => "The installation failed.",

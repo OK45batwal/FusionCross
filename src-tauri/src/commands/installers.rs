@@ -11,8 +11,8 @@ use crate::installer::{self, InstallerAnalysis};
 use crate::manager::{FusionState, Jobs};
 use crate::wine::scanner::{self, DiscoveredExe};
 
-use super::bottles::initialize_bottle_prefix;
 use super::{build_wine_execution_context, wine_binary_for};
+use crate::process::job::JobControl;
 
 #[tauri::command]
 pub fn analyze_installer(path: String) -> Result<InstallerAnalysis, FusionError> {
@@ -67,13 +67,20 @@ pub fn run_installer(
 ) -> Result<String, FusionError> {
     let analysis = installer::analyze_installer(Path::new(&installer_path))?;
     let jobs = app.state::<Jobs>();
-    let job = jobs.begin(format!("Installing {}", analysis.file_name));
+    let (job, control) = jobs.begin_cancellable(format!("Installing {}", analysis.file_name));
     let job_id = job.clone();
     let handle = app.clone();
 
     crate::manager::spawn_job(handle.clone(), job_id.clone(), move || {
         let jobs = handle.state::<Jobs>();
-        let outcome = install_job(&handle, &bottle_id, &installer_path, &analysis.file_name);
+        let outcome = install_job(
+            &handle,
+            &bottle_id,
+            &installer_path,
+            &analysis.file_name,
+            &[],
+            &control,
+        );
         match outcome {
             Ok(msg) => jobs.finish(&job_id, msg),
             Err(e) => jobs.fail(&job_id, format!("{} — {e}", analysis.file_name)),
@@ -87,6 +94,8 @@ pub fn install_job(
     bottle_id: &str,
     installer_path: &str,
     file_name: &str,
+    extra_dependencies: &[String],
+    control: &JobControl,
 ) -> Result<String, FusionError> {
     let st = app.state::<FusionState>();
     let bottle = st.with_state(|s| {
@@ -99,7 +108,27 @@ pub fn install_job(
     let binary = wine_binary_for(app, &bottle.runtime)?;
     let prefix = Path::new(&bottle.path);
 
-    initialize_bottle_prefix(app, bottle_id)?;
+    control.check()?;
+    if !crate::wine::prefix::prefix_prepared(prefix) {
+        let status = control.run(
+            std::process::Command::new(&binary)
+                .env("WINEPREFIX", prefix)
+                .env("WINEDLLOVERRIDES", "mscoree,mshtml=")
+                .args(["wineboot", "-i"]),
+        )?;
+        if !status.success() {
+            return Err(FusionError::InstallationFailed);
+        }
+    }
+    super::bottles::deploy_graphics_libraries(app, prefix);
+    crate::wine::prefix::ensure_graphics_registry(prefix, &bottle.graphics).ok();
+    let mut dependencies = bottle.dependencies.clone();
+    for dependency in extra_dependencies {
+        if !dependencies.contains(dependency) {
+            dependencies.push(dependency.clone());
+        }
+    }
+    crate::wine::prefix::install_verbs_cancellable(&binary, prefix, &dependencies, control)?;
 
     // Copy the installer into the prefix so Wine can reach it.
     let target_dir = prefix.join("drive_c").join("installers");
@@ -114,16 +143,14 @@ pub fn install_job(
     for (k, v) in override_env {
         cmd.env(k, v);
     }
-    let status = cmd
-        .arg(&target)
-        .status()
-        .map_err(|_| FusionError::LaunchFailed)?;
+    let status = control.run(cmd.arg(&target))?;
     if !status.success() {
         return Err(FusionError::InstallationFailed);
     }
 
     // Discover whatever the installer laid down.
     let found = scanner::scan_prefix(prefix);
+    control.seal()?;
     let registered = st.update(|s| Ok(register_discovered(s, bottle_id, prefix, &found)))?;
     Ok(format!(
         "Installed. Discovered {registered} application(s)."
@@ -169,6 +196,11 @@ pub(crate) fn register_discovered(
 #[tauri::command]
 pub fn list_jobs(app: AppHandle) -> Result<Vec<crate::manager::Job>, FusionError> {
     Ok(app.state::<Jobs>().list())
+}
+
+#[tauri::command]
+pub fn cancel_job(app: AppHandle, job_id: String) -> Result<(), FusionError> {
+    app.state::<Jobs>().cancel(&job_id)
 }
 
 #[cfg(test)]

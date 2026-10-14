@@ -1,13 +1,12 @@
 #![allow(dead_code)]
 
-use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
 use crate::compatibility::{self, GameCatalogItem};
 use crate::core::errors::FusionError;
 use crate::manager::{FusionState, Jobs};
 
-use super::bottles::{create_bottle, install_bottle_verb};
+use super::bottles::create_bottle;
 use super::installers::install_job;
 
 #[tauri::command]
@@ -31,7 +30,7 @@ pub fn install_catalog_game(
     let installer_url = item.installer_url.ok_or(FusionError::Unsupported)?;
 
     let jobs = app.state::<Jobs>();
-    let job = jobs.begin(format!("Preparing installer for {}", item.title));
+    let (job, control) = jobs.begin_cancellable(format!("Preparing installer for {}", item.title));
     let job_id = job.clone();
     let handle = app.clone();
 
@@ -68,44 +67,58 @@ pub fn install_catalog_game(
             };
 
             // 2. Download installer into user Application Support downloads cache
-            let home = std::env::var("HOME")
-                .map(PathBuf::from)
-                .map_err(|_| FusionError::PermissionDenied)?;
-            let dl_dir = home.join("Library/Application Support/FusionCross/downloads");
+            control.check()?;
+            let dl_dir = crate::manager::dirs(&handle).downloads;
             std::fs::create_dir_all(&dl_dir).map_err(|_| FusionError::PermissionDenied)?;
 
             let filename = format!("{}_installer.exe", item.id);
-            let local_installer = dl_dir.join(&filename);
+            let local_installer = dl_dir.join(format!("{job_id}.exe"));
 
             if !local_installer.exists()
                 || std::fs::metadata(&local_installer)
                     .map(|m| m.len() < 50_000)
                     .unwrap_or(true)
             {
-                let curl_status = std::process::Command::new("curl")
-                    .args(["-fL", "--max-time", "600", "-o"])
-                    .arg(&local_installer)
-                    .arg(installer_url)
-                    .status()
-                    .map_err(|_| FusionError::InstallationFailed)?;
+                let curl_status = control.run(
+                    std::process::Command::new("curl")
+                        .args([
+                            "-fL",
+                            "--proto",
+                            "=https",
+                            "--proto-redir",
+                            "=https",
+                            "--max-time",
+                            "600",
+                            "-o",
+                        ])
+                        .arg(&local_installer)
+                        .arg(installer_url),
+                );
+                let curl_status = match curl_status {
+                    Ok(status) => status,
+                    Err(error) => {
+                        let _ = std::fs::remove_file(&local_installer);
+                        return Err(error);
+                    }
+                };
                 if !curl_status.success() {
+                    let _ = std::fs::remove_file(&local_installer);
                     return Err(FusionError::InstallationFailed);
                 }
             }
 
-            // 3. Pre-install dependencies
-            for dep in &item.dependencies {
-                let _ =
-                    install_bottle_verb(handle.clone(), target_bottle_id.clone(), dep.to_string());
-            }
-
-            // 4. Run installer inside target bottle
-            install_job(
+            // Initialize the prefix before installing recipe dependencies and the app.
+            let dependencies: Vec<_> = item.dependencies.iter().map(|v| v.to_string()).collect();
+            let result = install_job(
                 &handle,
                 &target_bottle_id,
                 &local_installer.to_string_lossy(),
                 &filename,
-            )
+                &dependencies,
+                &control,
+            );
+            let _ = std::fs::remove_file(&local_installer);
+            result
         })();
 
         match res {

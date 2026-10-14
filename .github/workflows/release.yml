@@ -3,64 +3,83 @@ name: Release
 on:
   workflow_dispatch:
   push:
-    tags:
-      - "v*"
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   release:
     runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
       - uses: actions/checkout@v4
-
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
-
-      - name: Install JS deps
-        run: npm ci
-
-      - name: Rust fmt
-        run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
-
-      - name: Rust clippy
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
-
-      - name: Rust tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml
-
-      - name: Frontend build
-        run: npm run build
-
-      - name: Build release bundle (DMG)
-        run: npm run tauri build
-
-      - name: Compute DMG SHA-256
-        id: sha
+      - name: Validate release tag and signing prerequisites
+        run: node scripts/check-release.mjs --require-signing
+      - run: npm ci
+      - run: npm audit --audit-level=high
+      - run: npm run verify
+      - run: npx playwright install webkit
+      - run: npm run test:e2e
+      - name: Import distribution identity
+        run: bash .github/scripts/import-signing-certificate.sh
+      - name: Build signed and notarized universal app and DMG
+        run: npm run tauri build -- --target universal-apple-darwin --bundles app,dmg
+      - name: Verify signature and notarization tickets
         run: |
-          DMG=$(ls src-tauri/target/release/bundle/dmg/*.dmg)
-          echo "dmg=$DMG" >> "$GITHUB_OUTPUT"
-          echo "sha=$(shasum -a 256 "$DMG" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-          echo "name=$(basename "$DMG")" >> "$GITHUB_OUTPUT"
-
-      - name: Publish GitHub Release
+          set -euo pipefail
+          app_bundle="src-tauri/target/universal-apple-darwin/release/bundle/macos/FusionCross.app"
+          codesign --verify --deep --strict --verbose=2 "$app_bundle"
+          xcrun stapler validate "$app_bundle"
+          spctl --assess --type execute --verbose=2 "$app_bundle"
+          for disk_image in src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg; do
+            # An app ticket does not imply that its enclosing DMG has a ticket.
+            if ! xcrun stapler validate "$disk_image"; then
+              xcrun notarytool submit "$disk_image" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+              xcrun stapler staple "$disk_image"
+            fi
+            xcrun stapler validate "$disk_image"
+          done
+      - name: Write downloadable checksums
+        working-directory: src-tauri/target/universal-apple-darwin/release/bundle/dmg
+        run: shasum -a 256 *.dmg > SHA256SUMS.txt
+      - name: Prepare draft release for review
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.sha.outputs.dmg }}
-          name: FusionCross ${{ github.ref_name }}
+          draft: true
+          generate_release_notes: true
+          files: |
+            src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            src-tauri/target/universal-apple-darwin/release/bundle/dmg/SHA256SUMS.txt
           body: |
-            ## FusionCross ${{ github.ref_name }}
-
-            ### Verify your download
-
-            ```
-            shasum -a 256 FusionCross_2.0.0_aarch64.dmg
-            ${{ steps.sha.outputs.sha }}
-            ```
-
-            The website download and SHA-256 box must be updated to match
-            `${{ steps.sha.outputs.name }}` / `${{ steps.sha.outputs.sha }}` after every release.
+            Universal macOS build (Apple Silicon and Intel), macOS 13 or newer.
+            Verify the downloaded DMG with `shasum -a 256 -c SHA256SUMS.txt`.
+            Wine runtimes are installed separately; compatibility depends on the selected runtime and application.
+      - name: Remove temporary signing keychain
+        if: always()
+        run: |
+          if test -f "$RUNNER_TEMP/fusioncross-signing.keychain-db"; then
+            security delete-keychain "$RUNNER_TEMP/fusioncross-signing.keychain-db"
+          fi
+          if test -f "$RUNNER_TEMP/fusioncross-signing.p12"; then
+            rm "$RUNNER_TEMP/fusioncross-signing.p12"
+          fi

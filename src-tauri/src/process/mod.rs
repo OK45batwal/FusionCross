@@ -5,6 +5,9 @@ use std::time::{Duration, SystemTime};
 use serde::Serialize;
 
 use crate::core::errors::FusionError;
+pub mod job;
+#[cfg(test)]
+mod smoke;
 
 #[allow(dead_code, unused)]
 pub struct SessionRecord {

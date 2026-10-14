@@ -118,12 +118,12 @@ Run real-time health checks on your Wine prefixes:
 
 ### System Requirements
 - **macOS 13.0 (Ventura)** or newer.
-- **Apple Silicon Mac** (M1, M2, M3, M4 series).
+- **Apple Silicon Mac**. Universal release builds also target Intel, but Intel runtime compatibility requires separate validation; see [release support](docs/RELEASE.md).
 - **Wine Runtime**: [Whisky-Wine](https://github.com/Whisky-App/Whisky) or `brew install --cask --no-quarantine wine-stable`.
 
 ### Installation
 
-1. Download the latest `FusionCross-2.0.0-arm64.dmg` from the [Releases](https://github.com/OK45batwal/FusionCross/releases) page.
+1. Select a published DMG suitable for your Mac from the [Releases](https://github.com/OK45batwal/FusionCross/releases) page. New releases remain drafts until signing and verification are complete.
 2. Open the DMG and drag **FusionCross.app** into your `/Applications` folder.
 3. Open FusionCross and create your first Bottle or install software directly from the **Game Catalog**.
 
@@ -132,7 +132,7 @@ Run real-time health checks on your Wine prefixes:
 ## Building from Source
 
 ### 1. Prerequisites
-Install Xcode Command Line Tools, Node.js (v20+), and Rust:
+Install Xcode Command Line Tools, Node.js 22.13+ (22 LTS) or 24+, and stable Rust:
 ```bash
 xcode-select --install
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -154,22 +154,24 @@ npm run tauri dev
 
 ### 4. Quality Checks & Tests
 ```bash
-# Backend unit tests (50 tests)
-cargo test --manifest-path src-tauri/Cargo.toml
+# Full automated quality gate (frontend, Rust, lint, types, production bundle)
+npm run verify
 
-# Formatting & Clippy linting
-cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
-cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+# WebKit integration tests with mocked desktop IPC
+npx playwright install webkit
+npm run test:e2e
 
-# Frontend ESLint & TypeScript verification
-npm run lint
-npx tsc --noEmit
+# Native startup smoke test with a disposable library (macOS only)
+npm run tauri build -- --debug --bundles app
+npm run test:desktop
 ```
 
 ### 5. Production Release Build
 ```bash
 npm run tauri build
 ```
+
+Distribution requires Developer ID signing and notarization. Follow the [release checklist](docs/RELEASE.md); a local debug build is not a signed release. See the [Mac test report](docs/MAC_TEST_REPORT.md) for verified results and remaining manual checks.
 
 ---
 

@@ -51,6 +51,46 @@ pub fn install_verbs(
     }
 }
 
+/// Best-effort dependencies using the selected Wine runtime, with cancellation.
+pub fn install_verbs_cancellable(
+    wine_binary: &str,
+    prefix: &Path,
+    verbs: &[String],
+    control: &crate::process::job::JobControl,
+) -> Result<(), FusionError> {
+    control.check()?;
+    if verbs.is_empty() {
+        return Ok(());
+    }
+    let available = Command::new("which")
+        .arg("winetricks")
+        .output()
+        .is_ok_and(|out| out.status.success());
+    if !available {
+        return Ok(());
+    } // Preserve best-effort dependency installation.
+    let mut command = Command::new("winetricks");
+    command
+        .env("WINE", wine_binary)
+        .env("WINEPREFIX", prefix)
+        .env("WINEDLLOVERRIDES", "mscoree,mshtml=")
+        .arg("-q")
+        .args(verbs);
+    if let Some(server) = Path::new(wine_binary)
+        .parent()
+        .map(|parent| parent.join("wineserver"))
+        .filter(|path| path.is_file())
+    {
+        command.env("WINESERVER", server);
+    }
+    let status = control.run(&mut command)?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(FusionError::DependencyMissing)
+    }
+}
+
 /// Kill all active Wine processes and the wineserver daemon for this bottle prefix.
 pub fn kill_wineserver(wine_binary: &str, prefix: &Path) -> Result<(), FusionError> {
     let wineserver_bin = Path::new(wine_binary)

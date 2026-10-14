@@ -12,7 +12,7 @@ import {
   probeRuntime,
   removeRuntime,
   downloadRuntime,
-  listJobs,
+  getRuntimes,
   Runtime,
   FusionErrorPayload,
 } from "../services/tauri";
@@ -32,56 +32,21 @@ export const RuntimeManagerView: React.FC<RuntimeManagerViewProps> = ({
   const [importPath, setImportPath] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [downloading, setDownloading] = useState<Record<string, boolean>>({});
-
+  const [catalog, setCatalog] = useState<Runtime[]>(runtimes);
   useEffect(() => {
-    let stopped = false;
-    const tick = async () => {
-      try {
-        const jobs = await listJobs();
-        for (const id of Object.keys(downloading)) {
-          const job = jobs.find((j) => j.id === id);
-          if (!job || job.status === "Done") {
-            if (!stopped) {
-              setDownloading((prev) => {
-                const next = { ...prev };
-                delete next[id];
-                return next;
-              });
-              setNotice(`Runtime ${job?.status === "Done" ? "installed" : "finished"}.`);
-              onRefreshState();
-            }
-          } else if (job.status === "Failed") {
-            if (!stopped) {
-              setDownloading((prev) => {
-                const next = { ...prev };
-                delete next[id];
-                return next;
-              });
-              setError(`Runtime download failed: ${job.message || "unknown error"}.`);
-            }
-          }
-        }
-      } catch {
-        // still polling; transient
-      }
-    };
-    const interval = setInterval(tick, 1500);
-    return () => {
-      stopped = true;
-      clearInterval(interval);
-    };
-  }, [downloading, onRefreshState]);
+    let disposed = false;
+    getRuntimes().then((items) => { if (!disposed) setCatalog(items); }).catch((cause) => {
+      if (!disposed) setError((cause as FusionErrorPayload).message || "Could not load runtime catalog.");
+    });
+    return () => { disposed = true; };
+  }, [runtimes]);
 
-  const handleDownload = async (r: Runtime) => {
+  const handleDownload = async (runtime: Runtime) => {
     setError(null);
-    setNotice(null);
     try {
-      const jobId = await downloadRuntime(r.id);
-      setDownloading((prev) => ({ ...prev, [jobId]: true }));
-    } catch (e) {
-      setError((e as FusionErrorPayload).message || "Runtime download failed.");
-    }
+      await downloadRuntime(runtime.id);
+      setNotice("Download started. Progress and cancellation are available under Background tasks.");
+    } catch (cause) { setError((cause as FusionErrorPayload).message || "Runtime download failed."); }
   };
 
   const handleProbe = async (name: string) => {
@@ -167,6 +132,7 @@ export const RuntimeManagerView: React.FC<RuntimeManagerViewProps> = ({
                   <div className="flex items-center justify-between">
                     <span className="font-mono text-[14px] font-bold text-graphite-100">{engine}</span>
                     <button
+                      aria-label={`Probe ${engine}`}
                       onClick={() => handleProbe(engine)}
                       className="p-1 rounded text-graphite-400 hover:text-graphite-100"
                     >
@@ -205,15 +171,15 @@ export const RuntimeManagerView: React.FC<RuntimeManagerViewProps> = ({
       {/* Installed Runtimes Table */}
       <div className="rounded-xl border border-graphite-600 bg-graphite-900 p-5 space-y-4">
         <h2 className="text-[12px] font-mono font-bold text-graphite-400 uppercase tracking-wider">
-          Managed Runtime Catalog ({runtimes.length})
+          Managed Runtime Catalog ({catalog.length})
         </h2>
 
         <div className="divide-y divide-graphite-700/60 rounded-lg border border-graphite-700/60 bg-graphite-950 overflow-hidden">
-          {runtimes.map((r) => (
+          {catalog.map((r) => (
             <div key={r.id} className="p-4 flex items-center justify-between font-mono text-[12px]">
               <div>
                 <span className="font-bold text-graphite-100">{r.name}</span>
-                <span className="text-graphite-400 ml-2">v{r.version || "9.0"}</span>
+                <span className="text-graphite-400 ml-2">v{r.version || "not probed"}</span>
                 <span className="text-[10px] ml-3 px-2 py-0.5 rounded bg-graphite-850 text-accent-400 border border-graphite-700">
                   {r.category}
                 </span>
@@ -222,13 +188,12 @@ export const RuntimeManagerView: React.FC<RuntimeManagerViewProps> = ({
 
               <div className="flex items-center gap-3">
                 <span className={r.downloaded ? "text-ok" : "text-warn"}>
-                  {r.downloaded ? "● Installed" : "○ Available"}
+                  {r.downloaded ? "● Installed" : r.download_available ? "○ Available" : "Import only — no verified download"}
                 </span>
 
-                {!r.downloaded && r.url && (
+                {!r.downloaded && r.download_available && (
                   <button
                     onClick={() => handleDownload(r)}
-                    disabled={Object.values(downloading).some(Boolean)}
                     className="p-1.5 rounded text-accent-400 hover:bg-accent-500/10 disabled:opacity-50"
                     title="Download & install runtime"
                   >
@@ -257,12 +222,13 @@ export const RuntimeManagerView: React.FC<RuntimeManagerViewProps> = ({
           <Upload className="w-4 h-4 text-accent-400" /> Import Custom Runtime Archive
         </h2>
         <p className="text-[12px] text-graphite-300">
-          Import a custom Wine build archive (<span className="font-mono text-graphite-200">.tar.xz</span> or <span className="font-mono text-graphite-200">.tar.gz</span>). FusionCross automatically verifies, unpacks, and registers it safely.
+          Import a custom Wine build archive (<span className="font-mono text-graphite-200">.tar.xz</span> or <span className="font-mono text-graphite-200">.tar.gz</span>). FusionCross checks the archive structure and runs the Wine binary to identify its version. Only import runtimes from a source you trust.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 font-mono text-[12px]">
           <input
             type="text"
+            aria-label="Runtime name"
             placeholder="Runtime Name (e.g. Wine-GE-8.26)"
             value={importName}
             onChange={(e) => setImportName(e.target.value)}
@@ -270,6 +236,7 @@ export const RuntimeManagerView: React.FC<RuntimeManagerViewProps> = ({
           />
           <input
             type="text"
+            aria-label="Runtime archive path"
             placeholder="Archive Path (e.g. /path/to/wine.tar.xz)"
             value={importPath}
             onChange={(e) => setImportPath(e.target.value)}

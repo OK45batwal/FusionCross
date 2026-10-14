@@ -4,6 +4,8 @@
 **Target Platform:** macOS 13+ (Ventura, Sonoma, Sequoia) on Apple Silicon (M1/M2/M3/M4) & Intel (x86_64)  
 **Core Technologies:** Tauri 2, Rust 1.80+, React 19, TypeScript, Wine / CrossOver Engine, Game Porting Toolkit (D3DMetal), DXVK, DXMT, MSync  
 
+This is a test specification, not a record of passed tests. The game/performance tables below are proposed targets, not verified compatibility guarantees. Current evidence and limitations are in [MAC_TEST_REPORT.md](MAC_TEST_REPORT.md).
+
 ---
 
 ## 1. Executive Summary & Test Strategy
@@ -60,7 +62,9 @@ This document defines the complete verification methodology for FusionCross:
 
 ### Reliability regression coverage
 
-Run `npm run verify` for lint, Rust formatting, strict Clippy, Rust tests, TypeScript checking, and the production frontend build. Run `npm run tauri build -- --debug --no-bundle` to check the desktop build.
+Run `npm run verify` for lint, frontend tests, Rust formatting, strict Clippy, Rust tests, TypeScript checking, and the production frontend build. Run `npm run test:e2e` after `npx playwright install webkit` for frontend flows with mocked IPC. Run `npm run tauri build -- --debug --bundles app` followed by `npm run test:desktop` to check native startup using a disposable library.
+
+The opt-in real Wine test initializes a disposable prefix and exercises Windows command execution, logs, and session tracking. Set `FUSIONCROSS_TEST_WINE` to the absolute path of a trusted installed Wine binary, then run `cargo test --manifest-path src-tauri/Cargo.toml native_wine_smoke -- --ignored --nocapture`. The test cleans up only its own prefix and wineserver. It does not validate game graphics or installer UI.
 
 The reliability suite covers state backup recovery and corrupt-file preservation, refusal to overwrite newer schemas, rollback of failed metadata writes, repeated app discovery without duplicates, clone path boundaries and Wine symlinks, backend input validation, concurrent launch exclusion, process exit tracking, bounded completed-job history, and snapshot validation before replacing a live prefix.
 
@@ -72,7 +76,7 @@ Manual checks still required before a release:
 - Launch and stop a real Wine application, restart FusionCross, and verify its session statistics persist.
 - Restore a snapshot in a disposable bottle and check application launch afterward. Restore requires the tracked apps in that bottle to be stopped.
 
-Background jobs report worker failures and retain up to 100 completed results for one hour. Installer/download cancellation and tracking Wine processes started outside the application remain follow-up work.
+Background jobs report worker failures and retain up to 100 completed results for one hour. Installer and runtime-download jobs expose cancellation while interruptible, then disable cancellation before committing results. Cancelling stops the supervised process group but does not roll back installed files or guarantee termination of detached Wine services. Tracking Wine processes started outside the application remains follow-up work.
 
 ### 3.1 State Persistence & Schema Migrations (`src-tauri/src/core/state.rs`)
 * **Test Objective:** Guarantee backward compatibility and non-destructive schema evolution as new Wine features are added.

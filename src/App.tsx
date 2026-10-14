@@ -1,31 +1,26 @@
-import { useEffect, useState, useCallback } from "react";
+import { lazy, Suspense, useEffect, useState, useCallback } from "react";
 import { Sidebar, ViewId } from "./components/Sidebar";
 import { CommandPalette } from "./components/CommandPalette";
-import { BottleWorkspaceView } from "./views/BottleWorkspaceView";
-import { ApplicationsView } from "./views/ApplicationsView";
-import { InstallerWizardView } from "./views/InstallerWizardView";
-import { CatalogView } from "./views/CatalogView";
-import { RuntimeManagerView } from "./views/RuntimeManagerView";
-import { CompatibilityView } from "./views/CompatibilityView";
-import { DiagnosticsView } from "./views/DiagnosticsView";
-import { SettingsView } from "./views/SettingsView";
+const BottleWorkspaceView = lazy(() => import("./views/BottleWorkspaceView").then((module) => ({ default: module.BottleWorkspaceView })));
+const ApplicationsView = lazy(() => import("./views/ApplicationsView").then((module) => ({ default: module.ApplicationsView })));
+const InstallerWizardView = lazy(() => import("./views/InstallerWizardView").then((module) => ({ default: module.InstallerWizardView })));
+const CatalogView = lazy(() => import("./views/CatalogView").then((module) => ({ default: module.CatalogView })));
+const RuntimeManagerView = lazy(() => import("./views/RuntimeManagerView").then((module) => ({ default: module.RuntimeManagerView })));
+const CompatibilityView = lazy(() => import("./views/CompatibilityView").then((module) => ({ default: module.CompatibilityView })));
+const DiagnosticsView = lazy(() => import("./views/DiagnosticsView").then((module) => ({ default: module.DiagnosticsView })));
+const SettingsView = lazy(() => import("./views/SettingsView").then((module) => ({ default: module.SettingsView })));
 import {
-  getSystemInfo,
-  getState,
-  getRecoveryNotice,
-  getTemplates,
-  createBottle,
   launchApplication,
   stopApplication,
-  listRunning,
   toggleFavorite,
-  AppState,
-  BottleTemplate,
-  RunningInfo,
-  SystemInfo,
   FusionErrorPayload,
 } from "./services/tauri";
-import { RefreshCw, X, FlaskConical } from "lucide-react";
+import { RefreshCw } from "lucide-react";
+import { useLibraryState } from "./hooks/useLibraryState";
+import { CreateBottleDialog } from "./components/CreateBottleDialog";
+import { ViewBoundary } from "./components/ViewBoundary";
+import { JobPanel } from "./components/JobPanel";
+import { errorMessage } from "./services/errors";
 import { GlobalDropZone } from "./components/GlobalDropZone";
 import { DroppedFileModal } from "./components/DroppedFileModal";
 import { ToastContainer, ToastItem } from "./components/Toast";
@@ -38,20 +33,11 @@ export function App() {
     return (saved as "dark" | "light") || "dark";
   });
 
-  const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
-  const [state, setState] = useState<AppState | null>(null);
-  const [templates, setTemplates] = useState<BottleTemplate[]>([]);
-  const [runningInfo, setRunningInfo] = useState<RunningInfo[]>([]);
+  const { state, systemInfo, templates, runningInfo, recoveryNotice, setRecoveryNotice,
+    error: syncError, isSyncing, refreshState, pollDynamicState } = useLibraryState();
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [recoveryNotice, setRecoveryNotice] = useState<string | null>(null);
-
-  // Create Bottle Modal state
   const [showCreateBottleModal, setShowCreateBottleModal] = useState(false);
-  const [newBottleName, setNewBottleName] = useState("");
-  const [selectedTemplate, setSelectedTemplate] = useState("gaming");
-  const [creatingBottle, setCreatingBottle] = useState(false);
 
   // Dropped file inspection state
   const [droppedFilePath, setDroppedFilePath] = useState<string | null>(null);
@@ -74,66 +60,6 @@ export function App() {
     localStorage.setItem("fusioncross-theme", theme);
   }, [theme]);
 
-  // Full state refresh (system info, templates, app state, running processes)
-  const refreshState = useCallback(async () => {
-    try {
-      const [sys, st, tmpl, run] = await Promise.all([
-        getSystemInfo().catch(() => null),
-        getState().catch(() => null),
-        getTemplates().catch(() => []),
-        listRunning().catch(() => []),
-      ]);
-      if (sys) setSystemInfo(sys);
-      if (st) {
-        setState(st);
-        setSelectedBottleId((prev) => {
-          if (!prev && st.bottles.length > 0) return st.bottles[0].id;
-          if (prev && !st.bottles.some((b) => b.id === prev)) {
-            return st.bottles.length > 0 ? st.bottles[0].id : null;
-          }
-          return prev;
-        });
-      }
-      if (tmpl) setTemplates(tmpl);
-      if (run) setRunningInfo(run);
-    } catch (e) {
-      addToast("error", (e as FusionErrorPayload).message || String(e), "Sync Failed");
-    }
-  }, [addToast]);
-
-  // Lightweight recurring poll (only dynamic app state & running process telemetry)
-  const pollDynamicState = useCallback(async () => {
-    try {
-      const [st, run] = await Promise.all([
-        getState().catch(() => null),
-        listRunning().catch(() => []),
-      ]);
-      if (st) {
-        setState(st);
-        setSelectedBottleId((prev) => {
-          if (!prev && st.bottles.length > 0) return st.bottles[0].id;
-          if (prev && !st.bottles.some((b) => b.id === prev)) {
-            return st.bottles.length > 0 ? st.bottles[0].id : null;
-          }
-          return prev;
-        });
-      }
-      if (run) setRunningInfo(run);
-    } catch {
-      // Quiet background polling
-    }
-  }, []);
-
-  useEffect(() => {
-    const init = async () => {
-      setRecoveryNotice(await getRecoveryNotice().catch(() => null));
-      await refreshState();
-    };
-    init();
-    const interval = setInterval(pollDynamicState, 3500);
-    return () => clearInterval(interval);
-  }, [refreshState, pollDynamicState]);
-
   // Global Hotkey ⌘ K listener for Command Palette
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -147,10 +73,12 @@ export function App() {
   }, []);
 
   const handleManualSync = async () => {
-    setIsSyncing(true);
-    await refreshState();
-    setIsSyncing(false);
-    addToast("success", "Application state synchronized successfully.", "Synced");
+    try {
+      await refreshState();
+      addToast("success", "Application state synchronized successfully.", "Synced");
+    } catch (cause) {
+      addToast("error", errorMessage(cause, "Synchronization failed."), "Sync Failed");
+    }
   };
 
   const handleLaunchApp = async (appId: string) => {
@@ -179,8 +107,8 @@ export function App() {
     try {
       await toggleFavorite(appId);
       await pollDynamicState();
-    } catch {
-      // silent
+    } catch (cause) {
+      addToast("error", errorMessage(cause, "Could not update favorite."));
     }
   };
 
@@ -193,56 +121,13 @@ export function App() {
     setCurrentView("bottle");
   };
 
-  const handleCreateBottle = async () => {
-    if (!newBottleName.trim()) return;
-    setCreatingBottle(true);
-    try {
-      const b = await createBottle(newBottleName.trim(), selectedTemplate);
-      setShowCreateBottleModal(false);
-      setNewBottleName("");
-      setSelectedBottleId(b.id);
-      setCurrentView("bottle");
-      addToast("success", `Bottle "${b.name}" created successfully.`, "Bottle Ready");
-      await refreshState();
-    } catch (e) {
-      addToast("error", (e as FusionErrorPayload).message || "Failed to create bottle.", "Creation Failed");
-    } finally {
-      setCreatingBottle(false);
-    }
-  };
-
   if (!state) {
-    return (
-      <div className="flex h-screen w-screen bg-(--bg-main) text-(--text-main) font-sans select-none overflow-hidden">
-        {/* Skeleton Sidebar */}
-        <div className="w-64 border-r border-(--border-color) bg-(--bg-surface) p-4 flex flex-col gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-7 h-7 rounded-lg bg-(--bg-elevated) animate-pulse" />
-            <div className="h-4 w-28 bg-(--bg-elevated) rounded animate-pulse" />
-          </div>
-          <div className="space-y-2 mt-4">
-            <div className="h-7 bg-(--bg-elevated) rounded-lg animate-pulse" />
-            <div className="h-7 bg-(--bg-elevated) rounded-lg animate-pulse" />
-            <div className="h-7 bg-(--bg-elevated) rounded-lg animate-pulse" />
-          </div>
-          <div className="mt-6 space-y-2">
-            <div className="h-3 w-16 bg-(--bg-elevated) rounded animate-pulse" />
-            <div className="h-7 bg-(--bg-elevated) rounded-lg animate-pulse" />
-            <div className="h-7 bg-(--bg-elevated) rounded-lg animate-pulse" />
-          </div>
-        </div>
-        {/* Skeleton Main Content */}
-        <div className="flex-1 flex flex-col p-6 space-y-6">
-          <div className="h-9 w-48 bg-(--bg-elevated) rounded animate-pulse" />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="h-32 bg-(--bg-elevated) rounded-xl animate-pulse" />
-            <div className="h-32 bg-(--bg-elevated) rounded-xl animate-pulse" />
-            <div className="h-32 bg-(--bg-elevated) rounded-xl animate-pulse" />
-          </div>
-          <div className="h-64 bg-(--bg-elevated) rounded-xl animate-pulse" />
-        </div>
+    return <main className="flex h-screen items-center justify-center bg-(--bg-main) text-(--text-main)">
+      <div className="space-y-3 p-6" role={syncError ? "alert" : "status"}>
+        <h1>{syncError ? "Your library could not load" : "Loading your library…"}</h1>
+        {syncError && <><p>{syncError}</p><button disabled={isSyncing} onClick={handleManualSync} className="underline">{isSyncing ? "Retrying…" : "Retry"}</button></>}
       </div>
-    );
+    </main>;
   }
 
   const selectedBottle =
@@ -259,7 +144,7 @@ export function App() {
         currentView={currentView}
         onNavigate={(view) => setCurrentView(view)}
         bottles={state?.bottles || []}
-        selectedBottleId={selectedBottleId}
+        selectedBottleId={selectedBottle?.id || null}
         onSelectBottle={handleSelectBottle}
         onCreateBottle={() => setShowCreateBottleModal(true)}
         onOpenCommandPalette={() => setCommandPaletteOpen(true)}
@@ -272,6 +157,7 @@ export function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col overflow-hidden bg-(--bg-main)">
+        {syncError && <div role="alert" className="border-b border-(--border-color) p-3 text-sm">Updates are unavailable. Showing the last loaded library. {syncError}</div>}
         {recoveryNotice && (
           <div role="alert" className="px-6 py-3 text-sm border-b border-(--border-color) bg-(--bg-surface)">
             <p>{recoveryNotice}</p>
@@ -279,6 +165,7 @@ export function App() {
           </div>
         )}
         {/* Top Header Bar */}
+        <JobPanel onCompleted={refreshState} />
         <header className="h-11 shrink-0 px-6 flex items-center justify-between border-b border-(--border-color) bg-(--bg-glass) backdrop-blur-md text-[12px] font-sans">
           <div className="flex items-center gap-2 text-(--text-muted)">
             <span className="font-semibold text-(--text-main)">
@@ -321,6 +208,7 @@ export function App() {
 
         {/* Main Content View Switcher */}
         <div className="flex-1 overflow-hidden flex flex-col">
+          <ViewBoundary key={currentView}><Suspense fallback={<p role="status" className="p-6">Loading screen…</p>}>
           {currentView === "bottle" && selectedBottle && (
             <BottleWorkspaceView
               bottle={selectedBottle}
@@ -411,6 +299,7 @@ export function App() {
               onRefreshState={refreshState}
             />
           )}
+          </Suspense></ViewBoundary>
         </div>
       </main>
 
@@ -426,85 +315,13 @@ export function App() {
         onLaunchApp={handleLaunchApp}
       />
 
-      {/* Global Modal: Create New Bottle */}
-      {showCreateBottleModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-xl bg-(--bg-surface) border border-(--border-color) p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FlaskConical className="w-4 h-4 text-(--accent-primary)" />
-                <h3 className="text-[14px] font-semibold text-(--text-main)">
-                  Create New Bottle Environment
-                </h3>
-              </div>
-              <button
-                onClick={() => setShowCreateBottleModal(false)}
-                className="text-(--text-muted) hover:text-(--text-main) cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="text-[11px] font-mono text-(--text-muted) block mb-1">
-                  Bottle Name
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Steam, Cyberpunk 2077, Office 365"
-                  value={newBottleName}
-                  onChange={(e) => setNewBottleName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-[12px] text-(--text-main) focus:outline-none focus:border-(--accent-primary)"
-                />
-              </div>
-
-              <div>
-                <label className="text-[11px] font-mono text-(--text-muted) block mb-1">
-                  Environment Template
-                </label>
-                <div className="space-y-1.5">
-                  {[
-                    { id: "gaming", label: "Gaming (DirectX 12 / D3DMetal + MSync)", desc: "High-performance gaming with Apple GPTK & Mach fast sync" },
-                    { id: "office", label: "Office & Productivity", desc: "Windows 10 with CoreFonts and MSXML" },
-                    { id: "adobe", label: "Creative & Adobe Suite", desc: "Configured for creative software suites" },
-                    { id: "development", label: "Development & Engineering", desc: "Visual C++ runtimes and developer utilities" },
-                  ].map((tmpl) => (
-                    <div
-                      key={tmpl.id}
-                      onClick={() => setSelectedTemplate(tmpl.id)}
-                      className={`p-2.5 rounded-lg border cursor-pointer transition-colors ${
-                        selectedTemplate === tmpl.id
-                          ? "bg-(--accent-primary)/10 border-(--accent-primary) text-(--text-main)"
-                          : "bg-(--bg-elevated) border-(--border-color) hover:border-(--border-hover) text-(--text-secondary)"
-                      }`}
-                    >
-                      <p className="text-[12px] font-medium">{tmpl.label}</p>
-                      <p className="text-[10px] text-(--text-muted) mt-0.5">{tmpl.desc}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                onClick={() => setShowCreateBottleModal(false)}
-                className="px-3 py-1.5 rounded-lg border border-(--border-color) text-[12px] font-medium text-(--text-secondary) hover:bg-(--bg-elevated) cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreateBottle}
-                disabled={!newBottleName.trim() || creatingBottle}
-                className="px-4 py-1.5 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) disabled:opacity-50 text-white text-[12px] font-medium cursor-pointer"
-              >
-                {creatingBottle ? "Creating..." : "Create Bottle"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {showCreateBottleModal && <CreateBottleDialog templates={templates} onClose={() => setShowCreateBottleModal(false)} onCreated={(bottle) => {
+        setShowCreateBottleModal(false);
+        setSelectedBottleId(bottle.id);
+        setCurrentView("bottle");
+        addToast("success", `Bottle "${bottle.name}" created; initialization is running in the background.`);
+        void refreshState().catch((cause) => addToast("error", errorMessage(cause, "Could not refresh your library.")));
+      }} />}
 
       {/* Global Drag & Drop Window-wide Listener & Overlay */}
       <GlobalDropZone

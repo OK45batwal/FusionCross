@@ -41,11 +41,13 @@ export function GlobalDropZone({
   // 1. Tauri Native Window Drag-Drop Listener (macOS Finder native paths)
   useEffect(() => {
     let unlisten: (() => void) | undefined;
+    let disposed = false;
 
     const setupTauriDragDrop = async () => {
       try {
         const appWindow = getCurrentWindow();
         unlisten = await appWindow.onDragDropEvent((event) => {
+          if (disposed) return;
           if (event.payload.type === "enter") {
             setIsDragging(true);
             if (event.payload.paths && event.payload.paths.length > 0) {
@@ -53,7 +55,7 @@ export function GlobalDropZone({
               setHoveredFileNames(names);
             }
           } else if (event.payload.type === "over") {
-            if (!isDragging) setIsDragging(true);
+            setIsDragging(true);
           } else if (event.payload.type === "drop") {
             handleDropPaths(event.payload.paths);
           } else if (event.payload.type === "leave") {
@@ -61,6 +63,7 @@ export function GlobalDropZone({
             setHoveredFileNames([]);
           }
         });
+        if (disposed) unlisten();
       } catch (err) {
         console.warn("Tauri onDragDropEvent listener not available in this environment:", err);
       }
@@ -69,9 +72,10 @@ export function GlobalDropZone({
     setupTauriDragDrop();
 
     return () => {
+      disposed = true;
       if (unlisten) unlisten();
     };
-  }, [handleDropPaths, isDragging]);
+  }, [handleDropPaths]);
 
   // 2. DOM Fallback Drag-Drop Listeners
   useEffect(() => {

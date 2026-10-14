@@ -73,6 +73,7 @@ pub fn run() {
             commands::unregister_application,
             commands::run_installer,
             commands::list_jobs,
+            commands::cancel_job,
             commands::launch_application,
             commands::stop_application,
             commands::list_running,
