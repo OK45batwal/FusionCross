@@ -21,7 +21,12 @@ pub fn analyze_installer(path: &Path) -> Result<InstallerAnalysis, FusionError> 
     if !meta.is_file() {
         return Err(FusionError::InvalidExecutable);
     }
-    let data = std::fs::read(path).map_err(|_| FusionError::InvalidExecutable)?;
+    // Only the PE header is needed; installers are routinely several GB.
+    let mut data = vec![0u8; 4096];
+    let mut file = std::fs::File::open(path).map_err(|_| FusionError::InvalidExecutable)?;
+    let read =
+        std::io::Read::read(&mut file, &mut data).map_err(|_| FusionError::InvalidExecutable)?;
+    data.truncate(read);
     let ext = path
         .extension()
         .and_then(|e| e.to_str())

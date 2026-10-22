@@ -18,6 +18,7 @@ pub fn create_bottle(
     app: AppHandle,
     name: String,
     template_type: String,
+    initialize: Option<bool>,
 ) -> Result<Bottle, FusionError> {
     super::validation::name(&name)?;
     let template = templates::bottle_template(&template_type)?;
@@ -65,7 +66,11 @@ pub fn create_bottle(
         })?;
     }
 
-    // Initialize the prefix as a background job so the UI stays fast.
+    // Initialize the prefix as a background job so the UI stays fast. Callers
+    // that install immediately pass `false` and initialize synchronously.
+    if !initialize.unwrap_or(true) {
+        return Ok(bottle);
+    }
     let jobs = app.state::<Jobs>();
     let job = jobs.begin("Initializing bottle prefix".to_string());
     let job_id = job.clone();
@@ -188,8 +193,10 @@ pub fn initialize_bottle_prefix(app: &AppHandle, bottle_id: &str) -> Result<Stri
     let binary = wine_binary_for(app, &bottle.runtime)?;
     let prefix = Path::new(&bottle.path);
     crate::wine::prefix::init_prefix(&binary, prefix)?;
-    deploy_graphics_libraries(app, prefix);
-    crate::wine::prefix::ensure_graphics_registry(prefix, &bottle.graphics).ok();
+    if !super::settings_bool(app, "safe_mode") {
+        deploy_graphics_libraries(app, prefix);
+        crate::wine::prefix::ensure_graphics_registry(prefix, &bottle.graphics).ok();
+    }
     crate::wine::prefix::install_verbs(&binary, prefix, &bottle.dependencies)?;
     Ok("Prefix ready".to_string())
 }
@@ -345,10 +352,7 @@ pub fn open_bottle_c_drive(app: AppHandle, bottle_id: String) -> Result<(), Fusi
     })?;
     let drive_c = Path::new(&bottle.path).join("drive_c");
     std::fs::create_dir_all(&drive_c).map_err(|_| FusionError::PermissionDenied)?;
-    std::process::Command::new("open")
-        .arg(&drive_c)
-        .spawn()
-        .map_err(|_| FusionError::LaunchFailed)?;
+    crate::process::spawn_detached(std::process::Command::new("open").arg(&drive_c))?;
     Ok(())
 }
 
@@ -364,11 +368,9 @@ pub fn reveal_application_in_finder(app: AppHandle, app_id: String) -> Result<()
     })?;
     let executable = Path::new(&application.executable_path);
     if executable.is_file() {
-        std::process::Command::new("open")
-            .arg("-R")
-            .arg(executable)
-            .spawn()
-            .map_err(|_| FusionError::LaunchFailed)?;
+        crate::process::spawn_detached(
+            std::process::Command::new("open").arg("-R").arg(executable),
+        )?;
         Ok(())
     } else {
         Err(FusionError::InvalidExecutable)
@@ -400,10 +402,12 @@ pub fn run_executable_in_bottle(
     if !crate::wine::prefix::prefix_prepared(&prefix) {
         crate::wine::prefix::init_prefix(&binary, &prefix)?;
     }
-    deploy_graphics_libraries(&app, &prefix);
-    crate::wine::prefix::ensure_graphics_registry(&prefix, &bottle.graphics).ok();
-
     let safe = settings_bool(&app, "safe_mode");
+    if !safe {
+        deploy_graphics_libraries(&app, &prefix);
+        crate::wine::prefix::ensure_graphics_registry(&prefix, &bottle.graphics).ok();
+    }
+
     let (override_env, dll_overrides) = build_wine_execution_context(&binary, &bottle, safe);
 
     let mut cmd = std::process::Command::new(&binary);
@@ -416,7 +420,7 @@ pub fn run_executable_in_bottle(
     for arg in args {
         cmd.arg(arg);
     }
-    cmd.spawn().map_err(|_| FusionError::LaunchFailed)?;
+    crate::process::spawn_detached(&mut cmd)?;
     Ok(())
 }
 

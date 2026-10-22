@@ -124,9 +124,6 @@ pub fn export_app_bundle(app: AppHandle, app_id: String) -> Result<String, Fusio
 pub fn open_logs_directory(app: AppHandle) -> Result<(), FusionError> {
     let d = dirs(&app);
     d.ensure()?;
-    std::process::Command::new("open")
-        .arg(&d.logs)
-        .spawn()
-        .map_err(|_| FusionError::LaunchFailed)?;
+    crate::process::spawn_detached(std::process::Command::new("open").arg(&d.logs))?;
     Ok(())
 }

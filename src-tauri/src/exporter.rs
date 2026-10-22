@@ -53,7 +53,7 @@ pub fn create_mac_app_bundle(
         r#"#!/bin/bash
 # FusionCross Native macOS Application Launcher
 APP_ID="{}"
-open -a FusionCross --args --launch "$APP_ID"
+open -n -a FusionCross --args --launch "$APP_ID"
 "#,
         app_id
     );

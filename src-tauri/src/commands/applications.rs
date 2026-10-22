@@ -61,10 +61,12 @@ pub fn launch_application(app: AppHandle, app_id: String) -> Result<RunningInfo,
     if !crate::wine::prefix::prefix_prepared(&prefix) {
         crate::wine::prefix::init_prefix(&binary, &prefix)?;
     }
-    deploy_graphics_libraries(&app, &prefix);
-    crate::wine::prefix::ensure_graphics_registry(&prefix, &bottle.graphics).ok();
-
     let safe = settings_bool(&app, "safe_mode");
+    if !safe {
+        deploy_graphics_libraries(&app, &prefix);
+        crate::wine::prefix::ensure_graphics_registry(&prefix, &bottle.graphics).ok();
+    }
+
     let (mut override_env, dll_overrides) = build_wine_execution_context(&binary, &bottle, safe);
 
     // Detect launch arguments: Unreal Engine games (like Raji) benefit from -dx11 to force D3D11 RHI
@@ -116,13 +118,12 @@ pub fn launch_application(app: AppHandle, app_id: String) -> Result<RunningInfo,
         }
 
         // Clean stale htmlcache lockfiles that cause CEF IPC deadlocks and hangs
-        for user in &["omkar", "steam", "default"] {
-            let lf = prefix.join(format!(
-                "drive_c/users/{}/AppData/Local/Steam/htmlcache/lockfile",
-                user
-            ));
-            if lf.exists() {
-                let _ = std::fs::remove_file(lf);
+        if let Ok(users) = std::fs::read_dir(prefix.join("drive_c").join("users")) {
+            for user in users.flatten() {
+                let lockfile = user.path().join("AppData/Local/Steam/htmlcache/lockfile");
+                if lockfile.is_file() {
+                    let _ = std::fs::remove_file(lockfile);
+                }
             }
         }
 
@@ -377,19 +378,30 @@ pub fn list_application_logs(
 #[allow(dead_code)]
 pub fn read_log_file(app: AppHandle, log_id: String) -> Result<String, FusionError> {
     let path = resolve_log_file(&dirs(&app).logs, &log_id)?;
-    let metadata = std::fs::metadata(&path).map_err(|_| FusionError::Unsupported)?;
-    let content = if metadata.len() > 200_000 {
-        use std::io::{Read, Seek, SeekFrom};
-        let mut f = std::fs::File::open(path).map_err(|_| FusionError::Unsupported)?;
-        f.seek(SeekFrom::End(-200_000))
-            .map_err(|_| FusionError::Unsupported)?;
-        let mut buffer = String::new();
-        f.read_to_string(&mut buffer).unwrap_or_default();
-        format!("... [earlier output truncated] ...\n{}", buffer)
-    } else {
-        std::fs::read_to_string(path).unwrap_or_default()
-    };
-    Ok(content)
+    read_log_tail(&path, 200_000)
+}
+
+/// Last `limit` bytes of a log. Decoded lossily: cutting on a byte boundary
+/// can split a multi-byte character, which must not blank the whole tail.
+fn read_log_tail(path: &Path, limit: u64) -> Result<String, FusionError> {
+    let metadata = std::fs::metadata(path).map_err(|_| FusionError::Unsupported)?;
+    if metadata.len() <= limit {
+        return Ok(String::from_utf8_lossy(
+            &std::fs::read(path).map_err(|_| FusionError::Unsupported)?,
+        )
+        .into_owned());
+    }
+    use std::io::{Read, Seek, SeekFrom};
+    let mut file = std::fs::File::open(path).map_err(|_| FusionError::Unsupported)?;
+    file.seek(SeekFrom::End(-(limit as i64)))
+        .map_err(|_| FusionError::Unsupported)?;
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer)
+        .map_err(|_| FusionError::Unsupported)?;
+    Ok(format!(
+        "... [earlier output truncated] ...\n{}",
+        String::from_utf8_lossy(&buffer)
+    ))
 }
 
 fn resolve_log_file(logs_dir: &Path, log_id: &str) -> Result<std::path::PathBuf, FusionError> {
@@ -414,5 +426,18 @@ mod tests {
         assert!(resolve_log_file(&logs, "../state.json").is_err());
         assert!(resolve_log_file(&logs, "/etc/passwd").is_err());
         std::fs::remove_dir_all(logs).ok();
+    }
+
+    #[test]
+    fn log_tail_survives_a_utf8_boundary_split() {
+        let path = std::env::temp_dir().join(format!("fusioncross_tail_{}.log", new_id()));
+        let mut content = String::from("é").repeat(150_000);
+        content.push_str("LATEST LINE");
+        std::fs::write(&path, &content).unwrap();
+
+        let tail = read_log_tail(&path, 200_000).unwrap();
+        assert!(tail.contains("LATEST LINE"));
+        assert!(tail.starts_with("... [earlier output truncated]"));
+        std::fs::remove_file(path).ok();
     }
 }

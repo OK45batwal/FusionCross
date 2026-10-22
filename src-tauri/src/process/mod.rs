@@ -25,6 +25,17 @@ pub struct SessionRecord {
     pub log_path: Option<String>,
 }
 
+/// Spawn a short-lived helper (`open`, `winecfg`, a tool) and reap it on a
+/// background thread so finished children never linger as zombies.
+pub fn spawn_detached(command: &mut std::process::Command) -> Result<u32, FusionError> {
+    let mut child = command.spawn().map_err(|_| FusionError::LaunchFailed)?;
+    let pid = child.id();
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(pid)
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct RunningInfo {
     pub app_id: String,

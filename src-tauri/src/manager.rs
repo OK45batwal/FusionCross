@@ -20,7 +20,12 @@ fn app_data_dir(app: &AppHandle) -> Option<PathBuf> {
 }
 
 pub fn dirs(app: &AppHandle) -> Dirs {
-    let base = app_data_dir(app).unwrap_or_else(|| PathBuf::from("/tmp/fusioncross"));
+    // Fall back to the per-user Application Support path, never a shared /tmp.
+    let fallback = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir)
+        .join("Library/Application Support/FusionCross");
+    let base = app_data_dir(app).unwrap_or(fallback);
     let home = std::env::var("HOME").unwrap_or_default();
     let legacy_libraries =
         PathBuf::from(&home).join("Library/Application Support/FusionCross/libraries");
@@ -102,13 +107,7 @@ impl FusionState {
                                 .iter()
                                 .any(|b| b.id == id || b.path == path.to_string_lossy())
                         {
-                            let name = if id == "bottle-2ff1dd5a" {
-                                "Steam".to_string()
-                            } else if id == "bottle-61d41d23" {
-                                "Steam Gaming".to_string()
-                            } else {
-                                format!("Bottle {}", id.trim_start_matches("bottle-"))
-                            };
+                            let name = format!("Bottle {}", id.trim_start_matches("bottle-"));
                             state.bottles.push(crate::core::state::Bottle {
                                 id: id.clone(),
                                 name,
@@ -133,35 +132,7 @@ impl FusionState {
             }
         }
 
-        // Auto-scan each bottle for installed executables into state.applications
-        for bottle in state.bottles.clone() {
-            let found = crate::wine::scanner::scan_prefix(std::path::Path::new(&bottle.path));
-            crate::commands::installers::register_discovered(
-                &mut state,
-                &bottle.id,
-                std::path::Path::new(&bottle.path),
-                &found,
-            );
-        }
-
-        // Clean up bogus applications (such as symlinks escaping to dosdevices/z:,
-        // or helper/installer/uninstaller binaries that should not appear on the user's shelf)
-        state.applications.retain(|app| {
-            let p = std::path::Path::new(&app.executable_path);
-            !app.executable_path.contains("dosdevices/z:")
-                && !app.executable_path.contains("/opt/homebrew/")
-                && !app.executable_path.contains("/site-packages/")
-                && !crate::wine::scanner::is_ignored_exe(p)
-        });
-
-        // Ensure all valid applications have icons extracted
-        for app_entry in &mut state.applications {
-            if app_entry.icon_data.is_none() {
-                app_entry.icon_data = crate::wine::icon::extract_icon_data_url(
-                    std::path::Path::new(&app_entry.executable_path),
-                );
-            }
-        }
+        sanitize_applications(&mut state);
 
         if state != loaded || !d.state.exists() {
             crate::core::storage::save(&d.state, &state)?;
@@ -194,6 +165,49 @@ impl FusionState {
         *guard = next;
         Ok(result)
     }
+}
+
+/// Drop entries that point outside the bottle or at helper binaries.
+fn sanitize_applications(state: &mut AppState) {
+    state.applications.retain(|app| {
+        let path = std::path::Path::new(&app.executable_path);
+        !app.executable_path.contains("dosdevices/z:")
+            && !app.executable_path.contains("/opt/homebrew/")
+            && !app.executable_path.contains("/site-packages/")
+            && !crate::wine::scanner::is_ignored_exe(path)
+    });
+}
+
+/// Index every bottle once, off the UI thread. Startup no longer blocks on
+/// walking prefixes and extracting icons.
+pub fn scan_and_index(app: &AppHandle) {
+    let st = app.state::<FusionState>();
+    let bottles = match st.with_state(|s| Ok(s.bottles.clone())) {
+        Ok(bottles) => bottles,
+        Err(_) => return,
+    };
+    let scanned: Vec<_> = bottles
+        .into_iter()
+        .map(|bottle| {
+            let prefix = PathBuf::from(&bottle.path);
+            let found = crate::wine::scanner::scan_prefix(&prefix);
+            (bottle.id, prefix, found)
+        })
+        .collect();
+    let _ = st.update(|state| {
+        for (id, prefix, found) in &scanned {
+            crate::commands::installers::register_discovered(state, id, prefix, found);
+        }
+        sanitize_applications(state);
+        for application in &mut state.applications {
+            if application.icon_data.is_none() {
+                application.icon_data = crate::wine::icon::extract_icon_data_url(
+                    std::path::Path::new(&application.executable_path),
+                );
+            }
+        }
+        Ok(())
+    });
 }
 
 /// Always put a background job into a terminal state when its worker panics

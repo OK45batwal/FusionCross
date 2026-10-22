@@ -32,6 +32,19 @@ fn record_session(app: &tauri::AppHandle, rec: process::SessionRecord) {
         .unwrap_or_else(|error| eprintln!("Could not save session statistics: {error}"));
 }
 
+/// `--launch <app-id>` as passed by an exported bundle's launcher.
+pub fn launch_target(mut args: impl Iterator<Item = String>) -> Option<String> {
+    while let Some(arg) = args.next() {
+        if arg == "--launch" {
+            return args.next();
+        }
+        if let Some(value) = arg.strip_prefix("--launch=") {
+            return Some(value.to_string());
+        }
+    }
+    None
+}
+
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
@@ -44,6 +57,19 @@ pub fn run() {
                 },
             )));
             app.manage(manager::Jobs(Default::default()));
+
+            let scanner = app.handle().clone();
+            std::thread::spawn(move || manager::scan_and_index(&scanner));
+
+            if let Some(app_id) = launch_target(std::env::args().skip(1)) {
+                match commands::launch_application(app.handle().clone(), app_id) {
+                    Ok(_) => {
+                        app.handle().exit(0);
+                        return Ok(());
+                    }
+                    Err(error) => eprintln!("Could not launch exported application: {error}"),
+                }
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -100,4 +126,22 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running FusionCross");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::launch_target;
+
+    #[test]
+    fn exported_launcher_argument_is_parsed() {
+        assert_eq!(
+            launch_target(["--launch".to_string(), "app-1".to_string()].into_iter()),
+            Some("app-1".to_string())
+        );
+        assert_eq!(
+            launch_target(["--launch=app-2".to_string()].into_iter()),
+            Some("app-2".to_string())
+        );
+        assert_eq!(launch_target(["--other".to_string()].into_iter()), None);
+    }
 }

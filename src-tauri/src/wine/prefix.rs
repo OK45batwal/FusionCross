@@ -131,8 +131,7 @@ pub fn launch_wine_tool(wine_binary: &str, prefix: &Path, tool: &str) -> Result<
     cmd.stdout(std::process::Stdio::null());
     cmd.stderr(std::process::Stdio::null());
 
-    let child = cmd.spawn().map_err(|_| FusionError::LaunchFailed)?;
-    Ok(child.id())
+    crate::process::spawn_detached(&mut cmd)
 }
 
 /// Ensure Direct3D settings and DLL overrides exist in prefix user.reg for modern gaming (DirectX 10/11/12).

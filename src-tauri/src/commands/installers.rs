@@ -120,8 +120,11 @@ pub fn install_job(
             return Err(FusionError::InstallationFailed);
         }
     }
-    super::bottles::deploy_graphics_libraries(app, prefix);
-    crate::wine::prefix::ensure_graphics_registry(prefix, &bottle.graphics).ok();
+    let safe = super::settings_bool(app, "safe_mode");
+    if !safe {
+        super::bottles::deploy_graphics_libraries(app, prefix);
+        crate::wine::prefix::ensure_graphics_registry(prefix, &bottle.graphics).ok();
+    }
     let mut dependencies = bottle.dependencies.clone();
     for dependency in extra_dependencies {
         if !dependencies.contains(dependency) {
@@ -136,14 +139,14 @@ pub fn install_job(
     let target = target_dir.join(file_name);
     std::fs::copy(installer_path, &target).map_err(|_| FusionError::InvalidExecutable)?;
 
-    let (override_env, dll_overrides) = build_wine_execution_context(&binary, &bottle, false);
+    let (override_env, dll_overrides) = build_wine_execution_context(&binary, &bottle, safe);
     let mut cmd = std::process::Command::new(&binary);
     cmd.env("WINEPREFIX", prefix);
     cmd.env("WINEDLLOVERRIDES", &dll_overrides);
     for (k, v) in override_env {
         cmd.env(k, v);
     }
-    let status = control.run(cmd.arg(&target))?;
+    let status = control.run(installer_command(&mut cmd, &target))?;
     if !status.success() {
         return Err(FusionError::InstallationFailed);
     }
@@ -155,6 +158,22 @@ pub fn install_job(
     Ok(format!(
         "Installed. Discovered {registered} application(s)."
     ))
+}
+
+/// `.msi` packages are databases, not executables — Wine runs them through
+/// `msiexec`. Everything else is handed to Wine directly.
+pub(crate) fn installer_command<'a>(
+    cmd: &'a mut std::process::Command,
+    target: &Path,
+) -> &'a mut std::process::Command {
+    if target
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("msi"))
+    {
+        cmd.args(["msiexec", "/i"]);
+    }
+    cmd.arg(target)
 }
 
 pub(crate) fn register_discovered(
@@ -206,6 +225,23 @@ pub fn cancel_job(app: AppHandle, job_id: String) -> Result<(), FusionError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn msi_packages_are_opened_through_msiexec() {
+        let mut exe = std::process::Command::new("wine");
+        let args: Vec<_> = installer_command(&mut exe, Path::new("/tmp/setup.exe"))
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(args, ["/tmp/setup.exe"]);
+
+        let mut msi = std::process::Command::new("wine");
+        let args: Vec<_> = installer_command(&mut msi, Path::new("/tmp/setup.MSI"))
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(args, ["msiexec", "/i", "/tmp/setup.MSI"]);
+    }
 
     #[test]
     fn repeated_discovery_preserves_metadata_and_distinct_same_named_apps() {

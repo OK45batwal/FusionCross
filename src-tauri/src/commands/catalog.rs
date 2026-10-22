@@ -59,7 +59,11 @@ pub fn install_catalog_game(
                                 handle.clone(),
                                 format!("{} Bottle", item.title),
                                 "gaming".into(),
+                                Some(false),
                             )?;
+                            // Initialize here so the install owns the prefix;
+                            // one `wineboot` must never race another.
+                            super::bottles::initialize_bottle_prefix(&handle, &b.id)?;
                             b.id
                         }
                     }
@@ -71,40 +75,34 @@ pub fn install_catalog_game(
             let dl_dir = crate::manager::dirs(&handle).downloads;
             std::fs::create_dir_all(&dl_dir).map_err(|_| FusionError::PermissionDenied)?;
 
-            let filename = format!("{}_installer.exe", item.id);
-            let local_installer = dl_dir.join(format!("{job_id}.exe"));
+            let filename = download_name(item.id, installer_url);
+            let local_installer = dl_dir.join(format!("{job_id}-{filename}"));
 
-            if !local_installer.exists()
-                || std::fs::metadata(&local_installer)
-                    .map(|m| m.len() < 50_000)
-                    .unwrap_or(true)
-            {
-                let curl_status = control.run(
-                    std::process::Command::new("curl")
-                        .args([
-                            "-fL",
-                            "--proto",
-                            "=https",
-                            "--proto-redir",
-                            "=https",
-                            "--max-time",
-                            "600",
-                            "-o",
-                        ])
-                        .arg(&local_installer)
-                        .arg(installer_url),
-                );
-                let curl_status = match curl_status {
-                    Ok(status) => status,
-                    Err(error) => {
-                        let _ = std::fs::remove_file(&local_installer);
-                        return Err(error);
-                    }
-                };
-                if !curl_status.success() {
+            let curl_status = control.run(
+                std::process::Command::new("curl")
+                    .args([
+                        "-fL",
+                        "--proto",
+                        "=https",
+                        "--proto-redir",
+                        "=https",
+                        "--max-time",
+                        "600",
+                        "-o",
+                    ])
+                    .arg(&local_installer)
+                    .arg(installer_url),
+            );
+            let curl_status = match curl_status {
+                Ok(status) => status,
+                Err(error) => {
                     let _ = std::fs::remove_file(&local_installer);
-                    return Err(FusionError::InstallationFailed);
+                    return Err(error);
                 }
+            };
+            if !curl_status.success() {
+                let _ = std::fs::remove_file(&local_installer);
+                return Err(FusionError::InstallationFailed);
             }
 
             // Initialize the prefix before installing recipe dependencies and the app.
@@ -128,4 +126,49 @@ pub fn install_catalog_game(
     });
 
     Ok(job)
+}
+
+/// Catalogue installers keep their real name so Wine sees the right extension
+/// (`.msi` installers need `msiexec`).
+fn download_name(catalog_id: &str, url: &str) -> String {
+    let last = url
+        .split(['?', '#'])
+        .next()
+        .unwrap_or(url)
+        .rsplit('/')
+        .next()
+        .unwrap_or("");
+    let lower = last.to_ascii_lowercase();
+    if (lower.ends_with(".exe") || lower.ends_with(".msi"))
+        && !last.contains(['/', '\\'])
+        && !last.is_empty()
+    {
+        last.to_string()
+    } else {
+        format!("{catalog_id}_installer.exe")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::download_name;
+
+    #[test]
+    fn keeps_installer_extension_from_url() {
+        assert_eq!(
+            download_name(
+                "fortnite",
+                "https://cdn.example.com/FortniteSetup.msi?token=1"
+            ),
+            "FortniteSetup.msi"
+        );
+        assert_eq!(
+            download_name("epic", "https://cdn.example.com/EpicInstaller.exe"),
+            "EpicInstaller.exe"
+        );
+        assert_eq!(
+            download_name("weird", "https://cdn.example.com/download"),
+            "weird_installer.exe"
+        );
+    }
 }
