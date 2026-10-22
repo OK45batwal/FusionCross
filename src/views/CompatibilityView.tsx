@@ -52,7 +52,7 @@ export const CompatibilityView: React.FC = () => {
             <Cpu className="w-5 h-5 text-(--accent-primary)" />
             Compatibility Engine & Recipes
           </h1>
-          <p className="text-[12px] text-(--text-secondary) mt-1">
+          <p className="text-[13px] text-(--text-secondary) mt-1">
             Automated translation recipes matching Windows games & software to optimal Apple Silicon D3DMetal (GPTK), DXVK, and MSync settings.
           </p>
         </div>
@@ -60,7 +60,7 @@ export const CompatibilityView: React.FC = () => {
 
       {/* Interactive Recommendation Evaluator */}
       <div className="rounded-xl border border-(--border-color) bg-(--bg-surface) p-5 space-y-4 shadow-xs">
-        <h2 className="text-[12px] font-mono font-bold text-(--text-muted) uppercase tracking-wider flex items-center gap-2">
+        <h2 className="text-[13px] font-bold text-(--text-muted) uppercase tracking-wider flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-(--accent-primary)" />
           Test Any Windows Game or Executable
         </h2>
@@ -74,25 +74,25 @@ export const CompatibilityView: React.FC = () => {
               value={testAppName}
               onChange={(e) => setTestAppName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleTestRecommendation()}
-              className="w-full pl-9 pr-3 py-2 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-[12px] font-sans text-(--text-main) placeholder-(--text-muted) focus:outline-none focus:border-(--accent-primary)"
+              className="w-full pl-9 pr-3 py-2 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-[13px] font-sans text-(--text-main) placeholder-(--text-muted) focus:outline-none focus:border-(--accent-primary)"
             />
           </div>
           <button
             onClick={handleTestRecommendation}
-            className="px-4 py-2 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white font-medium text-[12px] shadow-xs cursor-pointer transition-colors"
+            className="px-4 py-2 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white font-medium text-[13px] shadow-xs cursor-pointer transition-colors"
           >
             Evaluate
           </button>
         </div>
 
         {testedRecommendation && (
-          <div className="rounded-xl bg-(--bg-elevated) p-4.5 border border-(--border-color) space-y-3 animate-fade-in">
+          <div className="rounded-xl bg-(--bg-elevated) p-4.5 border border-(--border-color) space-y-3 fc-pop">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="font-bold text-[14px] text-(--text-main)">
                   Matched Recipe: {testedRecommendation.profile.toUpperCase()}
                 </span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-(--accent-primary)/10 text-(--accent-primary) font-semibold">
+                <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-(--accent-primary)/10 text-(--accent-primary) font-semibold">
                   Recipe Found
                 </span>
               </div>
@@ -109,7 +109,7 @@ export const CompatibilityView: React.FC = () => {
               </span>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2 border-t border-(--border-color)/60 text-[11px] font-mono">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2 border-t border-(--border-color)/60 text-[12px] font-mono">
               <div>
                 <span className="text-(--text-muted) block">Wine Runtime:</span>
                 <span className="text-(--accent-primary) font-semibold">
@@ -137,7 +137,7 @@ export const CompatibilityView: React.FC = () => {
             </div>
 
             {testedRecommendation.notes.length > 0 && (
-              <div className="pt-2 border-t border-(--border-color)/60 text-[11px]">
+              <div className="pt-2 border-t border-(--border-color)/60 text-[12px]">
                 <span className="text-amber-500 font-semibold">Community Guidance: </span>
                 <span className="text-(--text-secondary)">{testedRecommendation.notes.join(" ")}</span>
               </div>
@@ -154,7 +154,7 @@ export const CompatibilityView: React.FC = () => {
             macOS Anti-Cheat Architecture Transparency
           </h3>
         </div>
-        <p className="text-[12px] text-(--text-secondary) leading-relaxed">
+        <p className="text-[13px] text-(--text-secondary) leading-relaxed">
           Windows games that use user-space anti-cheat (Valve VAC, Blizzard Warden, Easy Anti-Cheat in offline mode) run smoothly. Games requiring Windows <strong>ring-0 kernel drivers</strong> (Riot Vanguard, BattlEye kernel mode) cannot execute under macOS kernel security policy. FusionCross identifies these titles immediately to save you time.
         </p>
       </div>
@@ -162,10 +162,10 @@ export const CompatibilityView: React.FC = () => {
       {/* Featured Profiles Section */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-[12px] font-mono font-bold text-(--text-muted) uppercase tracking-wider">
+          <h2 className="text-[13px] font-bold text-(--text-muted) uppercase tracking-wider">
             Verified Game & Launcher Recipes
           </h2>
-          <span className="text-[11px] font-mono text-(--text-muted)">
+          <span className="text-[12px] font-mono text-(--text-muted)">
             {profiles.length} Verified Highlights
           </span>
         </div>
@@ -182,7 +182,7 @@ export const CompatibilityView: React.FC = () => {
                     {name}
                   </h3>
                   <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                    className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold ${
                       rec.compatibility >= 85
                         ? "bg-(--color-ok-glow) text-ok border border-ok/30"
                         : "bg-amber-500/10 text-amber-500 border border-amber-500/30"
@@ -191,12 +191,12 @@ export const CompatibilityView: React.FC = () => {
                     {rec.compatibility}%
                   </span>
                 </div>
-                <p className="text-[11px] font-mono text-(--text-muted) mt-1">
+                <p className="text-[12px] font-mono text-(--text-muted) mt-1">
                   Engine: <span className="text-(--accent-primary) font-semibold">{rec.graphics === "d3dmetal" ? "D3DMetal (GPTK)" : rec.graphics.toUpperCase()}</span>
                 </p>
               </div>
 
-              <div className="pt-2 border-t border-(--border-color)/60 font-mono text-[11px] space-y-1">
+              <div className="pt-2 border-t border-(--border-color)/60 font-mono text-[12px] space-y-1">
                 <p className="text-(--text-secondary)">
                   <span className="text-(--text-muted)">Runtime: </span>
                   {rec.runtime_hint}

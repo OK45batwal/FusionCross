@@ -25,6 +25,18 @@ import { GlobalDropZone } from "./components/GlobalDropZone";
 import { DroppedFileModal } from "./components/DroppedFileModal";
 import { ToastContainer, ToastItem } from "./components/Toast";
 
+const VIEW_TITLES: Record<ViewId, string> = {
+  all_apps: "All Applications",
+  favorites: "Favorites",
+  catalog: "Game Catalog",
+  bottle: "Bottle",
+  installer: "Install Windows Application",
+  compatibility: "Compatibility Center",
+  diagnostics: "Diagnostics & Health",
+  runtimes: "Wine Runtimes",
+  settings: "Settings",
+};
+
 export function App() {
   const [currentView, setCurrentView] = useState<ViewId>("all_apps");
   const [selectedBottleId, setSelectedBottleId] = useState<string | null>(null);
@@ -138,7 +150,7 @@ export function App() {
   const favoritesCount = state.applications.filter((a) => a.favorite).length;
 
   return (
-    <div className="flex h-screen w-screen bg-(--bg-main) text-(--text-main) font-sans select-none overflow-hidden transition-colors duration-200">
+    <div className="flex h-screen w-screen bg-(--bg-main) text-(--text-main) font-sans overflow-hidden transition-colors duration-200">
       {/* Left Navigation Sidebar (CrossOver-style master layout) */}
       <Sidebar
         currentView={currentView}
@@ -166,28 +178,16 @@ export function App() {
         )}
         {/* Top Header Bar */}
         <JobPanel onCompleted={refreshState} />
-        <header className="h-11 shrink-0 px-6 flex items-center justify-between border-b border-(--border-color) bg-(--bg-glass) backdrop-blur-md text-[12px] font-sans">
+        <header className="h-11 shrink-0 px-6 flex items-center justify-between border-b border-(--border-color) bg-(--bg-glass) backdrop-blur-md text-[13px] font-sans">
           <div className="flex items-center gap-2 text-(--text-muted)">
             <span className="font-semibold text-(--text-main)">
               {currentView === "bottle" && selectedBottle
                 ? selectedBottle.name
-                : currentView === "all_apps"
-                ? "All Applications"
-                : currentView === "favorites"
-                ? "Favorites"
-                : currentView === "installer"
-                ? "Install Windows Application"
-                : currentView === "compatibility"
-                ? "Compatibility Center"
-                : currentView === "diagnostics"
-                ? "Diagnostics & Health"
-                : currentView === "runtimes"
-                ? "Wine Runtimes"
-                : "Settings"}
+                : VIEW_TITLES[currentView]}
             </span>
           </div>
 
-          <div className="flex items-center gap-4 text-[11px] font-mono text-(--text-muted)">
+          <div className="flex items-center gap-4 text-[12px] font-mono text-(--text-muted)">
             {systemInfo && (
               <span className="hidden sm:inline">
                 macOS {systemInfo.os} · {systemInfo.arch}
@@ -240,6 +240,7 @@ export function App() {
               onNavigate={(v) => setCurrentView(v)}
               filterMode="all"
               onRefreshState={refreshState}
+              onNotify={addToast}
             />
           )}
 
@@ -254,6 +255,7 @@ export function App() {
               onNavigate={(v) => setCurrentView(v)}
               filterMode="favorites"
               onRefreshState={refreshState}
+              onNotify={addToast}
             />
           )}
 
@@ -297,6 +299,7 @@ export function App() {
             <SettingsView
               settings={state?.settings || []}
               onRefreshState={refreshState}
+              onNotify={addToast}
             />
           )}
           </Suspense></ViewBoundary>

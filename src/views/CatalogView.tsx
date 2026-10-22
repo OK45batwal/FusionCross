@@ -126,31 +126,31 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
     switch (tier.toLowerCase()) {
       case "platinum":
         return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-(--color-ok-glow) text-ok border border-ok/30 flex items-center gap-1">
+          <span className="px-2 py-0.5 rounded text-[11px] font-mono font-semibold bg-(--color-ok-glow) text-ok border border-ok/30 flex items-center gap-1">
             <CheckCircle2 className="w-3 h-3" /> Platinum ({score}%)
           </span>
         );
       case "gold":
         return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-(--accent-primary)/15 text-(--accent-primary) border border-(--accent-primary)/30 flex items-center gap-1">
+          <span className="px-2 py-0.5 rounded text-[11px] font-mono font-semibold bg-(--accent-primary)/15 text-(--accent-primary) border border-(--accent-primary)/30 flex items-center gap-1">
             <Sparkles className="w-3 h-3" /> Gold ({score}%)
           </span>
         );
       case "silver":
         return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-amber-500/15 text-amber-500 border border-amber-500/30 flex items-center gap-1">
+          <span className="px-2 py-0.5 rounded text-[11px] font-mono font-semibold bg-amber-500/15 text-amber-500 border border-amber-500/30 flex items-center gap-1">
             <AlertTriangle className="w-3 h-3" /> Silver ({score}%)
           </span>
         );
       case "blocked":
         return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-red-500/15 text-red-500 border border-red-500/30 flex items-center gap-1">
+          <span className="px-2 py-0.5 rounded text-[11px] font-mono font-semibold bg-red-500/15 text-red-500 border border-red-500/30 flex items-center gap-1">
             <ShieldAlert className="w-3 h-3" /> Blocked ({score}%)
           </span>
         );
       default:
         return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-(--bg-elevated) text-(--text-secondary) border border-(--border-color)">
+          <span className="px-2 py-0.5 rounded text-[11px] font-mono font-semibold bg-(--bg-elevated) text-(--text-secondary) border border-(--border-color)">
             {tier} ({score}%)
           </span>
         );
@@ -170,11 +170,11 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
               <h1 className="text-[18px] font-bold tracking-tight text-(--text-main)">
                 Game & Software Catalog
               </h1>
-              <span className="px-2 py-0.5 text-[11px] font-mono rounded-full bg-(--bg-elevated) border border-(--border-color) text-(--text-muted)">
+              <span className="px-2 py-0.5 text-[12px] font-mono rounded-full bg-(--bg-elevated) border border-(--border-color) text-(--text-muted)">
                 {catalog.length} Tested Profiles
               </span>
             </div>
-            <p className="text-[12px] text-(--text-secondary) mt-1.5 max-w-2xl leading-relaxed">
+            <p className="text-[13px] text-(--text-secondary) mt-1.5 max-w-2xl leading-relaxed">
               Verified Windows games, launchers, and creative apps optimized for Apple Silicon with Apple Game Porting Toolkit (D3DMetal), DXVK Vulkan, and Mach semaphores.
             </p>
           </div>
@@ -187,7 +187,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
               placeholder="Search 50+ games, developers, backends..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-[12px] font-sans text-(--text-main) placeholder-(--text-muted) focus:outline-none focus:border-(--accent-primary) transition-colors"
+              className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-[13px] font-sans text-(--text-main) placeholder-(--text-muted) focus:outline-none focus:border-(--accent-primary) transition-colors"
             />
           </div>
         </div>
@@ -199,7 +199,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
-                className={`px-3 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer ${
+                className={`px-3 py-1 rounded-md text-[12px] font-medium transition-all cursor-pointer ${
                   selectedCategory === cat.id
                     ? "bg-(--accent-primary) text-white font-semibold shadow-xs"
                     : "bg-(--bg-elevated) text-(--text-secondary) hover:text-(--text-main) border border-(--border-color)"
@@ -210,13 +210,13 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
             ))}
           </div>
 
-          <div className="flex items-center gap-1.5 text-[11px]">
+          <div className="flex items-center gap-1.5 text-[12px]">
             <span className="text-(--text-muted) font-mono">Rating:</span>
             {["all", "platinum", "gold", "silver", "blocked"].map((tier) => (
               <button
                 key={tier}
                 onClick={() => setSelectedTier(tier)}
-                className={`px-2 py-0.5 rounded capitalize font-mono text-[10px] transition-colors cursor-pointer ${
+                className={`px-2 py-0.5 rounded capitalize text-[11px] transition-colors cursor-pointer ${
                   selectedTier === tier
                     ? "bg-(--text-main) text-(--bg-main) font-bold"
                     : "text-(--text-muted) hover:text-(--text-main)"
@@ -231,7 +231,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
 
       {/* Global Notifications */}
       {notice && (
-        <div className="px-6 py-2 bg-emerald-500/10 border-b border-emerald-500/20 text-emerald-500 text-[11px] font-mono flex items-center justify-between">
+        <div className="px-6 py-2 bg-emerald-500/10 border-b border-emerald-500/20 text-emerald-500 text-[12px] font-mono flex items-center justify-between">
           <span>✓ {notice}</span>
           <button onClick={() => setNotice(null)} className="hover:underline cursor-pointer">
             Dismiss
@@ -240,7 +240,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
       )}
 
       {error && (
-        <div className="px-6 py-2 bg-red-500/10 border-b border-red-500/20 text-red-500 text-[11px] font-mono flex items-center justify-between">
+        <div className="px-6 py-2 bg-red-500/10 border-b border-red-500/20 text-red-500 text-[12px] font-mono flex items-center justify-between">
           <span>⚠ {error}</span>
           <button onClick={() => setError(null)} className="hover:underline cursor-pointer">
             Dismiss
@@ -256,7 +256,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
               <Gamepad2 className="w-6 h-6" />
             </div>
             <h3 className="text-[15px] font-bold text-(--text-main)">No games matched your criteria</h3>
-            <p className="text-[12px] text-(--text-secondary) max-w-sm">
+            <p className="text-[13px] text-(--text-secondary) max-w-sm">
               Try adjusting your search terms or selecting &quot;All Items&quot;.
             </p>
             <button
@@ -265,7 +265,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                 setSelectedCategory("all");
                 setSelectedTier("all");
               }}
-              className="px-3 py-1.5 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-[12px] text-(--text-main) hover:bg-(--border-color) transition-colors cursor-pointer"
+              className="px-3 py-1.5 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-[13px] text-(--text-main) hover:bg-(--border-color) transition-colors cursor-pointer"
             >
               Reset Filters
             </button>
@@ -288,20 +288,20 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                         <h3 className="text-[14px] font-bold text-(--text-main) group-hover:text-(--accent-primary) transition-colors line-clamp-1">
                           {item.title}
                         </h3>
-                        <p className="text-[11px] text-(--text-muted)">
+                        <p className="text-[12px] text-(--text-muted)">
                           {item.developer} · {item.category}
                         </p>
                       </div>
                       {getTierBadge(item.tier, item.compatibility)}
                     </div>
 
-                    <p className="text-[11px] text-(--text-secondary) line-clamp-2 mt-2 leading-relaxed">
+                    <p className="text-[12px] text-(--text-secondary) line-clamp-2 mt-2 leading-relaxed">
                       {item.notes}
                     </p>
                   </div>
 
                   {/* Engine Specs Badges */}
-                  <div className="pt-2 border-t border-(--border-color) flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
+                  <div className="pt-2 border-t border-(--border-color) flex flex-wrap items-center gap-1.5 text-[11px] font-mono">
                     <span className="px-2 py-0.5 rounded bg-(--bg-elevated) border border-(--border-color) text-(--text-secondary)">
                       {item.graphics_backend === "d3dmetal" ? "D3DMetal (GPTK)" : item.graphics_backend.toUpperCase()}
                     </span>
@@ -322,7 +322,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
 
                   {/* Card Footer Actions */}
                   <div className="pt-2 border-t border-(--border-color) flex items-center justify-between">
-                    <span className="text-[10px] font-mono text-(--text-muted)">
+                    <span className="text-[11px] font-mono text-(--text-muted)">
                       {item.dependencies.length > 0 ? `${item.dependencies.length} runtimes needed` : "Zero dependencies"}
                     </span>
 
@@ -334,7 +334,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                             handleInstallGame(item);
                           }}
                           disabled={isDownloading}
-                          className="px-3 py-1 rounded-md bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[11px] font-medium flex items-center gap-1 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                          className="px-3 py-1 rounded-md bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[12px] font-medium flex items-center gap-1 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
                         >
                           {isDownloading ? (
                             <>
@@ -354,7 +354,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                             e.stopPropagation();
                             setSelectedGame(item);
                           }}
-                          className="px-2.5 py-1 rounded-md bg-(--bg-elevated) hover:bg-(--border-color) border border-(--border-color) text-(--text-main) text-[11px] font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                          className="px-2.5 py-1 rounded-md bg-(--bg-elevated) hover:bg-(--border-color) border border-(--border-color) text-(--text-main) text-[12px] font-medium flex items-center gap-1 transition-colors cursor-pointer"
                         >
                           <Info className="w-3 h-3 text-(--accent-primary)" />
                           <span>View Recipe</span>
@@ -382,7 +382,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                   </h2>
                   {getTierBadge(selectedGame.tier, selectedGame.compatibility)}
                 </div>
-                <p className="text-[12px] text-(--text-secondary) mt-0.5">
+                <p className="text-[13px] text-(--text-secondary) mt-0.5">
                   Developer: <span className="text-(--text-main) font-medium">{selectedGame.developer}</span> · {selectedGame.category}
                 </p>
               </div>
@@ -397,21 +397,21 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
 
             {/* Anti-cheat Banner */}
             {selectedGame.anti_cheat_status === "Kernel Driver Incompatible" ? (
-              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-[12px] flex items-start gap-2.5">
+              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-[13px] flex items-start gap-2.5">
                 <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
                 <div className="space-y-0.5">
                   <p className="font-semibold">Kernel-Level Anti-Cheat Incompatible</p>
-                  <p className="text-[11px] text-red-300/90 leading-relaxed">
+                  <p className="text-[12px] text-red-300/90 leading-relaxed">
                     This game uses a ring-0 Windows kernel driver (e.g. Vanguard/BattlEye) which cannot run inside Wine or macOS. Running the Windows binary will be blocked by the anti-cheat service.
                   </p>
                 </div>
               </div>
             ) : selectedGame.anti_cheat_status === "Singleplayer Only" ? (
-              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[12px] flex items-start gap-2.5">
+              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[13px] flex items-start gap-2.5">
                 <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5" />
                 <div className="space-y-0.5">
                   <p className="font-semibold">Singleplayer / Offline Compatible</p>
-                  <p className="text-[11px] text-amber-300/90 leading-relaxed">
+                  <p className="text-[12px] text-amber-300/90 leading-relaxed">
                     Singleplayer and campaign modes run with full graphics fidelity. Multiplayer matchmaking requiring kernel anti-cheat should be launched with anti-cheat disabled or offline.
                   </p>
                 </div>
@@ -419,12 +419,12 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
             ) : null}
 
             {/* Optimal Recipe Matrix */}
-            <div className="space-y-2 rounded-xl bg-(--bg-elevated) p-4 border border-(--border-color) font-mono text-[12px]">
-              <div className="text-[11px] font-sans font-semibold text-(--text-muted) uppercase tracking-wider mb-2">
+            <div className="space-y-2 rounded-xl bg-(--bg-elevated) p-4 border border-(--border-color) font-mono text-[13px]">
+              <div className="text-[12px] font-sans font-semibold text-(--text-muted) uppercase tracking-wider mb-2">
                 Optimal Wine & Hardware Configuration
               </div>
 
-              <div className="grid grid-cols-2 gap-3 text-[11px]">
+              <div className="grid grid-cols-2 gap-3 text-[12px]">
                 <div>
                   <span className="text-(--text-muted)">Graphics Translation: </span>
                   <span className="text-(--accent-primary) font-bold">
@@ -448,7 +448,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
               </div>
 
               {/* Dependencies & Launch args */}
-              <div className="pt-2 border-t border-(--border-color) space-y-1.5 text-[11px]">
+              <div className="pt-2 border-t border-(--border-color) space-y-1.5 text-[12px]">
                 <div>
                   <span className="text-(--text-muted)">Required Dependencies: </span>
                   <span className="text-(--text-main)">
@@ -466,8 +466,8 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
 
             {/* Notes Section */}
             <div className="space-y-1">
-              <h4 className="text-[12px] font-semibold text-(--text-main)">Community Testing Notes</h4>
-              <p className="text-[12px] text-(--text-secondary) leading-relaxed">
+              <h4 className="text-[13px] font-semibold text-(--text-main)">Community Testing Notes</h4>
+              <p className="text-[13px] text-(--text-secondary) leading-relaxed">
                 {selectedGame.notes}
               </p>
             </div>
@@ -475,13 +475,13 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
             {/* Target Bottle Selection & Actions */}
             <div className="pt-3 border-t border-(--border-color) flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2 flex-1 max-w-xs">
-                <label className="text-[11px] font-medium text-(--text-muted) shrink-0">
+                <label className="text-[12px] font-medium text-(--text-muted) shrink-0">
                   Target Bottle:
                 </label>
                 <select
                   value={targetBottleId}
                   onChange={(e) => setTargetBottleId(e.target.value)}
-                  className="flex-1 bg-(--bg-elevated) border border-(--border-color) text-[12px] rounded-lg px-2.5 py-1.5 text-(--text-main) focus:outline-none focus:border-(--accent-primary) truncate"
+                  className="flex-1 bg-(--bg-elevated) border border-(--border-color) text-[13px] rounded-lg px-2.5 py-1.5 text-(--text-main) focus:outline-none focus:border-(--accent-primary) truncate"
                 >
                   <option value="">Auto-create or pick default</option>
                   {bottles.map((b) => (
@@ -495,7 +495,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setSelectedGame(null)}
-                  className="px-3 py-1.5 rounded-lg border border-(--border-color) text-[12px] font-medium text-(--text-secondary) hover:bg-(--bg-elevated) transition-colors cursor-pointer"
+                  className="px-3 py-1.5 rounded-lg border border-(--border-color) text-[13px] font-medium text-(--text-secondary) hover:bg-(--bg-elevated) transition-colors cursor-pointer"
                 >
                   Close
                 </button>
@@ -504,7 +504,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                   <button
                     onClick={() => handleInstallGame(selectedGame, targetBottleId)}
                     disabled={installingId === selectedGame.id}
-                    className="px-4 py-1.5 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[12px] font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                    className="px-4 py-1.5 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[13px] font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
                   >
                     {installingId === selectedGame.id ? (
                       <>
@@ -521,7 +521,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                 ) : (
                   <button
                     onClick={() => handleInstallGame(selectedGame, targetBottleId)}
-                    className="px-4 py-1.5 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[12px] font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                    className="px-4 py-1.5 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[13px] font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Setup Bottle & Install Game</span>

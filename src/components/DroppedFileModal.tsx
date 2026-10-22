@@ -128,7 +128,7 @@ export function DroppedFileModal({
 
   return (
     <Modal label="Install Windows application" onClose={onClose}>
-      <div className="bg-(--bg-card) border border-(--border-color) rounded-2xl max-w-lg w-full p-6 shadow-2xl shadow-black/40 text-left animate-scale-in">
+      <div className="bg-(--bg-card) border border-(--border-color) rounded-2xl max-w-lg w-full p-6 shadow-2xl shadow-black/40 text-left fc-pop">
         {/* Header */}
         <div className="flex items-start justify-between pb-4 border-b border-(--border-color)">
           <div className="flex items-center gap-3">
@@ -147,7 +147,7 @@ export function DroppedFileModal({
               <h3 className="text-[16px] font-semibold text-(--text-primary) tracking-tight">
                 Inspect Dropped File
               </h3>
-              <p className="text-[12px] text-(--text-secondary) font-mono truncate max-w-xs">
+              <p className="text-[13px] text-(--text-secondary) font-mono truncate max-w-xs">
                 {fileName}
               </p>
             </div>
@@ -164,7 +164,7 @@ export function DroppedFileModal({
         {/* File Analysis Section */}
         <div className="py-4 space-y-3">
           <div className="bg-(--bg-subtle) border border-(--border-color) rounded-xl p-3.5 space-y-2">
-            <div className="flex items-center justify-between text-[12px]">
+            <div className="flex items-center justify-between text-[13px]">
               <span className="text-(--text-secondary) flex items-center gap-1.5">
                 <Cpu className="w-3.5 h-3.5 text-(--accent)" /> Architecture:
               </span>
@@ -183,25 +183,25 @@ export function DroppedFileModal({
               </span>
             </div>
 
-            <div className="flex items-center justify-between text-[12px]">
+            <div className="flex items-center justify-between text-[13px]">
               <span className="text-(--text-secondary) flex items-center gap-1.5">
                 <Layers className="w-3.5 h-3.5 text-indigo-400" /> Translation Layer:
               </span>
-              <span className="text-(--text-primary) font-mono text-[11px]">
+              <span className="text-(--text-primary) font-mono text-[12px]">
                 {analysis && analysis.size_bytes > 0
                   ? `${(analysis.size_bytes / (1024 * 1024)).toFixed(1)} MB • DXVK / Metal DXMT`
                   : "Whisky-Wine 11.0 (Apple GPTK)"}
               </span>
             </div>
 
-            <div className="text-[11px] font-mono text-(--text-tertiary) break-all pt-1 border-t border-(--border-color)/60">
+            <div className="text-[12px] font-mono text-(--text-tertiary) break-all pt-1 border-t border-(--border-color)/60">
               {filePath}
             </div>
           </div>
 
           {/* Bottle Selector */}
           <div>
-            <label className="text-[11px] font-medium text-(--text-secondary) block mb-1.5">
+            <label className="text-[12px] font-medium text-(--text-secondary) block mb-1.5">
               Target Wine Bottle
             </label>
 
@@ -222,7 +222,7 @@ export function DroppedFileModal({
                 <button
                   type="button"
                   onClick={() => setCreatingNewBottle(true)}
-                  className="px-3 py-2 text-[12px] bg-(--bg-subtle) hover:bg-(--bg-hover) border border-(--border-color) text-(--text-primary) rounded-lg flex items-center gap-1 transition-colors"
+                  className="px-3 py-2 text-[13px] bg-(--bg-subtle) hover:bg-(--bg-hover) border border-(--border-color) text-(--text-primary) rounded-lg flex items-center gap-1 transition-colors"
                 >
                   <Plus className="w-3.5 h-3.5" /> New
                 </button>
@@ -240,14 +240,14 @@ export function DroppedFileModal({
                 <button
                   type="button"
                   onClick={handleCreateAndSelectBottle}
-                  className="px-3 py-2 text-[12px] bg-(--accent) hover:bg-(--accent-hover) text-white font-medium rounded-lg"
+                  className="px-3 py-2 text-[13px] bg-(--accent) hover:bg-(--accent-hover) text-white font-medium rounded-lg"
                 >
                   Create
                 </button>
                 <button
                   type="button"
                   onClick={() => setCreatingNewBottle(false)}
-                  className="px-2 py-2 text-[12px] text-(--text-tertiary) hover:text-(--text-primary)"
+                  className="px-2 py-2 text-[13px] text-(--text-tertiary) hover:text-(--text-primary)"
                 >
                   Cancel
                 </button>
@@ -257,14 +257,14 @@ export function DroppedFileModal({
 
           {/* Feedback & Alerts */}
           {error && (
-            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-[12px] flex items-center gap-2">
+            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-[13px] flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
           {actionSuccess && (
-            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 text-[12px] flex items-center gap-2">
+            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 text-[13px] flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 shrink-0" />
               <span>{actionSuccess}</span>
             </div>
@@ -273,7 +273,7 @@ export function DroppedFileModal({
 
         {/* Footer Actions */}
         <div className="flex items-center justify-between pt-4 border-t border-(--border-color)">
-          <div className="text-[11px] text-(--text-tertiary) flex items-center gap-1">
+          <div className="text-[12px] text-(--text-tertiary) flex items-center gap-1">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" /> Sandboxed Bottle Execution
           </div>
 
@@ -281,7 +281,7 @@ export function DroppedFileModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-3 py-1.5 text-[12px] text-(--text-secondary) hover:text-(--text-primary) rounded-lg hover:bg-(--bg-hover) transition-colors"
+              className="px-3 py-1.5 text-[13px] text-(--text-secondary) hover:text-(--text-primary) rounded-lg hover:bg-(--bg-hover) transition-colors"
             >
               Cancel
             </button>
@@ -290,7 +290,7 @@ export function DroppedFileModal({
               type="button"
               disabled={executing || bottles.length === 0}
               onClick={handleInstall}
-              className="px-4 py-1.5 text-[12px] font-medium bg-(--accent) hover:bg-(--accent-hover) text-white rounded-lg flex items-center gap-1.5 shadow-sm transition-colors disabled:opacity-50"
+              className="px-4 py-1.5 text-[13px] font-medium bg-(--accent) hover:bg-(--accent-hover) text-white rounded-lg flex items-center gap-1.5 shadow-sm transition-colors disabled:opacity-50"
             >
               {executing ? (
                 <>

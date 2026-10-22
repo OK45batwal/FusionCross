@@ -65,6 +65,14 @@
   --theme-transition: background-color 0.2s ease,
                      color 0.2s ease,
                      border-color 0.2s ease;
+
+  /* Aliases for legacy class names used by older views. */
+  --text-primary: var(--text-main);
+  --text-tertiary: var(--text-muted);
+  --accent: var(--accent-primary);
+  --bg-subtle: var(--bg-elevated);
+  --bg-hover: var(--bg-elevated);
+  --bg-card: var(--bg-surface);
 }
 
 [data-theme="light"] {
@@ -127,52 +135,26 @@ body,
   transition: var(--theme-transition);
 }
 
-/* Ambient Glow Orbs */
-.ambient-glow-1 {
-  position: absolute;
-  top: -120px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 900px;
-  height: 550px;
-  background: radial-gradient(circle, var(--accent-glow) 0%, rgba(0, 0, 0, 0) 70%);
-  pointer-events: none;
-  z-index: 0;
-  animation: floatGlow 10s ease-in-out infinite alternate;
-}
-
-.ambient-glow-2 {
-  position: absolute;
-  top: 500px;
-  right: -250px;
-  width: 700px;
-  height: 700px;
-  background: radial-gradient(circle, var(--color-ok-glow) 0%, rgba(0, 0, 0, 0) 70%);
-  pointer-events: none;
-  z-index: 0;
-  animation: floatGlow 14s ease-in-out infinite alternate-reverse;
-}
-
-@keyframes floatGlow {
-  0% {
-    transform: translateX(-50%) translateY(0) scale(1);
-  }
-  100% {
-    transform: translateX(-50%) translateY(30px) scale(1.08);
-  }
-}
-
-@keyframes spin {
+/* Motion — only for things that appear. */
+@keyframes fc-pop {
   from {
-    transform: rotate(0deg);
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
   }
   to {
-    transform: rotate(360deg);
+    opacity: 1;
+    transform: none;
   }
 }
 
-.animate-spin-slow {
-  animation: spin 1.5s linear infinite;
+.fc-pop {
+  animation: fc-pop 140ms ease-out;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 /* Scrollbar */
@@ -189,8 +171,5 @@ body,
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
-  }
-  .ambient-glow-1, .ambient-glow-2 {
-    animation: none;
   }
 }

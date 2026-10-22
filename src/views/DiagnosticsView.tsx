@@ -73,7 +73,7 @@ export const DiagnosticsView: React.FC<DiagnosticsViewProps> = ({
           <h1 className="text-[20px] font-bold text-graphite-100 flex items-center gap-2">
             <Activity className="w-5 h-5 text-warn" /> Diagnostics & Auto-Fix Engine
           </h1>
-          <p className="text-[12px] text-graphite-400">
+          <p className="text-[13px] text-graphite-400">
             Intelligent Error Diagnosis with 1-Click Automated Repair
           </p>
         </div>
@@ -82,13 +82,13 @@ export const DiagnosticsView: React.FC<DiagnosticsViewProps> = ({
       {/* Target Application Selector */}
       <div className="rounded-xl border border-graphite-600 bg-graphite-900 p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
-          <label className="text-[12px] font-mono font-bold text-graphite-400 uppercase">
+          <label className="text-[13px] font-bold text-graphite-400 uppercase">
             Select Application to Diagnose
           </label>
           <select
             value={selectedAppId}
             onChange={(e) => setSelectedAppId(e.target.value)}
-            className="w-full md:w-80 px-3 py-2 rounded-lg bg-graphite-850 border border-graphite-700 font-mono text-[12px] text-graphite-100 focus:outline-none"
+            className="w-full md:w-80 px-3 py-2 rounded-lg bg-graphite-850 border border-graphite-700 font-mono text-[13px] text-graphite-100 focus:outline-none"
           >
             {applications.map((app) => (
               <option key={app.id} value={app.id}>
@@ -101,7 +101,7 @@ export const DiagnosticsView: React.FC<DiagnosticsViewProps> = ({
         <button
           disabled={!selectedAppId || runningChecks}
           onClick={handleRunChecks}
-          className="px-5 py-2.5 rounded-lg bg-warn hover:bg-warn/90 text-black font-mono text-[12px] font-bold flex items-center gap-2 disabled:opacity-50"
+          className="px-5 py-2.5 rounded-lg bg-warn hover:bg-warn/90 text-black font-mono text-[13px] font-bold flex items-center gap-2 disabled:opacity-50"
         >
           {runningChecks ? (
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -113,7 +113,7 @@ export const DiagnosticsView: React.FC<DiagnosticsViewProps> = ({
       </div>
 
       {fixResult && (
-        <div className="rounded-xl border border-ok/40 bg-ok/10 p-4 text-[12px] text-ok font-mono whitespace-pre-wrap">
+        <div className="rounded-xl border border-ok/40 bg-ok/10 p-4 text-[13px] text-ok font-mono whitespace-pre-wrap">
           ✓ Auto-Fix Applied:
           {"\n"}
           {fixResult}
@@ -121,7 +121,7 @@ export const DiagnosticsView: React.FC<DiagnosticsViewProps> = ({
       )}
 
       {error && (
-        <div className="rounded-xl border border-err/40 bg-err/10 p-4 text-[12px] text-err font-mono">
+        <div className="rounded-xl border border-err/40 bg-err/10 p-4 text-[13px] text-err font-mono">
           ⚠ {error}
         </div>
       )}
@@ -130,11 +130,11 @@ export const DiagnosticsView: React.FC<DiagnosticsViewProps> = ({
       {checks.length > 0 && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-[12px] font-mono font-bold text-graphite-400 uppercase tracking-wider">
+            <h2 className="text-[13px] font-bold text-graphite-400 uppercase tracking-wider">
               Diagnostic Health Checks ({checks.length - failedCount}/{checks.length} Passed)
             </h2>
             {failedCount > 0 && (
-              <span className="text-[11px] font-mono text-warn font-bold">
+              <span className="text-[12px] font-mono text-warn font-bold">
                 ⚠ {failedCount} issue(s) detected requiring auto-fix
               </span>
             )}
@@ -157,7 +157,7 @@ export const DiagnosticsView: React.FC<DiagnosticsViewProps> = ({
                     ) : (
                       <AlertTriangle className="w-5 h-5 text-warn shrink-0 mt-0.5" />
                     )}
-                    <div className="space-y-1 font-mono text-[12px]">
+                    <div className="space-y-1 font-mono text-[13px]">
                       <h3 className="font-bold text-graphite-100 text-[13px]">{check.label}</h3>
 
                       {/* 3-part layout */}
@@ -199,7 +199,7 @@ export const DiagnosticsView: React.FC<DiagnosticsViewProps> = ({
                               <button
                                 disabled={fixing === check.fix}
                                 onClick={() => handleApplyFix(check.fix!)}
-                                className="px-3 py-1.5 rounded bg-accent-500 hover:bg-accent-400 disabled:opacity-50 text-white font-bold text-[11px] flex items-center gap-1.5 shrink-0"
+                                className="px-3 py-1.5 rounded bg-accent-500 hover:bg-accent-400 disabled:opacity-50 text-white font-bold text-[12px] flex items-center gap-1.5 shrink-0"
                               >
                                 {fixing === check.fix ? (
                                   <Loader2 className="w-3.5 h-3.5 animate-spin" />

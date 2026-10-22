@@ -128,7 +128,7 @@ export function GlobalDropZone({
 
   return (
     <div
-      className="fixed inset-0 z-100 pointer-events-auto flex items-center justify-center p-8 bg-black/70 backdrop-blur-md animate-fade-in"
+      className="fixed inset-0 z-100 pointer-events-auto flex items-center justify-center p-8 bg-black/70 backdrop-blur-md fc-pop"
       onDragOver={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -157,10 +157,10 @@ export function GlobalDropZone({
           <div className="w-full bg-(--bg-card) border border-(--border-color) rounded-lg px-4 py-2.5 mb-6 flex items-center gap-3 text-left">
             <FolderArchive className="w-4 h-4 text-(--accent) shrink-0" />
             <div className="flex-1 min-w-0">
-              <div className="text-[11px] text-(--text-tertiary) uppercase font-mono tracking-wider">
+              <div className="text-[12px] text-(--text-tertiary) uppercase tracking-wider">
                 Incoming File
               </div>
-              <div className="text-[12px] font-mono text-(--text-primary) truncate">
+              <div className="text-[13px] font-mono text-(--text-primary) truncate">
                 {hoveredFileNames.join(", ")}
               </div>
             </div>
@@ -170,7 +170,7 @@ export function GlobalDropZone({
         {bottles.length > 0 ? (
           <div className="w-full bg-(--bg-subtle) border border-(--border-color) rounded-xl p-3.5 mb-2 flex items-center justify-between">
             <div className="text-left">
-              <span className="text-[11px] text-(--text-secondary) block">Target Bottle</span>
+              <span className="text-[12px] text-(--text-secondary) block">Target Bottle</span>
               <span className="text-[13px] font-medium text-(--text-primary) flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-500" />
                 {targetBottle?.name || "Select Bottle"}
@@ -182,7 +182,7 @@ export function GlobalDropZone({
                 aria-label="Target Bottle"
                 value={effectiveTargetId}
                 onChange={(e) => setDragTargetBottleId(e.target.value)}
-                className="bg-(--bg-card) border border-(--border-color) text-[12px] rounded-md px-2.5 py-1 text-(--text-primary) font-sans focus:outline-none focus:border-(--accent)"
+                className="bg-(--bg-card) border border-(--border-color) text-[13px] rounded-md px-2.5 py-1 text-(--text-primary) font-sans focus:outline-none focus:border-(--accent)"
               >
                 {bottles.map((b) => (
                   <option key={b.id} value={b.id}>
@@ -193,13 +193,13 @@ export function GlobalDropZone({
             </div>
           </div>
         ) : (
-          <div className="text-[12px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 mb-2 flex items-center gap-2">
+          <div className="text-[13px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 mb-2 flex items-center gap-2">
             <Sparkles className="w-4 h-4 shrink-0" />
             A new gaming bottle will be automatically created for this application.
           </div>
         )}
 
-        <div className="text-[11px] text-(--text-tertiary) flex items-center gap-1.5 mt-3">
+        <div className="text-[12px] text-(--text-tertiary) flex items-center gap-1.5 mt-3">
           Release file in this window to inspect & execute <ArrowRight className="w-3 h-3" />
         </div>
       </div>

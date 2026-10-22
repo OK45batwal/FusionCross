@@ -18,7 +18,8 @@ export function useLibraryState() {
   const refresh = useCallback(async (full: boolean) => {
     const request = ++generation.current;
     pending.current += 1;
-    setIsSyncing(true);
+    // Background polls stay silent; only user-triggered refreshes show "Syncing".
+    if (full) setIsSyncing(true);
     try {
       const [nextState, running, metadata] = await Promise.all([
         getState(),
@@ -42,7 +43,7 @@ export function useLibraryState() {
       throw cause;
     } finally {
       pending.current -= 1;
-      if (request === generation.current) setIsSyncing(false);
+      if (full && request === generation.current) setIsSyncing(false);
     }
   }, []);
 

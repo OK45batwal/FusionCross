@@ -15,6 +15,8 @@ import {
   Trash2,
   FolderOpen,
   ExternalLink,
+  Check,
+  AlertTriangle,
 } from "lucide-react";
 import {
   Application,
@@ -27,6 +29,8 @@ import {
   updateApplication,
 } from "../services/tauri";
 import { ViewId } from "../components/Sidebar";
+import { Modal } from "../components/Modal";
+import { errorMessage } from "../services/errors";
 
 interface ApplicationsViewProps {
   applications: Application[];
@@ -38,6 +42,7 @@ interface ApplicationsViewProps {
   onNavigate: (view: ViewId) => void;
   filterMode?: "all" | "favorites" | "recent";
   onRefreshState?: () => Promise<void> | void;
+  onNotify?: (type: "success" | "error" | "info", message: string, title?: string) => void;
 }
 
 export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
@@ -50,6 +55,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
   onNavigate,
   filterMode = "all",
   onRefreshState,
+  onNotify,
 }) => {
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
@@ -77,8 +83,8 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
       setSaveArgsSuccess(true);
       setTimeout(() => setSaveArgsSuccess(false), 2000);
       if (onRefreshState) await onRefreshState();
-    } catch {
-      // handled
+    } catch (cause) {
+      onNotify?.("error", errorMessage(cause, "Could not save launch arguments."), "Save failed");
     }
   };
 
@@ -91,10 +97,17 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
   const handleScanAll = async () => {
     setScanning(true);
     try {
-      await scanAllBottles();
+      const added = await scanAllBottles();
       if (onRefreshState) await onRefreshState();
-    } catch {
-      // scan error handled gracefully
+      onNotify?.(
+        "info",
+        added > 0
+          ? `Found ${added} new application${added === 1 ? "" : "s"}.`
+          : "No new applications found.",
+        "Scan complete"
+      );
+    } catch (cause) {
+      onNotify?.("error", errorMessage(cause, "Could not scan your bottles."), "Scan failed");
     } finally {
       setScanning(false);
     }
@@ -123,20 +136,22 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
 
   const handleUnregisterApp = async (appId: string) => {
     try {
+      const name = confirmDeleteApp?.name ?? "Application";
       await unregisterApplication(appId);
       if (onRefreshState) await onRefreshState();
       if (selectedApp?.id === appId) handleSelectApp(null);
       setConfirmDeleteApp(null);
-    } catch {
-      // handled
+      onNotify?.("success", `Removed ${name} from your shelf.`, "Removed");
+    } catch (cause) {
+      onNotify?.("error", errorMessage(cause, "Could not remove this application."), "Remove failed");
     }
   };
 
   const handleReveal = async (appId: string) => {
     try {
       await revealApplicationInFinder(appId);
-    } catch {
-      // handled
+    } catch (cause) {
+      onNotify?.("error", errorMessage(cause, "Could not reveal the file in Finder."), "Finder");
     }
   };
 
@@ -175,7 +190,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
               placeholder="Search applications..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-[12px] font-mono text-(--text-main) placeholder-(--text-muted) focus:outline-none focus:border-(--accent-primary) transition-colors"
+              className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-[13px] text-(--text-main) placeholder-(--text-muted) focus:outline-none focus:border-(--accent-primary) transition-colors"
             />
           </div>
 
@@ -184,7 +199,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-mono capitalize transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded-md text-[12px] capitalize transition-all cursor-pointer ${
                   selectedCategory === cat
                     ? "bg-(--accent-primary) text-white font-semibold shadow-sm"
                     : "bg-(--bg-elevated) text-(--text-secondary) hover:text-(--text-main) hover:border-(--border-hover) border border-(--border-color)"
@@ -222,7 +237,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
           <button
             onClick={handleScanAll}
             disabled={scanning}
-            className="px-2.5 py-1.5 rounded-lg bg-(--bg-elevated) hover:bg-(--border-color) border border-(--border-color) text-(--text-main) text-[11px] font-mono flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+            className="px-2.5 py-1.5 rounded-lg bg-(--bg-elevated) hover:bg-(--border-color) border border-(--border-color) text-(--text-main) text-[12px] flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
             title="Scan all bottle C: drives for installed Windows applications"
           >
             <RefreshCw className={`w-3.5 h-3.5 text-(--accent-primary) ${scanning ? "animate-spin" : ""}`} />
@@ -231,7 +246,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
 
           <button
             onClick={() => onNavigate("installer")}
-            className="px-3 py-1.5 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[11px] font-mono font-bold flex items-center gap-1.5 shadow-sm cursor-pointer transition-all"
+            className="px-3 py-1.5 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[12px] font-bold flex items-center gap-1.5 shadow-sm cursor-pointer transition-all"
           >
             + Add Application
           </button>
@@ -247,21 +262,21 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
             </div>
             <div>
               <h3 className="text-[16px] font-bold text-(--text-main)">No applications found</h3>
-              <p className="text-[12px] text-(--text-secondary) mt-1 max-w-sm">
+              <p className="text-[13px] text-(--text-secondary) mt-1 max-w-sm">
                 Install a Windows application using the smart installer wizard or scan your bottles.
               </p>
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => onNavigate("installer")}
-                className="px-4 py-2 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[12px] font-mono font-bold shadow-md cursor-pointer transition-all"
+                className="px-4 py-2 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[13px] font-bold shadow-md cursor-pointer transition-all"
               >
                 Launch Smart Installer
               </button>
               <button
                 onClick={handleScanAll}
                 disabled={scanning}
-                className="px-4 py-2 rounded-lg bg-(--bg-elevated) hover:bg-(--border-color) border border-(--border-color) text-(--text-main) text-[12px] font-mono font-bold shadow-xs cursor-pointer transition-all flex items-center gap-1.5 disabled:opacity-50"
+                className="px-4 py-2 rounded-lg bg-(--bg-elevated) hover:bg-(--border-color) border border-(--border-color) text-(--text-main) text-[13px] font-bold shadow-xs cursor-pointer transition-all flex items-center gap-1.5 disabled:opacity-50"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${scanning ? "animate-spin" : ""}`} />
                 <span>{scanning ? "Scanning..." : "Scan Bottles"}</span>
@@ -276,7 +291,18 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
               return (
                 <div
                   key={app.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`${app.name}${active ? ", running" : ""}`}
                   onClick={() => handleSelectApp(app)}
+                  onKeyDown={(event) => {
+                    if (event.target !== event.currentTarget) return;
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      if (active) onStopApp(app.id);
+                      else onLaunchApp(app.id);
+                    }
+                  }}
                   onDoubleClick={(e) => {
                     e.stopPropagation();
                     if (active) onStopApp(app.id);
@@ -334,12 +360,12 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                   {/* App Title */}
                   <div className="mt-2.5 max-w-30 w-full">
                     <p
-                      className="text-[12.5px] font-medium text-(--text-main) truncate leading-tight group-hover:text-(--accent-primary) transition-colors"
+                      className="text-[13px] font-medium text-(--text-main) truncate leading-tight group-hover:text-(--accent-primary) transition-colors"
                       title={app.name}
                     >
                       {app.name}
                     </p>
-                    <p className="text-[10px] font-mono text-(--text-muted) truncate mt-0.5">
+                    <p className="text-[11px] font-mono text-(--text-muted) truncate mt-0.5">
                       {getBottleName(app.bottle_id)}
                     </p>
                   </div>
@@ -363,7 +389,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                     {isMenuOpen && (
                       <div
                         onClick={(e) => e.stopPropagation()}
-                        className="absolute right-0 top-7 w-48 rounded-xl bg-(--bg-elevated) border border-(--border-color) shadow-xl py-1 z-30 text-left text-[12px] font-mono animate-in fade-in zoom-in-95 duration-100"
+                        className="absolute right-0 top-7 w-48 rounded-xl bg-(--bg-elevated) border border-(--border-color) shadow-xl py-1 z-30 text-left text-[13px] fc-pop"
                       >
                         {active ? (
                           <button
@@ -404,9 +430,10 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                           onClick={async () => {
                             setMenuAppId(null);
                             try {
-                              await exportAppBundle(app.id);
-                            } catch {
-                              // ignore
+                              const path = await exportAppBundle(app.id);
+                              onNotify?.("success", `Exported to ${path}`, "Mac app created");
+                            } catch (cause) {
+                              onNotify?.("error", errorMessage(cause, "Could not export this application."), "Export failed");
                             }
                           }}
                           className="w-full px-3 py-1.5 hover:bg-(--bg-surface) text-(--text-main) flex items-center gap-2 cursor-pointer transition-colors"
@@ -450,7 +477,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
           <div className="rounded-xl border border-(--border-color) bg-(--bg-surface) overflow-hidden divide-y divide-(--border-color)">
             {filtered.map((app) => {
               const active = isRunning(app.id);
-              const score = app.compatibility ?? 88;
+              const score = app.compatibility;
               return (
                 <div
                   key={app.id}
@@ -471,15 +498,18 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                     )}
                     <div>
                       <h4 className="text-[13px] font-bold text-(--text-main)">{app.name}</h4>
-                      <p className="text-[11px] font-mono text-(--text-secondary)">
+                      <p className="text-[12px] font-mono text-(--text-secondary)">
                         {app.category} · Bottle: {getBottleName(app.bottle_id)}
                       </p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-4">
-                    <span className="text-[11px] font-mono text-(--text-secondary)">
-                      Score: <span className="text-ok font-semibold">{score}%</span>
+                    <span className="text-[12px] font-mono text-(--text-secondary)">
+                      Compatibility:{" "}
+                      <span className="text-ok font-semibold">
+                        {score != null ? `${score}%` : "Unknown"}
+                      </span>
                     </span>
 
                     <button
@@ -500,7 +530,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                           e.stopPropagation();
                           onStopApp(app.id);
                         }}
-                        className="px-3 py-1 rounded bg-red-500/10 border border-red-500/30 text-red-500 text-[11px] font-mono font-bold flex items-center gap-1"
+                        className="px-3 py-1 rounded bg-red-500/10 border border-red-500/30 text-red-500 text-[12px] font-mono font-bold flex items-center gap-1"
                       >
                         <Square className="w-3 h-3 fill-current" /> STOP
                       </button>
@@ -510,7 +540,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                           e.stopPropagation();
                           onLaunchApp(app.id);
                         }}
-                        className="px-3 py-1 rounded bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[11px] font-mono font-bold flex items-center gap-1"
+                        className="px-3 py-1 rounded bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[12px] font-mono font-bold flex items-center gap-1"
                       >
                         <Play className="w-3 h-3 fill-current" /> LAUNCH
                       </button>
@@ -525,8 +555,8 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
 
       {/* Application Detail Modal */}
       {selectedApp && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-2xl border border-(--border-color) bg-(--bg-surface) p-6 shadow-2xl space-y-5">
+        <Modal label={`${selectedApp.name} details`} onClose={() => handleSelectApp(null)}>
+          <div className="space-y-5">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
                 {selectedApp.icon_data ? (
@@ -542,7 +572,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                 )}
                 <div>
                   <h3 className="text-[18px] font-bold text-(--text-main)">{selectedApp.name}</h3>
-                  <p className="text-[12px] font-mono text-(--text-secondary)">
+                  <p className="text-[13px] font-mono text-(--text-secondary)">
                     Category: {selectedApp.category}
                   </p>
                 </div>
@@ -555,7 +585,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
               </button>
             </div>
 
-            <div className="space-y-2 rounded-xl bg-(--bg-elevated) p-4 border border-(--border-color) font-mono text-[12px]">
+            <div className="space-y-2 rounded-xl bg-(--bg-elevated) p-4 border border-(--border-color) font-mono text-[13px]">
               <div>
                 <span className="text-(--text-muted)">Bottle: </span>
                 <span className="text-(--text-main) font-semibold">{getBottleName(selectedApp.bottle_id)}</span>
@@ -587,11 +617,11 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
             {/* Launch Arguments Editor */}
             <div className="rounded-xl bg-(--bg-elevated) p-4 border border-(--border-color) space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[12px] font-mono font-bold text-(--text-main)">
+                <span className="text-[13px] font-mono font-bold text-(--text-main)">
                   Launch Arguments
                 </span>
                 {saveArgsSuccess && (
-                  <span className="text-[10px] text-ok font-mono">
+                  <span className="text-[11px] text-ok font-mono">
                     ✓ Saved
                   </span>
                 )}
@@ -602,11 +632,11 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                   placeholder="e.g. -dx11 -novid -fullscreen"
                   value={appLaunchArgs}
                   onChange={(e) => setAppLaunchArgs(e.target.value)}
-                  className="flex-1 px-3 py-1.5 rounded-lg bg-(--bg-surface) border border-(--border-color) text-(--text-main) font-mono text-[11px]"
+                  className="flex-1 px-3 py-1.5 rounded-lg bg-(--bg-surface) border border-(--border-color) text-(--text-main) font-mono text-[12px]"
                 />
                 <button
                   onClick={handleSaveLaunchArgs}
-                  className="px-3 py-1.5 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[11px] font-semibold cursor-pointer transition-colors"
+                  className="px-3 py-1.5 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[12px] font-semibold cursor-pointer transition-colors"
                 >
                   Save
                 </button>
@@ -621,7 +651,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                     handleSelectApp(null);
                     onNavigate("diagnostics");
                   }}
-                  className="px-3 py-1.5 rounded-lg bg-(--bg-elevated) hover:bg-(--border-color) text-(--text-main) text-[11px] font-mono flex items-center gap-1.5 border border-(--border-color) cursor-pointer transition-colors"
+                  className="px-3 py-1.5 rounded-lg bg-(--bg-elevated) hover:bg-(--border-color) text-(--text-main) text-[12px] flex items-center gap-1.5 border border-(--border-color) cursor-pointer transition-colors"
                 >
                   <Activity className="w-3.5 h-3.5 text-amber-500" /> Diagnostics
                 </button>
@@ -632,18 +662,18 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                     try {
                       const res = await exportAppBundle(selectedApp.id);
                       setExportStatus({ ok: true, text: `Exported to: ${res}` });
-                    } catch (e) {
-                      setExportStatus({ ok: false, text: `Export failed: ${String(e)}` });
+                    } catch (cause) {
+                      setExportStatus({ ok: false, text: errorMessage(cause, "Export failed.") });
                     }
                   }}
-                  className="px-3 py-1.5 rounded-lg bg-(--bg-elevated) hover:bg-(--border-color) text-(--text-main) text-[11px] font-mono flex items-center gap-1.5 border border-(--border-color) cursor-pointer transition-colors"
+                  className="px-3 py-1.5 rounded-lg bg-(--bg-elevated) hover:bg-(--border-color) text-(--text-main) text-[12px] flex items-center gap-1.5 border border-(--border-color) cursor-pointer transition-colors"
                 >
                   <Share className="w-3.5 h-3.5 text-(--accent-primary)" /> Export .app
                 </button>
 
                 <button
                   onClick={() => setConfirmDeleteApp(selectedApp)}
-                  className="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 text-[11px] font-mono flex items-center gap-1.5 border border-red-500/30 cursor-pointer transition-colors"
+                  className="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 text-[12px] flex items-center gap-1.5 border border-red-500/30 cursor-pointer transition-colors"
                 >
                   <Trash2 className="w-3.5 h-3.5" /> Remove from Shelf
                 </button>
@@ -651,14 +681,18 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
 
               {exportStatus && (
                 <div
-                  className={`px-3 py-2 rounded-lg border font-mono text-[11px] ${
+                  className={`px-3 py-2 rounded-lg border text-[12px] flex items-center gap-1.5 ${
                     exportStatus.ok
                       ? "border-ok/40 bg-(--color-ok-glow) text-ok"
                       : "border-red-500/40 bg-red-500/10 text-red-500"
                   }`}
                 >
-                  {exportStatus.ok ? "✓ " : "⚠ "}
-                  {exportStatus.text}
+                  {exportStatus.ok ? (
+                    <Check className="w-3.5 h-3.5 shrink-0" />
+                  ) : (
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  )}
+                  <span className="min-w-0 break-all">{exportStatus.text}</span>
                 </div>
               )}
 
@@ -668,7 +702,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                     onToggleFavorite(selectedApp.id);
                     setSelectedApp({ ...selectedApp, favorite: !selectedApp.favorite });
                   }}
-                  className={`px-3 py-1.5 rounded-lg text-[11px] font-mono flex items-center gap-1 border cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg text-[12px] flex items-center gap-1 border cursor-pointer ${
                     selectedApp.favorite
                       ? "bg-red-500/10 border-red-500/30 text-red-500"
                       : "bg-(--bg-elevated) border-(--border-color) text-(--text-secondary)"
@@ -684,7 +718,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                       onStopApp(selectedApp.id);
                       handleSelectApp(null);
                     }}
-                    className="px-4 py-1.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-500 text-[11px] font-mono font-bold flex items-center gap-1.5 cursor-pointer"
+                    className="px-4 py-1.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-500 text-[12px] font-bold flex items-center gap-1.5 cursor-pointer"
                   >
                     <Square className="w-3.5 h-3.5 fill-current" /> STOP
                   </button>
@@ -694,7 +728,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                       onLaunchApp(selectedApp.id);
                       handleSelectApp(null);
                     }}
-                    className="px-4 py-1.5 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[11px] font-mono font-bold flex items-center gap-1.5 shadow-md cursor-pointer"
+                    className="px-4 py-1.5 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[12px] font-bold flex items-center gap-1.5 shadow-md cursor-pointer"
                   >
                     <Play className="w-3.5 h-3.5 fill-current" /> LAUNCH
                   </button>
@@ -702,38 +736,38 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
               </div>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* Remove from Shelf Confirmation Modal */}
       {confirmDeleteApp && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-(--bg-surface) border border-(--border-color) p-6 shadow-2xl space-y-4 text-center animate-in fade-in zoom-in-95 duration-100">
+        <Modal label="Remove application" onClose={() => setConfirmDeleteApp(null)}>
+          <div className="space-y-4 text-center">
             <div className="w-12 h-12 rounded-full bg-red-500/10 text-red-500 mx-auto flex items-center justify-center">
               <Trash2 className="w-6 h-6" />
             </div>
             <div>
               <h3 className="text-[15px] font-bold text-(--text-main)">Remove from Shelf?</h3>
-              <p className="text-[12px] text-(--text-muted) mt-1.5 leading-relaxed">
+              <p className="text-[13px] text-(--text-muted) mt-1.5 leading-relaxed">
                 Are you sure you want to remove <span className="font-semibold text-(--text-main)">"{confirmDeleteApp.name}"</span>? The files inside your bottle prefix will not be deleted.
               </p>
             </div>
             <div className="flex gap-2 justify-center pt-2">
               <button
                 onClick={() => setConfirmDeleteApp(null)}
-                className="px-4 py-2 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-(--text-main) text-[12px] font-semibold hover:bg-(--bg-surface) transition-colors cursor-pointer"
+                className="px-4 py-2 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-(--text-main) text-[13px] font-semibold hover:bg-(--bg-surface) transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={() => handleUnregisterApp(confirmDeleteApp.id)}
-                className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-[12px] font-semibold transition-colors cursor-pointer shadow-xs"
+                className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-[13px] font-semibold transition-colors cursor-pointer shadow-xs"
               >
                 Remove
               </button>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

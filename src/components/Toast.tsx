@@ -75,15 +75,15 @@ const ToastCard: React.FC<{ toast: ToastItem; onDismiss: () => void }> = ({ toas
 
   return (
     <div
-      className={`pointer-events-auto relative overflow-hidden rounded-xl border ${config.border} ${config.bg} p-3.5 shadow-2xl backdrop-blur-xl animate-fade-in flex items-start gap-3 text-[12px] font-sans transition-all duration-200`}
+      className={`pointer-events-auto relative overflow-hidden rounded-xl border ${config.border} ${config.bg} p-3.5 shadow-2xl backdrop-blur-xl fc-pop flex items-start gap-3 text-[13px] font-sans transition-all duration-200`}
     >
       <div className={`absolute left-0 top-0 bottom-0 w-1 ${config.indicator}`} />
       {config.icon}
       <div className="flex-1 min-w-0 pr-2">
-        <p className="font-semibold text-(--text-main) text-[12px] leading-tight">
+        <p className="font-semibold text-(--text-main) text-[13px] leading-tight">
           {toast.title || config.defaultTitle}
         </p>
-        <p className="text-(--text-secondary) text-[11px] mt-0.5 break-words leading-relaxed font-mono">
+        <p className="text-(--text-secondary) text-[12px] mt-0.5 break-words leading-relaxed font-mono">
           {toast.message}
         </p>
       </div>

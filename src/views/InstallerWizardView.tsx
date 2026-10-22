@@ -165,12 +165,12 @@ export const InstallerWizardView: React.FC<InstallerWizardViewProps> = ({
             <Download className="w-5 h-5 text-(--accent-primary)" />
             Smart Installer Wizard
           </h1>
-          <p className="text-[12px] text-(--text-secondary) mt-0.5">
+          <p className="text-[13px] text-(--text-secondary) mt-0.5">
             Automated Wine configuration, translation engine tuning & one-click setup
           </p>
         </div>
 
-        <div className="flex items-center gap-2 font-mono text-[11px]">
+        <div className="flex items-center gap-2 font-mono text-[12px]">
           <span
             className={`px-2.5 py-1 rounded-full ${
               step >= 1 ? "bg-(--accent-primary) text-white font-bold" : "bg-(--bg-elevated) text-(--text-muted)"
@@ -206,7 +206,7 @@ export const InstallerWizardView: React.FC<InstallerWizardViewProps> = ({
       </div>
 
       {error && (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-[12px] text-red-400 font-mono space-y-1">
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-[13px] text-red-400 font-mono space-y-1">
           <p className="font-bold flex items-center gap-2">
             <AlertTriangle className="w-4 h-4" /> Installation Error
           </p>
@@ -220,11 +220,11 @@ export const InstallerWizardView: React.FC<InstallerWizardViewProps> = ({
           {/* Popular 1-Click Game Presets */}
           <div className="rounded-2xl border border-(--border-color) bg-(--bg-surface) p-5 space-y-3.5 shadow-xs">
             <div className="flex items-center justify-between">
-              <span className="text-[12px] font-mono uppercase tracking-wider text-(--text-muted) font-semibold flex items-center gap-2">
+              <span className="text-[13px] uppercase tracking-wider text-(--text-muted) font-semibold flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-(--accent-primary)" />
                 Quick Install from Verified Presets
               </span>
-              <span className="text-[11px] font-mono text-(--text-muted)">1-Click Setup</span>
+              <span className="text-[12px] font-mono text-(--text-muted)">1-Click Setup</span>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5">
@@ -234,10 +234,10 @@ export const InstallerWizardView: React.FC<InstallerWizardViewProps> = ({
                   onClick={() => handleSelectPreset(preset)}
                   className="p-3 rounded-xl border border-(--border-color) bg-(--bg-elevated) hover:border-(--accent-primary) hover:bg-(--accent-primary)/10 text-left transition-all cursor-pointer group shadow-xs"
                 >
-                  <p className="text-[12px] font-bold text-(--text-main) group-hover:text-(--accent-primary) truncate">
+                  <p className="text-[13px] font-bold text-(--text-main) group-hover:text-(--accent-primary) truncate">
                     {preset.name}
                   </p>
-                  <p className="text-[10px] text-(--text-muted) truncate mt-0.5">
+                  <p className="text-[11px] text-(--text-muted) truncate mt-0.5">
                     {preset.category}
                   </p>
                 </button>
@@ -266,7 +266,7 @@ export const InstallerWizardView: React.FC<InstallerWizardViewProps> = ({
               <h2 className="text-[17px] font-bold text-(--text-main)">
                 Or Select Any Local Windows Installer
               </h2>
-              <p className="text-[12px] text-(--text-secondary) mt-1">
+              <p className="text-[13px] text-(--text-secondary) mt-1">
                 Drag and drop your <span className="font-mono text-(--text-main) font-semibold">.exe</span> or <span className="font-mono text-(--text-main) font-semibold">.msi</span> file directly into this box
               </p>
             </div>
@@ -278,12 +278,12 @@ export const InstallerWizardView: React.FC<InstallerWizardViewProps> = ({
                   placeholder="Or paste path e.g. /Users/mac/Downloads/setup.exe"
                   value={filePath}
                   onChange={(e) => setFilePath(e.target.value)}
-                  className="flex-1 px-3 py-2 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-[12px] font-sans text-(--text-main) placeholder-(--text-muted) focus:outline-none focus:border-(--accent-primary)"
+                  className="flex-1 px-3 py-2 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-[13px] font-sans text-(--text-main) placeholder-(--text-muted) focus:outline-none focus:border-(--accent-primary)"
                 />
                 <button
                   disabled={!filePath || analyzing}
                   onClick={() => handleAnalyzeFile(filePath)}
-                  className="px-4 py-2 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) disabled:opacity-50 text-white text-[12px] font-medium flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
+                  className="px-4 py-2 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) disabled:opacity-50 text-white text-[13px] font-medium flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
                 >
                   {analyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : "Analyze"}
                 </button>
@@ -297,44 +297,44 @@ export const InstallerWizardView: React.FC<InstallerWizardViewProps> = ({
       {step === 2 && analysis && recommendation && (
         <div className="space-y-6">
           <div className="rounded-xl border border-(--border-color) bg-(--bg-surface) p-5 space-y-4 shadow-xs">
-            <h2 className="text-[13px] font-mono font-bold text-(--text-muted) uppercase tracking-wider">
+            <h2 className="text-[13px] font-bold text-(--text-muted) uppercase tracking-wider">
               1. Executable Inspection Results
             </h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 font-mono text-[12px]">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 font-mono text-[13px]">
               <div className="p-3 rounded-lg bg-(--bg-elevated) border border-(--border-color)">
-                <span className="text-(--text-muted) text-[10px] block">FILE / PRESET</span>
+                <span className="text-(--text-muted) text-[11px] block">FILE / PRESET</span>
                 <p className="font-bold text-(--text-main) truncate mt-0.5">{analysis.file_name}</p>
               </div>
               <div className="p-3 rounded-lg bg-(--bg-elevated) border border-(--border-color)">
-                <span className="text-(--text-muted) text-[10px] block">ARCHITECTURE</span>
+                <span className="text-(--text-muted) text-[11px] block">ARCHITECTURE</span>
                 <p className="font-bold text-(--accent-primary) mt-0.5">{analysis.arch}</p>
               </div>
               <div className="p-3 rounded-lg bg-(--bg-elevated) border border-(--border-color)">
-                <span className="text-(--text-muted) text-[10px] block">SIZE ESTIMATE</span>
+                <span className="text-(--text-muted) text-[11px] block">SIZE ESTIMATE</span>
                 <p className="font-bold text-(--text-main) mt-0.5">
                   {(analysis.size_bytes / (1024 * 1024)).toFixed(1)} MB
                 </p>
               </div>
               <div className="p-3 rounded-lg bg-(--bg-elevated) border border-(--border-color)">
-                <span className="text-(--text-muted) text-[10px] block">COMPATIBILITY</span>
+                <span className="text-(--text-muted) text-[11px] block">COMPATIBILITY</span>
                 <p className="font-bold text-ok mt-0.5">{recommendation.compatibility}%</p>
               </div>
             </div>
           </div>
 
           <div className="rounded-xl border border-(--border-color) bg-(--bg-surface) p-5 space-y-4 shadow-xs">
-            <h2 className="text-[13px] font-mono font-bold text-(--text-muted) uppercase tracking-wider">
+            <h2 className="text-[13px] font-bold text-(--text-muted) uppercase tracking-wider">
               2. FusionCross Optimal Recipe
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 font-mono text-[12px]">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 font-mono text-[13px]">
               <div className="p-3 rounded-lg bg-(--bg-elevated) border border-(--border-color) space-y-1">
-                <div className="flex items-center gap-1.5 text-(--accent-primary) text-[10px]">
+                <div className="flex items-center gap-1.5 text-(--accent-primary) text-[11px]">
                   <Boxes className="w-3.5 h-3.5" /> RECOMMENDED ENGINE
                 </div>
                 <p className="font-bold text-(--text-main)">{recommendation.runtime_hint}</p>
               </div>
               <div className="p-3 rounded-lg bg-(--bg-elevated) border border-(--border-color) space-y-1">
-                <div className="flex items-center gap-1.5 text-ok text-[10px]">
+                <div className="flex items-center gap-1.5 text-ok text-[11px]">
                   <Cpu className="w-3.5 h-3.5" /> GRAPHICS TRANSLATION
                 </div>
                 <p className="font-bold text-(--text-main) uppercase">
@@ -342,7 +342,7 @@ export const InstallerWizardView: React.FC<InstallerWizardViewProps> = ({
                 </p>
               </div>
               <div className="p-3 rounded-lg bg-(--bg-elevated) border border-(--border-color) space-y-1">
-                <div className="flex items-center gap-1.5 text-amber-500 text-[10px]">
+                <div className="flex items-center gap-1.5 text-amber-500 text-[11px]">
                   <FlaskConical className="w-3.5 h-3.5" /> REQUIRED RUNTIMES
                 </div>
                 <p className="font-bold text-(--text-main) truncate">
@@ -353,7 +353,7 @@ export const InstallerWizardView: React.FC<InstallerWizardViewProps> = ({
           </div>
 
           <div className="rounded-xl border border-(--border-color) bg-(--bg-surface) p-5 space-y-4 shadow-xs">
-            <h2 className="text-[13px] font-mono font-bold text-(--text-muted) uppercase tracking-wider">
+            <h2 className="text-[13px] font-bold text-(--text-muted) uppercase tracking-wider">
               3. Target Bottle Selection
             </h2>
             <div className="space-y-3">
@@ -370,7 +370,7 @@ export const InstallerWizardView: React.FC<InstallerWizardViewProps> = ({
                   disabled={createNewBottle}
                   value={selectedBottleId}
                   onChange={(e) => setSelectedBottleId(e.target.value)}
-                  className="px-3 py-1.5 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-[12px] font-mono text-(--text-main) disabled:opacity-50"
+                  className="px-3 py-1.5 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-[13px] font-mono text-(--text-main) disabled:opacity-50"
                 >
                   {bottles.map((b) => (
                     <option key={b.id} value={b.id}>
@@ -395,7 +395,7 @@ export const InstallerWizardView: React.FC<InstallerWizardViewProps> = ({
                   value={newBottleName}
                   onChange={(e) => setNewBottleName(e.target.value)}
                   placeholder="Bottle Name"
-                  className="px-3 py-1.5 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-[12px] font-mono text-(--text-main) disabled:opacity-50"
+                  className="px-3 py-1.5 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-[13px] font-mono text-(--text-main) disabled:opacity-50"
                 />
               </label>
             </div>
@@ -404,13 +404,13 @@ export const InstallerWizardView: React.FC<InstallerWizardViewProps> = ({
           <div className="flex items-center justify-between pt-2">
             <button
               onClick={() => setStep(1)}
-              className="px-4 py-2 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-(--text-secondary) hover:text-(--text-main) font-medium text-[12px] flex items-center gap-1.5 cursor-pointer transition-colors"
+              className="px-4 py-2 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-(--text-secondary) hover:text-(--text-main) font-medium text-[13px] flex items-center gap-1.5 cursor-pointer transition-colors"
             >
               <ArrowLeft className="w-4 h-4" /> Back
             </button>
             <button
               onClick={() => setStep(3)}
-              className="px-5 py-2 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white font-medium text-[12px] flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
+              className="px-5 py-2 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white font-medium text-[13px] flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
             >
               Proceed to Install <ArrowRight className="w-4 h-4" />
             </button>
@@ -428,12 +428,12 @@ export const InstallerWizardView: React.FC<InstallerWizardViewProps> = ({
             <h2 className="text-[18px] font-bold text-(--text-main)">
               {installing ? "Installing Windows Application..." : "Ready to Install"}
             </h2>
-            <p className="text-[12px] text-(--text-secondary) mt-1">
+            <p className="text-[13px] text-(--text-secondary) mt-1">
               FusionCross will run <span className="font-mono text-(--text-main) font-semibold">{analysis?.file_name}</span> in the selected Wine prefix.
             </p>
           </div>
 
-          <div className="rounded-xl bg-(--bg-elevated) p-4 border border-(--border-color) font-mono text-[11px] text-left text-ok space-y-1">
+          <div className="rounded-xl bg-(--bg-elevated) p-4 border border-(--border-color) font-mono text-[12px] text-left text-ok space-y-1">
             <p>● WinePrefix configuration: Ready</p>
             <p>● DLL Overrides: Auto-configured</p>
             <p>● Graphics API: {recommendation?.graphics.toUpperCase()}</p>
@@ -444,14 +444,14 @@ export const InstallerWizardView: React.FC<InstallerWizardViewProps> = ({
             <button
               disabled={installing}
               onClick={() => setStep(2)}
-              className="px-4 py-2 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-(--text-secondary) font-medium text-[12px] disabled:opacity-50 cursor-pointer"
+              className="px-4 py-2 rounded-lg bg-(--bg-elevated) border border-(--border-color) text-(--text-secondary) font-medium text-[13px] disabled:opacity-50 cursor-pointer"
             >
               Back
             </button>
             <button
               disabled={installing}
               onClick={handleRunInstallation}
-              className="px-6 py-2.5 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) disabled:opacity-50 text-white font-semibold text-[12px] shadow-xs cursor-pointer transition-colors"
+              className="px-6 py-2.5 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) disabled:opacity-50 text-white font-semibold text-[13px] shadow-xs cursor-pointer transition-colors"
             >
               {installing ? "Installing..." : "Execute Installer"}
             </button>
@@ -475,7 +475,7 @@ export const InstallerWizardView: React.FC<InstallerWizardViewProps> = ({
           <div className="pt-4 flex items-center justify-center gap-3">
             <button
               onClick={onFinish}
-              className="px-6 py-2.5 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[12px] font-semibold shadow-xs cursor-pointer transition-colors"
+              className="px-6 py-2.5 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[13px] font-semibold shadow-xs cursor-pointer transition-colors"
             >
               Go to Application Library
             </button>

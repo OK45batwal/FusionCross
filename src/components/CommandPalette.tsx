@@ -74,7 +74,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             placeholder="Type a command or search applications, bottles, runtimes..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="flex-1 bg-transparent border-none text-[13px] font-mono text-graphite-100 placeholder-graphite-400 focus:outline-none"
+            className="flex-1 bg-transparent border-none text-[13px] text-graphite-100 placeholder-graphite-400 focus:outline-none"
           />
           <button
             aria-label="Close command palette"
@@ -90,7 +90,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           {/* Applications match */}
           {filteredApps.length > 0 && (
             <div>
-              <p className="px-2 mb-1.5 text-[10px] font-mono tracking-wider text-graphite-400 font-semibold">
+              <p className="px-2 mb-1.5 text-[11px] font-mono tracking-wider text-graphite-400 font-semibold">
                 APPLICATIONS
               </p>
               <div className="space-y-1">
@@ -107,10 +107,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                       <AppWindow className="w-4 h-4 text-accent-400" />
                       <div>
                         <p className="text-[13px] font-medium text-graphite-100">{app.name}</p>
-                        <p className="text-[11px] font-mono text-graphite-400">{app.category}</p>
+                        <p className="text-[12px] font-mono text-graphite-400">{app.category}</p>
                       </div>
                     </div>
-                    <span className="text-[11px] font-mono text-accent-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="text-[12px] font-mono text-accent-400 opacity-0 group-hover:opacity-100 transition-opacity">
                       Launch ↵
                     </span>
                   </button>
@@ -122,7 +122,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           {/* Quick Navigation Commands */}
           {navigationCommands.length > 0 && (
             <div>
-              <p className="px-2 mb-1.5 text-[10px] font-mono tracking-wider text-graphite-400 font-semibold">
+              <p className="px-2 mb-1.5 text-[11px] font-mono tracking-wider text-graphite-400 font-semibold">
                 ACTIONS & TOOLS
               </p>
               <div className="space-y-1">
@@ -138,7 +138,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                       className="w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-graphite-850 hover:bg-graphite-800 border border-graphite-700/60 transition-colors text-left"
                     >
                       <Icon className="w-4 h-4 text-graphite-300" />
-                      <span className="text-[12px] font-medium text-graphite-200">{cmd.label}</span>
+                      <span className="text-[13px] font-medium text-graphite-200">{cmd.label}</span>
                     </button>
                   );
                 })}
@@ -149,7 +149,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           {/* Bottles match */}
           {filteredBottles.length > 0 && (
             <div>
-              <p className="px-2 mb-1.5 text-[10px] font-mono tracking-wider text-graphite-400 font-semibold">
+              <p className="px-2 mb-1.5 text-[11px] font-mono tracking-wider text-graphite-400 font-semibold">
                 BOTTLE ENVIRONMENTS
               </p>
               <div className="space-y-1">
@@ -165,9 +165,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                   >
                     <div className="flex items-center gap-2.5">
                       <FlaskConical className="w-4 h-4 text-ok" />
-                      <span className="text-[12px] font-medium text-graphite-100">{b.name}</span>
+                      <span className="text-[13px] font-medium text-graphite-100">{b.name}</span>
                     </div>
-                    <span className="text-[11px] font-mono text-graphite-400">
+                    <span className="text-[12px] font-mono text-graphite-400">
                       {b.windows_version} · {b.graphics}
                     </span>
                   </button>
@@ -179,7 +179,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           {/* Runtimes match */}
           {filteredRuntimes.length > 0 && (
             <div>
-              <p className="px-2 mb-1.5 text-[10px] font-mono tracking-wider text-graphite-400 font-semibold">
+              <p className="px-2 mb-1.5 text-[11px] font-mono tracking-wider text-graphite-400 font-semibold">
                 RUNTIMES
               </p>
               <div className="space-y-1">
@@ -194,9 +194,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                   >
                     <div className="flex items-center gap-2.5">
                       <Boxes className="w-4 h-4 text-warn" />
-                      <span className="text-[12px] font-medium text-graphite-100">{r.name}</span>
+                      <span className="text-[13px] font-medium text-graphite-100">{r.name}</span>
                     </div>
-                    <span className="text-[11px] font-mono text-graphite-400">
+                    <span className="text-[12px] font-mono text-graphite-400">
                       {r.downloaded ? "Installed" : "Available"}
                     </span>
                   </button>
@@ -207,7 +207,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         </div>
 
         {/* Footer info */}
-        <div className="px-4 py-2 border-t border-graphite-600/70 bg-graphite-950/60 flex items-center justify-between text-[11px] font-mono text-graphite-400">
+        <div className="px-4 py-2 border-t border-graphite-600/70 bg-graphite-950/60 flex items-center justify-between text-[12px] font-mono text-graphite-400">
           <span>Navigate with ↑ ↓ and Enter</span>
           <span>ESC to close</span>
         </div>

@@ -33,13 +33,16 @@ export const RuntimeManagerView: React.FC<RuntimeManagerViewProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<Runtime[]>(runtimes);
+  // Keyed on the installed set: a poll that returns the same runtimes must not
+  // re-run this fetch (it shells out to `which` on the backend).
+  const installedKey = runtimes.map((runtime) => runtime.id).join(",");
   useEffect(() => {
     let disposed = false;
     getRuntimes().then((items) => { if (!disposed) setCatalog(items); }).catch((cause) => {
       if (!disposed) setError((cause as FusionErrorPayload).message || "Could not load runtime catalog.");
     });
     return () => { disposed = true; };
-  }, [runtimes]);
+  }, [installedKey]);
 
   const handleDownload = async (runtime: Runtime) => {
     setError(null);
@@ -96,27 +99,27 @@ export const RuntimeManagerView: React.FC<RuntimeManagerViewProps> = ({
           <h1 className="text-[20px] font-bold text-graphite-100 flex items-center gap-2">
             <Boxes className="w-5 h-5 text-accent-400" /> Runtime Engine Manager
           </h1>
-          <p className="text-[12px] text-graphite-400">
+          <p className="text-[13px] text-graphite-400">
             Wine Stable, Wine Staging, Wine-GE & Proton-GE runtime management
           </p>
         </div>
       </div>
 
       {notice && (
-        <div className="rounded-xl border border-ok/40 bg-ok/10 p-3 text-[12px] text-ok font-mono">
+        <div className="rounded-xl border border-ok/40 bg-ok/10 p-3 text-[13px] text-ok font-mono">
           ✓ {notice}
         </div>
       )}
 
       {error && (
-        <div className="rounded-xl border border-err/40 bg-err/10 p-3 text-[12px] text-err font-mono">
+        <div className="rounded-xl border border-err/40 bg-err/10 p-3 text-[13px] text-err font-mono">
           ⚠ {error}
         </div>
       )}
 
       {/* Available Engine Probing */}
       <div className="space-y-3">
-        <h2 className="text-[12px] font-mono font-bold text-graphite-400 uppercase tracking-wider">
+        <h2 className="text-[13px] font-bold text-graphite-400 uppercase tracking-wider">
           System Runtime Probing
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -139,7 +142,7 @@ export const RuntimeManagerView: React.FC<RuntimeManagerViewProps> = ({
                       <RefreshCw className={`w-3.5 h-3.5 ${isProbing ? "animate-spin" : ""}`} />
                     </button>
                   </div>
-                  <p className="text-[11px] font-mono text-graphite-400 mt-1">
+                  <p className="text-[12px] font-mono text-graphite-400 mt-1">
                     {engine === "Wine Stable"
                       ? "Official Wine binary"
                       : engine === "Wine-GE"
@@ -148,7 +151,7 @@ export const RuntimeManagerView: React.FC<RuntimeManagerViewProps> = ({
                   </p>
                 </div>
 
-                <div className="pt-3 border-t border-graphite-700/60 font-mono text-[12px]">
+                <div className="pt-3 border-t border-graphite-700/60 font-mono text-[13px]">
                   {status ? (
                     <p className={status.includes("not found") ? "text-warn" : "text-ok"}>
                       ● {status}
@@ -156,7 +159,7 @@ export const RuntimeManagerView: React.FC<RuntimeManagerViewProps> = ({
                   ) : (
                     <button
                       onClick={() => handleProbe(engine)}
-                      className="text-accent-400 hover:underline text-[11px]"
+                      className="text-accent-400 hover:underline text-[12px]"
                     >
                       Probe Status →
                     </button>
@@ -170,20 +173,20 @@ export const RuntimeManagerView: React.FC<RuntimeManagerViewProps> = ({
 
       {/* Installed Runtimes Table */}
       <div className="rounded-xl border border-graphite-600 bg-graphite-900 p-5 space-y-4">
-        <h2 className="text-[12px] font-mono font-bold text-graphite-400 uppercase tracking-wider">
+        <h2 className="text-[13px] font-bold text-graphite-400 uppercase tracking-wider">
           Managed Runtime Catalog ({catalog.length})
         </h2>
 
         <div className="divide-y divide-graphite-700/60 rounded-lg border border-graphite-700/60 bg-graphite-950 overflow-hidden">
           {catalog.map((r) => (
-            <div key={r.id} className="p-4 flex items-center justify-between font-mono text-[12px]">
+            <div key={r.id} className="p-4 flex items-center justify-between font-mono text-[13px]">
               <div>
                 <span className="font-bold text-graphite-100">{r.name}</span>
                 <span className="text-graphite-400 ml-2">v{r.version || "not probed"}</span>
-                <span className="text-[10px] ml-3 px-2 py-0.5 rounded bg-graphite-850 text-accent-400 border border-graphite-700">
+                <span className="text-[11px] ml-3 px-2 py-0.5 rounded bg-graphite-850 text-accent-400 border border-graphite-700">
                   {r.category}
                 </span>
-                {r.note && <p className="text-[11px] text-graphite-400 mt-1">{r.note}</p>}
+                {r.note && <p className="text-[12px] text-graphite-400 mt-1">{r.note}</p>}
               </div>
 
               <div className="flex items-center gap-3">
@@ -218,14 +221,14 @@ export const RuntimeManagerView: React.FC<RuntimeManagerViewProps> = ({
 
       {/* Import Custom Runtime Archive */}
       <div className="rounded-xl border border-graphite-600 bg-graphite-900 p-5 space-y-4">
-        <h2 className="text-[12px] font-mono font-bold text-graphite-400 uppercase tracking-wider flex items-center gap-2">
+        <h2 className="text-[13px] font-bold text-graphite-400 uppercase tracking-wider flex items-center gap-2">
           <Upload className="w-4 h-4 text-accent-400" /> Import Custom Runtime Archive
         </h2>
-        <p className="text-[12px] text-graphite-300">
+        <p className="text-[13px] text-graphite-300">
           Import a custom Wine build archive (<span className="font-mono text-graphite-200">.tar.xz</span> or <span className="font-mono text-graphite-200">.tar.gz</span>). FusionCross checks the archive structure and runs the Wine binary to identify its version. Only import runtimes from a source you trust.
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 font-mono text-[12px]">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 font-mono text-[13px]">
           <input
             type="text"
             aria-label="Runtime name"
@@ -247,7 +250,7 @@ export const RuntimeManagerView: React.FC<RuntimeManagerViewProps> = ({
         <button
           onClick={handleImport}
           disabled={!importName.trim() || !importPath.trim()}
-          className="px-4 py-2 rounded-lg bg-accent-500 hover:bg-accent-400 disabled:opacity-50 text-white font-mono text-[12px] font-bold flex items-center gap-1.5"
+          className="px-4 py-2 rounded-lg bg-accent-500 hover:bg-accent-400 disabled:opacity-50 text-white font-mono text-[13px] font-bold flex items-center gap-1.5"
         >
           <Plus className="w-4 h-4" /> Import & Register Runtime
         </button>
