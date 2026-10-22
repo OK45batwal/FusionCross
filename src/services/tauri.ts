@@ -14,6 +14,8 @@ export interface SystemInfo {
   arch: string;
   os: string;
   engines: string[];
+  /** Resolved Wine binary; null when Windows apps cannot launch yet. */
+  wine_path: string | null;
 }
 
 export interface RuntimeStatus {

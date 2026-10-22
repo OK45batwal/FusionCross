@@ -7,7 +7,7 @@ vi.mock("../services/tauri", () => ({ getState: vi.fn(), getSystemInfo: vi.fn(),
 const state: api.AppState = { schema_version: 3, applications: [], bottles: [], runtimes: [], snapshots: [], settings: [] };
 beforeEach(() => {
   vi.mocked(api.getState).mockResolvedValue(state);
-  vi.mocked(api.getSystemInfo).mockResolvedValue({ app_version: "2", arch: "aarch64", os: "macos", engines: [] });
+  vi.mocked(api.getSystemInfo).mockResolvedValue({ app_version: "2", arch: "aarch64", os: "macos", engines: [], wine_path: "/test/wine64" });
   vi.mocked(api.getTemplates).mockResolvedValue([]);
   vi.mocked(api.listRunning).mockResolvedValue([]);
   vi.mocked(api.getRecoveryNotice).mockResolvedValue(null);

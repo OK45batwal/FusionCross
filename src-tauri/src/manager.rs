@@ -89,6 +89,10 @@ impl FusionState {
         let (mut state, notice) = crate::core::storage::load(&d.state)?;
         let loaded = state.clone();
 
+        // Bridge libraries created under the older bundle identifiers. Paths
+        // are registered where they already live — nothing is copied.
+        migrate_legacy(&mut state, &legacy_bases());
+
         // Reconcile any existing bottle prefixes found on disk
         if d.bottles.is_dir() {
             if let Ok(entries) = std::fs::read_dir(&d.bottles) {
@@ -165,6 +169,43 @@ impl FusionState {
         *guard = next;
         Ok(result)
     }
+}
+
+/// One-time bridge from the older bundle identifiers. Bottles and runtimes are
+/// re-registered at their existing paths; nothing is copied or moved.
+fn migrate_legacy(state: &mut AppState, bases: &[PathBuf]) {
+    if !state.bottles.is_empty() {
+        return;
+    }
+    for base in bases {
+        let Ok((legacy, _)) = crate::core::storage::load(&base.join("state.json")) else {
+            continue;
+        };
+        for bottle in legacy.bottles {
+            let prefix = std::path::Path::new(&bottle.path);
+            let usable = prefix.join("drive_c").is_dir() || prefix.join("system.reg").is_file();
+            if usable && !state.bottles.iter().any(|b| b.id == bottle.id) {
+                state.bottles.push(bottle);
+            }
+        }
+        for runtime in legacy.runtimes {
+            let usable =
+                crate::runtime::engine_binary(std::path::Path::new(&runtime.path)).is_some();
+            if usable && !state.runtimes.iter().any(|r| r.id == runtime.id) {
+                state.runtimes.push(runtime);
+            }
+        }
+    }
+}
+
+fn legacy_bases() -> Vec<PathBuf> {
+    let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
+        return Vec::new();
+    };
+    ["FusionCross", "com.fusioncross.app"]
+        .into_iter()
+        .map(|name| home.join("Library/Application Support").join(name))
+        .collect()
 }
 
 /// Drop entries that point outside the bottle, at helper binaries, or at the
@@ -373,6 +414,9 @@ impl Jobs {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::ids::new_id;
+    use crate::core::state::{Bottle, Runtime};
+    use std::path::Path;
 
     #[test]
     fn job_status_contract_and_cancellation_are_visible_to_frontend() {
@@ -424,5 +468,76 @@ mod tests {
         let listed = jobs.list();
         assert_eq!(listed.len(), 101);
         assert!(listed.iter().any(|j| j.id == active));
+    }
+
+    fn bottle(id: &str, path: &Path) -> Bottle {
+        Bottle {
+            id: id.into(),
+            name: id.into(),
+            prefix_type: "gaming".into(),
+            runtime: "Wine Stable".into(),
+            windows_version: "win10".into(),
+            graphics: "automatic".into(),
+            dxvk_enabled: true,
+            msync_enabled: true,
+            performance_hud: false,
+            retina_mode: false,
+            path: path.to_string_lossy().into_owned(),
+            created_at: "2026-01-01T00:00:00Z".into(),
+            last_used_at: None,
+            environment: vec![],
+            dll_overrides: vec![],
+            dependencies: vec![],
+        }
+    }
+
+    fn runtime(id: &str, path: &Path) -> Runtime {
+        Runtime {
+            id: id.into(),
+            name: id.into(),
+            category: "wine".into(),
+            downloaded: true,
+            version: "9.0".into(),
+            path: path.to_string_lossy().into_owned(),
+            url: String::new(),
+            sha256: String::new(),
+            size_bytes: 0,
+        }
+    }
+
+    #[test]
+    fn migrates_only_usable_entries_from_legacy_bases() {
+        let root = std::env::temp_dir().join(format!("fc_migrate_{}", new_id()));
+        std::fs::create_dir_all(root.join("live/drive_c")).unwrap();
+        std::fs::create_dir_all(root.join("legacy/runtimes/wine/bin")).unwrap();
+        std::fs::write(root.join("legacy/runtimes/wine/bin/wine64"), b"stub").unwrap();
+
+        let legacy_base = root.join("legacy");
+        let mut old = AppState::default();
+        old.bottles.push(bottle("kept", &root.join("live")));
+        old.bottles.push(bottle("missing", &root.join("gone")));
+        old.runtimes
+            .push(runtime("wine", &root.join("legacy/runtimes/wine")));
+        old.runtimes
+            .push(runtime("gone", &root.join("runtimes/gone")));
+        crate::core::storage::save(&legacy_base.join("state.json"), &old).unwrap();
+
+        let mut state = AppState::default();
+        migrate_legacy(&mut state, &[legacy_base]);
+        assert_eq!(state.bottles.len(), 1);
+        assert_eq!(state.bottles[0].id, "kept");
+        assert_eq!(state.runtimes.len(), 1);
+        assert_eq!(state.runtimes[0].id, "wine");
+
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn never_overwrites_a_library_that_already_has_bottles() {
+        let mut state = AppState::default();
+        state.bottles.push(bottle("own", Path::new("/tmp")));
+        migrate_legacy(&mut state, &[PathBuf::from("/definitely/not/a/base")]);
+        assert_eq!(state.bottles.len(), 1);
+        assert_eq!(state.bottles[0].id, "own");
     }
 }

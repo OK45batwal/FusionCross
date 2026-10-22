@@ -49,7 +49,7 @@ test.beforeEach(async ({ page }) => {
         invoke: async (command: string, args: Record<string, string>) => {
           switch (command) {
             case "get_state": if (control.failState) throw { message: "Test connection unavailable" }; return structuredClone(state);
-            case "get_system_info": return { app_version: "2.0.0", arch: "aarch64", os: "macos", engines: [] };
+            case "get_system_info": return { app_version: "2.0.0", arch: "aarch64", os: "macos", engines: [], wine_path: params.has("noWine") ? null : "/test/wine64" };
             case "get_templates": return [{ type: "gaming", label: "Gaming", description: "Games", windows_version: "win10", graphics: "automatic", dependencies: [] }];
             case "get_recovery_notice": return null;
             case "list_running": case "list_jobs": return [];
@@ -102,7 +102,8 @@ test("command palette supports keyboard navigation, focus containment, and Escap
   await expect(dialog).toHaveCount(0);
 });
 
-test("lazy runtime view disables unverified downloads", async ({ page }) => {  await page.goto("/");
+test("lazy runtime view disables unverified downloads", async ({ page }) => {
+  await page.goto("/");
   await page.getByRole("button", { name: /Runtimes/ }).click();
   await expect(page.getByRole("heading", { name: "Runtime Engine Manager" })).toBeVisible();
   await expect(page.getByText("Import only — no verified download")).toBeVisible();
@@ -122,4 +123,13 @@ test("catalog install starts a background job for the selected game", async ({ p
   await page.getByText("Neon Drift", { exact: true }).click();
   await page.getByRole("button", { name: "Install Neon Drift" }).click();
   await expect(page.getByText(/Job #abcdef12 started in background/)).toBeVisible();
+});
+
+test("missing Wine runtime is surfaced with a setup path", async ({ page }) => {
+  await page.goto("/?noWine=1");
+  await expect(page.getByText(/No Wine runtime found/)).toBeVisible();
+  await page.getByRole("button", { name: "Set up runtime" }).click();
+  await expect(page.getByRole("heading", { name: "Runtime Engine Manager" })).toBeVisible();
+  await expect(page.getByText("No Wine binary found")).toBeVisible();
+  await expect(page.getByLabel("Path to wine64")).toBeVisible();
 });

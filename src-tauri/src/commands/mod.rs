@@ -51,66 +51,87 @@ pub fn wine_binary_for(app: &AppHandle, runtime_id: &str) -> Result<String, Fusi
         }
     }
 
-    // Check custom path in settings
+    detected_wine_path(app).ok_or(FusionError::RuntimeNotFound)
+}
+
+/// Any usable Wine binary: the configured one, an imported runtime, or one
+/// already installed on the Mac. `None` means Windows apps cannot launch yet.
+pub fn detected_wine_path(app: &AppHandle) -> Option<String> {
+    let st = app.state::<FusionState>();
     if let Ok(state) = st.0.lock() {
         if let Some((_, custom_path)) = state.settings.iter().find(|(k, _)| k == "wine_binary_path")
         {
             if !custom_path.is_empty() && Path::new(custom_path).exists() {
-                return Ok(custom_path.clone());
+                return Some(custom_path.clone());
+            }
+        }
+        for runtime in &state.runtimes {
+            if let Some(bin) = runtime::engine_binary(Path::new(&runtime.path)) {
+                return Some(bin.to_string_lossy().into_owned());
             }
         }
     }
+    auto_detect_wine()
+}
 
-    // Check user Library Whisky installation
-    if let Ok(home) = std::env::var("HOME").map(PathBuf::from) {
-        let whisky_bin = home
-            .join("Library/Application Support/com.isaacmarovitz.Whisky/Libraries/Wine/bin/wine64");
-        if whisky_bin.exists() {
-            return Ok(whisky_bin.to_string_lossy().into_owned());
-        }
-        let fc_runtime_bin =
-            home.join("Library/Application Support/FusionCross/runtimes/whisky-wine/bin/wine64");
-        if fc_runtime_bin.exists() {
-            return Ok(fc_runtime_bin.to_string_lossy().into_owned());
-        }
-    }
-
-    // Standard macOS locations (Homebrew, CrossOver, Whisky)
+fn auto_detect_wine() -> Option<String> {
+    let home = std::env::var_os("HOME").map(PathBuf::from)?;
     let candidates = [
-        "/opt/homebrew/bin/wine64",
-        "/opt/homebrew/bin/wine",
-        "/usr/local/bin/wine64",
-        "/usr/local/bin/wine",
-        "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine64",
-        "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine",
-        "/Applications/Whisky.app/Contents/Resources/Wine/bin/wine64",
+        // Whisky downloads its Wine toolkit outside the app bundle.
+        home.join("Library/Application Support/com.isaacmarovitz.Whisky/Libraries/Wine/bin/wine64"),
+        home.join("Library/Application Support/FusionCross/runtimes/whisky-wine/bin/wine64"),
+        PathBuf::from("/opt/homebrew/bin/wine64"),
+        PathBuf::from("/opt/homebrew/bin/wine"),
+        PathBuf::from("/usr/local/bin/wine64"),
+        PathBuf::from("/usr/local/bin/wine"),
+        PathBuf::from("/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine64"),
+        PathBuf::from("/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine"),
+        PathBuf::from("/Applications/Whisky.app/Contents/Resources/Wine/bin/wine64"),
     ];
-
-    for cand in candidates {
-        if Path::new(cand).exists() {
-            return Ok(cand.to_string());
+    for candidate in candidates {
+        if candidate.exists() {
+            return Some(candidate.to_string_lossy().into_owned());
         }
     }
 
-    // Check PATH via which
-    if let Ok(out) = std::process::Command::new("which").arg("wine64").output() {
-        if out.status.success() {
-            let p = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            if !p.is_empty() && Path::new(&p).exists() {
-                return Ok(p);
+    // Packaged builds (Homebrew casks, Gcenx) land as `Wine <flavour>.app`
+    // with the binary under Contents/Resources/wine/bin.
+    for root in [PathBuf::from("/Applications"), home.join("Applications")] {
+        if let Some(found) = wine_in_app_bundles(&root) {
+            return Some(found);
+        }
+    }
+
+    for tool in ["wine64", "wine"] {
+        if let Ok(out) = std::process::Command::new("which").arg(tool).output() {
+            if out.status.success() {
+                let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if !path.is_empty() && Path::new(&path).exists() {
+                    return Some(path);
+                }
             }
         }
     }
-    if let Ok(out) = std::process::Command::new("which").arg("wine").output() {
-        if out.status.success() {
-            let p = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            if !p.is_empty() && Path::new(&p).exists() {
-                return Ok(p);
+    None
+}
+
+fn wine_in_app_bundles(root: &Path) -> Option<String> {
+    for entry in std::fs::read_dir(root).ok()?.flatten() {
+        let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+        if !name.ends_with(".app") || !name.contains("wine") {
+            continue;
+        }
+        for relative in [
+            "Contents/Resources/wine/bin/wine64",
+            "Contents/Resources/wine/bin/wine",
+        ] {
+            let candidate = entry.path().join(relative);
+            if candidate.exists() {
+                return Some(candidate.to_string_lossy().into_owned());
             }
         }
     }
-
-    Err(FusionError::RuntimeNotFound)
+    None
 }
 
 pub fn settings_bool(app: &AppHandle, key: &str) -> bool {
@@ -269,5 +290,19 @@ mod tests {
         if std::env::consts::ARCH == "aarch64" {
             assert_eq!(env_map.get("ROSETTA_ADVERTISE_AVX"), Some(&"1".to_string()));
         }
+    }
+
+    #[test]
+    fn finds_wine_inside_a_cask_app_bundle() {
+        let root = std::env::temp_dir().join(format!("fc_apps_{}", crate::core::ids::new_id()));
+        let bin = root.join("Wine Stable.app/Contents/Resources/wine/bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(bin.join("wine64"), b"stub").unwrap();
+        std::fs::create_dir_all(root.join("Unrelated.app/Contents/Resources")).unwrap();
+
+        let found = wine_in_app_bundles(&root).expect("wine inside the app bundle");
+        assert!(found.ends_with("Wine Stable.app/Contents/Resources/wine/bin/wine64"));
+
+        std::fs::remove_dir_all(root).ok();
     }
 }

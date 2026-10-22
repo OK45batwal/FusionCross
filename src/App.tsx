@@ -15,7 +15,7 @@ import {
   toggleFavorite,
   FusionErrorPayload,
 } from "./services/tauri";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, AlertTriangle } from "lucide-react";
 import { useLibraryState } from "./hooks/useLibraryState";
 import { CreateBottleDialog } from "./components/CreateBottleDialog";
 import { ViewBoundary } from "./components/ViewBoundary";
@@ -206,6 +206,21 @@ export function App() {
           </div>
         </header>
 
+        {systemInfo && systemInfo.wine_path === null && (
+          <div className="px-6 py-2 border-b border-amber-500/30 bg-amber-500/10 flex items-center gap-2 text-[13px] text-(--text-main)">
+            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+            <span className="flex-1">
+              No Wine runtime found — Windows apps can't launch until one is available.
+            </span>
+            <button
+              onClick={() => setCurrentView("runtimes")}
+              className="px-2.5 py-1 rounded-md bg-(--bg-surface) border border-(--border-color) font-semibold hover:bg-(--bg-elevated) transition-colors cursor-pointer shrink-0"
+            >
+              Set up runtime
+            </button>
+          </div>
+        )}
+
         {/* Main Content View Switcher */}
         <div className="flex-1 overflow-hidden flex flex-col">
           <ViewBoundary key={currentView}><Suspense fallback={<p role="status" className="p-6">Loading screen…</p>}>
@@ -291,6 +306,7 @@ export function App() {
           {currentView === "runtimes" && (
             <RuntimeManagerView
               runtimes={state?.runtimes || []}
+              winePath={systemInfo ? systemInfo.wine_path : undefined}
               onRefreshState={refreshState}
             />
           )}

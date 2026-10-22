@@ -15,6 +15,8 @@ pub struct SystemInfo {
     pub arch: &'static str,
     pub os: &'static str,
     pub engines: Vec<&'static str>,
+    /// Resolved Wine binary, or `None` when Windows apps cannot launch yet.
+    pub wine_path: Option<String>,
 }
 
 #[tauri::command]
@@ -32,12 +34,13 @@ pub fn get_recovery_notice(state: State<'_, FusionState>) -> Option<String> {
 }
 
 #[tauri::command]
-pub fn get_system_info() -> Result<SystemInfo, FusionError> {
+pub fn get_system_info(app: AppHandle) -> Result<SystemInfo, FusionError> {
     Ok(SystemInfo {
         app_version: env!("CARGO_PKG_VERSION"),
         arch: std::env::consts::ARCH,
         os: std::env::consts::OS,
         engines: vec!["Whisky-Wine (Apple GPTK)", "Wine Stable"],
+        wine_path: super::detected_wine_path(&app),
     })
 }
 

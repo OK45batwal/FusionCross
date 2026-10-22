@@ -6,6 +6,7 @@ import {
   Trash2,
   Upload,
   Download,
+  AlertTriangle,
 } from "lucide-react";
 import {
   importRuntime,
@@ -13,17 +14,21 @@ import {
   removeRuntime,
   downloadRuntime,
   getRuntimes,
+  setSetting,
   Runtime,
   FusionErrorPayload,
 } from "../services/tauri";
 
 interface RuntimeManagerViewProps {
   runtimes: Runtime[];
+  /** Resolved Wine binary; null when none is available, undefined while loading. */
+  winePath?: string | null;
   onRefreshState: () => void;
 }
 
 export const RuntimeManagerView: React.FC<RuntimeManagerViewProps> = ({
   runtimes,
+  winePath,
   onRefreshState,
 }) => {
   const [probeStatuses, setProbeStatuses] = useState<Record<string, string>>({});
@@ -32,6 +37,7 @@ export const RuntimeManagerView: React.FC<RuntimeManagerViewProps> = ({
   const [importPath, setImportPath] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [winePathInput, setWinePathInput] = useState("");
   const [catalog, setCatalog] = useState<Runtime[]>(runtimes);
   // Keyed on the installed set: a poll that returns the same runtimes must not
   // re-run this fetch (it shells out to `which` on the backend).
@@ -81,6 +87,21 @@ export const RuntimeManagerView: React.FC<RuntimeManagerViewProps> = ({
     }
   };
 
+  const handleSaveWinePath = async () => {
+    const path = winePathInput.trim();
+    if (!path) return;
+    setError(null);
+    setNotice(null);
+    try {
+      await setSetting("wine_binary_path", path);
+      onRefreshState();
+      setNotice("Wine binary saved. FusionCross will use it for launches.");
+      setWinePathInput("");
+    } catch (e) {
+      setError((e as FusionErrorPayload).message || "Could not save the Wine path.");
+    }
+  };
+
   const handleRemove = async (runtimeId: string) => {
     if (!confirm("Remove this runtime engine?")) return;
     try {
@@ -114,6 +135,36 @@ export const RuntimeManagerView: React.FC<RuntimeManagerViewProps> = ({
       {error && (
         <div className="rounded-xl border border-err/40 bg-err/10 p-3 text-[13px] text-err font-mono">
           ⚠ {error}
+        </div>
+      )}
+
+      {winePath === null && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-500" />
+            <h2 className="text-[14px] font-bold text-(--text-main)">No Wine binary found</h2>
+          </div>
+          <p className="text-[13px] text-(--text-muted)">
+            Windows apps can't launch until FusionCross can find Wine. Install a packaged build
+            (for example <code className="font-mono">brew install --cask wine-stable</code>) or
+            point at an existing <code className="font-mono">wine64</code>.
+          </p>
+          <div className="flex gap-2">
+            <input
+              aria-label="Path to wine64"
+              value={winePathInput}
+              onChange={(event) => setWinePathInput(event.target.value)}
+              placeholder="/Applications/Wine Stable.app/Contents/Resources/wine/bin/wine64"
+              className="flex-1 px-3 py-1.5 rounded-md bg-(--bg-surface) border border-(--border-color) text-(--text-main) text-[12px]"
+            />
+            <button
+              onClick={handleSaveWinePath}
+              disabled={!winePathInput.trim()}
+              className="px-3 py-1.5 rounded-md bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[12px] font-semibold cursor-pointer disabled:opacity-50"
+            >
+              Save path
+            </button>
+          </div>
         </div>
       )}
 
