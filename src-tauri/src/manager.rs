@@ -167,11 +167,12 @@ impl FusionState {
     }
 }
 
-/// Drop entries that point outside the bottle or at helper binaries.
+/// Drop entries that point outside the bottle, at helper binaries, or at the
+/// legacy `dosdevices` alias of the same `drive_c` file.
 fn sanitize_applications(state: &mut AppState) {
     state.applications.retain(|app| {
         let path = std::path::Path::new(&app.executable_path);
-        !app.executable_path.contains("dosdevices/z:")
+        !app.executable_path.contains("dosdevices/")
             && !app.executable_path.contains("/opt/homebrew/")
             && !app.executable_path.contains("/site-packages/")
             && !crate::wine::scanner::is_ignored_exe(path)

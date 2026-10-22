@@ -68,6 +68,9 @@ const IGNORED_EXE_STEMS: &[&str] = &[
     "gameoverlayui",
     "gameoverlayui64",
     "steamxboxutil",
+    "steamsysinfo",
+    "steam_monitor",
+    "streaming_client",
     "vulkandriverquery",
     "vulkandriverquery64",
     "gldriverquery",
@@ -100,6 +103,23 @@ const IGNORED_EXE_STEMS: &[&str] = &[
     "taskmgr",
     "cmd",
     "notepad",
+    "wordpad",
+    "write",
+    "iexplore",
+    "mshta",
+    "wscript",
+    "cscript",
+    "msinfo32",
+    "osk",
+    "narrator",
+    "magnify",
+    "charmap",
+    "dvdplay",
+    "wmplayer",
+    "iexpress",
+    "regsvr32",
+    "msconfig",
+    "sndvol",
     "winhlp32",
     "conhost",
     "svchost",
@@ -219,6 +239,15 @@ pub fn is_ignored_exe(path: &Path) -> bool {
         return true;
     }
 
+    // Steam keeps helpers next to `steam.exe`; only the client itself is a game.
+    if path_str.contains("/steam/bin/") && stem_lower != "steam" {
+        return true;
+    }
+
+    if stem_lower.contains("prereq") || stem_lower.contains("redist") {
+        return true;
+    }
+
     if IGNORED_EXE_STEMS.iter().any(|s| stem_lower == *s)
         || stem_lower.starts_with("unins")
         || stem_lower.starts_with("setup")
@@ -228,6 +257,7 @@ pub fn is_ignored_exe(path: &Path) -> bool {
         || stem_lower.starts_with("vc_redist")
         || stem_lower.starts_with("vcredist")
         || stem_lower.starts_with("dxsetup")
+        || stem_lower.starts_with("steamxboxutil")
         || stem_lower.contains("crashreporter")
         || stem_lower.contains("crashhandler")
         || stem_lower.contains("unrealcefsubprocess")
@@ -277,5 +307,35 @@ fn guess_category(path: &Path) -> String {
         "games".to_string()
     } else {
         "applications".to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn write_exe(path: &Path) {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, vec![0u8; 50_000]).unwrap();
+    }
+
+    #[test]
+    fn scan_skips_steam_helpers_and_windows_accessories() {
+        let prefix = std::env::temp_dir().join(format!("fc_scan_{}", crate::core::ids::new_id()));
+        let drive = prefix.join("drive_c");
+        write_exe(&drive.join("Program Files (x86)/Steam/steam.exe"));
+        write_exe(&drive.join("Program Files (x86)/Steam/bin/drivers.exe"));
+        write_exe(&drive.join("Program Files (x86)/Steam/steamsysinfo.exe"));
+        write_exe(&drive.join("Program Files (x86)/Steam/streaming_client.exe"));
+        write_exe(&drive.join("Program Files/Windows NT/Accessories/wordpad.exe"));
+        write_exe(&drive.join("Program Files/Internet Explorer/iexplore.exe"));
+        write_exe(&drive.join("Games/Neon/Neon.exe"));
+
+        let found: Vec<String> = scan_prefix(&prefix).into_iter().map(|e| e.name).collect();
+        assert_eq!(found.len(), 2, "unexpected entries: {found:?}");
+        assert!(found.contains(&"Steam".to_string()));
+        assert!(found.contains(&"Neon".to_string()));
+
+        std::fs::remove_dir_all(prefix).ok();
     }
 }
