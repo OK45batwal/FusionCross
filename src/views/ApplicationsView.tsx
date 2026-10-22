@@ -170,6 +170,8 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
     return matchesSearch && matchesCategory && matchesFilterMode;
   });
 
+  const hasActiveFilters = search.trim() !== "" || selectedCategory !== "all";
+
   const getBottleName = (bottleId: string) => {
     const b = bottles.find((b) => b.id === bottleId);
     return b ? b.name : "Default Bottle";
@@ -180,10 +182,10 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-(--bg-main) text-(--text-main) transition-colors duration-300">
       {/* Header controls */}
-      <div className="p-4 border-b border-(--border-color) bg-(--bg-surface) flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div className="p-4 border-b border-(--border-color) bg-(--bg-surface) flex flex-wrap items-center gap-x-4 gap-y-3">
         {/* Search & Categories */}
-        <div className="flex items-center gap-3 flex-1">
-          <div className="relative flex-1 max-w-sm">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 flex-1 min-w-0">
+          <div className="relative w-full sm:w-60 shrink-0">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-(--text-muted)" />
             <input
               type="text"
@@ -194,7 +196,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
             />
           </div>
 
-          <div className="flex items-center gap-1 overflow-x-auto py-1">
+          <div className="flex items-center gap-1 overflow-x-auto py-1 min-w-0">
             {categories.map((cat) => (
               <button
                 key={cat}
@@ -212,7 +214,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
         </div>
 
         {/* View Mode Toggle & Install CTA */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0 ml-auto">
           <div className="flex items-center rounded-lg bg-(--bg-elevated) p-1 border border-(--border-color)">
             <button
               onClick={() => setViewMode("grid")}
@@ -260,28 +262,67 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
             <div className="w-12 h-12 rounded-full bg-(--bg-elevated) border border-(--border-color) flex items-center justify-center text-(--text-muted)">
               <AppWindow className="w-6 h-6" />
             </div>
-            <div>
-              <h3 className="text-[16px] font-bold text-(--text-main)">No applications found</h3>
-              <p className="text-[13px] text-(--text-secondary) mt-1 max-w-sm">
-                Install a Windows application using the smart installer wizard or scan your bottles.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => onNavigate("installer")}
-                className="px-4 py-2 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[13px] font-bold shadow-md cursor-pointer transition-all"
-              >
-                Launch Smart Installer
-              </button>
-              <button
-                onClick={handleScanAll}
-                disabled={scanning}
-                className="px-4 py-2 rounded-lg bg-(--bg-elevated) hover:bg-(--border-color) border border-(--border-color) text-(--text-main) text-[13px] font-bold shadow-xs cursor-pointer transition-all flex items-center gap-1.5 disabled:opacity-50"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${scanning ? "animate-spin" : ""}`} />
-                <span>{scanning ? "Scanning..." : "Scan Bottles"}</span>
-              </button>
-            </div>
+            {hasActiveFilters ? (
+              <>
+                <div>
+                  <h3 className="text-[16px] font-bold text-(--text-main)">No matches</h3>
+                  <p className="text-[13px] text-(--text-secondary) mt-1 max-w-sm">
+                    {search.trim()
+                      ? `Nothing on your shelf matches “${search.trim()}”.`
+                      : `Nothing on your shelf is filed under ${selectedCategory}.`}
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setSearch("");
+                    setSelectedCategory("all");
+                  }}
+                  className="px-4 py-2 rounded-lg bg-(--bg-elevated) hover:bg-(--border-color) border border-(--border-color) text-(--text-main) text-[13px] font-semibold cursor-pointer transition-all"
+                >
+                  Clear filters
+                </button>
+              </>
+            ) : filterMode === "favorites" ? (
+              <>
+                <div>
+                  <h3 className="text-[16px] font-bold text-(--text-main)">No favorites yet</h3>
+                  <p className="text-[13px] text-(--text-secondary) mt-1 max-w-sm">
+                    Hover an app and press the heart to pin it here.
+                  </p>
+                </div>
+                <button
+                  onClick={() => onNavigate("all_apps")}
+                  className="px-4 py-2 rounded-lg bg-(--bg-elevated) hover:bg-(--border-color) border border-(--border-color) text-(--text-main) text-[13px] font-semibold cursor-pointer transition-all"
+                >
+                  Browse library
+                </button>
+              </>
+            ) : (
+              <>
+                <div>
+                  <h3 className="text-[16px] font-bold text-(--text-main)">No applications found</h3>
+                  <p className="text-[13px] text-(--text-secondary) mt-1 max-w-sm">
+                    Install a Windows application using the smart installer wizard or scan your bottles.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => onNavigate("installer")}
+                    className="px-4 py-2 rounded-lg bg-(--accent-primary) hover:bg-(--accent-hover) text-white text-[13px] font-bold shadow-md cursor-pointer transition-all"
+                  >
+                    Launch Smart Installer
+                  </button>
+                  <button
+                    onClick={handleScanAll}
+                    disabled={scanning}
+                    className="px-4 py-2 rounded-lg bg-(--bg-elevated) hover:bg-(--border-color) border border-(--border-color) text-(--text-main) text-[13px] font-bold shadow-xs cursor-pointer transition-all flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${scanning ? "animate-spin" : ""}`} />
+                    <span>{scanning ? "Scanning..." : "Scan Bottles"}</span>
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         ) : viewMode === "grid" ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 pt-2">
@@ -507,7 +548,7 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
                   <div className="flex items-center gap-4">
                     <span className="text-[12px] font-mono text-(--text-secondary)">
                       Compatibility:{" "}
-                      <span className="text-ok font-semibold">
+                      <span className={score != null ? "text-ok font-semibold" : "text-(--text-muted)"}>
                         {score != null ? `${score}%` : "Unknown"}
                       </span>
                     </span>
@@ -610,7 +651,17 @@ export const ApplicationsView: React.FC<ApplicationsViewProps> = ({
               </div>
               <div>
                 <span className="text-(--text-muted)">Compatibility Score: </span>
-                <span className="text-ok font-bold">{selectedApp.compatibility ?? 88}%</span>
+                <span
+                  className={
+                    selectedApp.compatibility != null
+                      ? "text-ok font-bold"
+                      : "text-(--text-muted)"
+                  }
+                >
+                  {selectedApp.compatibility != null
+                    ? `${selectedApp.compatibility}%`
+                    : "Not measured"}
+                </span>
               </div>
             </div>
 

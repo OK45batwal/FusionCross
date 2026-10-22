@@ -190,7 +190,10 @@ export function App() {
           <div className="flex items-center gap-4 text-[12px] font-mono text-(--text-muted)">
             {systemInfo && (
               <span className="hidden sm:inline">
-                macOS {systemInfo.os} · {systemInfo.arch}
+                macOS ·{" "}
+                {systemInfo.arch === "aarch64" || systemInfo.arch === "arm64"
+                  ? "Apple silicon"
+                  : "Intel"}
               </span>
             )}
 
