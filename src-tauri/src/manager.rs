@@ -220,6 +220,20 @@ fn sanitize_applications(state: &mut AppState) {
     });
 }
 
+/// Drop library entries whose executable vanished (uninstalled Steam game),
+/// but only when the bottle itself is still on this Mac.
+fn prune_missing_applications(
+    state: &mut AppState,
+    scanned: &[(String, PathBuf, Vec<crate::wine::scanner::DiscoveredExe>)],
+) {
+    state.applications.retain(|app| {
+        let Some((_, prefix, _)) = scanned.iter().find(|(id, _, _)| *id == app.bottle_id) else {
+            return true;
+        };
+        !prefix.is_dir() || std::path::Path::new(&app.executable_path).is_file()
+    });
+}
+
 /// Index every bottle once, off the UI thread. Startup no longer blocks on
 /// walking prefixes and extracting icons.
 pub fn scan_and_index(app: &AppHandle) {
@@ -241,6 +255,7 @@ pub fn scan_and_index(app: &AppHandle) {
             crate::commands::installers::register_discovered(state, id, prefix, found);
         }
         sanitize_applications(state);
+        prune_missing_applications(state, &scanned);
         for application in &mut state.applications {
             if application.icon_data.is_none() {
                 application.icon_data = crate::wine::icon::extract_icon_data_url(
@@ -528,6 +543,60 @@ mod tests {
         assert_eq!(state.bottles[0].id, "kept");
         assert_eq!(state.runtimes.len(), 1);
         assert_eq!(state.runtimes[0].id, "wine");
+
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    fn application(
+        id: &str,
+        bottle_id: &str,
+        executable: &Path,
+    ) -> crate::core::state::Application {
+        serde_json::from_value(serde_json::json!({
+            "id": id,
+            "bottle_id": bottle_id,
+            "name": id,
+            "executable_path": executable.to_string_lossy(),
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn prunes_library_entries_whose_executable_is_gone() {
+        let root = std::env::temp_dir().join(format!("fc_prune_{}", new_id()));
+        let prefix = root.join("bottle");
+        std::fs::create_dir_all(prefix.join("drive_c")).unwrap();
+        let live = prefix.join("drive_c/live.exe");
+        std::fs::write(&live, b"stub").unwrap();
+
+        let mut state = AppState::default();
+        state.applications.push(application("live", "b", &live));
+        state
+            .applications
+            .push(application("ghost", "b", &prefix.join("drive_c/gone.exe")));
+        state.applications.push(application(
+            "offline",
+            "c",
+            &root.join("unmounted/thing.exe"),
+        ));
+
+        // The bottle is present: the ghost goes, the live exe stays.
+        prune_missing_applications(&mut state, &[("b".to_string(), prefix.clone(), Vec::new())]);
+        assert_eq!(state.applications.len(), 2);
+        assert!(state.applications.iter().all(|a| a.id != "ghost"));
+
+        // The bottle is gone (unmounted volume): keep its entries untouched.
+        let mut state = AppState::default();
+        state.applications.push(application(
+            "offline",
+            "b",
+            &root.join("unmounted/thing.exe"),
+        ));
+        prune_missing_applications(
+            &mut state,
+            &[("b".to_string(), root.join("unmounted"), Vec::new())],
+        );
+        assert_eq!(state.applications.len(), 1);
 
         std::fs::remove_dir_all(root).ok();
     }

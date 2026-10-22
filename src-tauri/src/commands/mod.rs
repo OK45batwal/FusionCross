@@ -177,8 +177,11 @@ pub fn build_wine_execution_context(
 
         if !dyld_paths.is_empty() {
             let joined = dyld_paths.join(":");
-            env.push(("DYLD_FALLBACK_LIBRARY_PATH".into(), joined.clone()));
-            env.push(("DYLD_LIBRARY_PATH".into(), joined));
+            // Never set DYLD_LIBRARY_PATH: it overrides dyld for the Wine
+            // preloader and makes Chromium's CEF helper fail to register its
+            // message window, leaving Steam with no UI. The fallback path is
+            // enough for D3DMetal's dylibs.
+            env.push(("DYLD_FALLBACK_LIBRARY_PATH".into(), joined));
         }
 
         if ext_dir.join("D3DMetal.framework").exists() {
@@ -290,6 +293,24 @@ mod tests {
         if std::env::consts::ARCH == "aarch64" {
             assert_eq!(env_map.get("ROSETTA_ADVERTISE_AVX"), Some(&"1".to_string()));
         }
+    }
+
+    #[test]
+    fn never_sets_dyld_library_path_for_wine() {
+        let root = std::env::temp_dir().join(format!("fc_dyld_{}", crate::core::ids::new_id()));
+        std::fs::create_dir_all(root.join("lib/external")).unwrap();
+        let bottle: Bottle = serde_json::from_value(serde_json::json!({
+            "id": "b", "name": "Bottle", "path": "/tmp/prefix"
+        }))
+        .unwrap();
+        let wine = root.join("bin/wine64");
+
+        let (env, _) = build_wine_execution_context(&wine.to_string_lossy(), &bottle, true);
+        let keys: Vec<&str> = env.iter().map(|(k, _)| k.as_str()).collect();
+        assert!(!keys.contains(&"DYLD_LIBRARY_PATH"));
+        assert!(keys.contains(&"DYLD_FALLBACK_LIBRARY_PATH"));
+
+        std::fs::remove_dir_all(root).ok();
     }
 
     #[test]

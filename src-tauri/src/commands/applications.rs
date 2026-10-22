@@ -127,19 +127,11 @@ pub fn launch_application(app: AppHandle, app_id: String) -> Result<RunningInfo,
             }
         }
 
-        for flag in &[
-            "-no-cef-sandbox",
-            "-cef-disable-gpu",
-            "-cef-disable-gpu-compositing",
-            "-cef-disable-hang-monitor",
-            "-allpackagedcontent",
-            "-noverifyfiles",
-            "-allosarches",
-        ] {
-            if !launch_args.iter().any(|a| a == *flag) {
-                launch_args.push(flag.to_string());
-            }
-        }
+        // Only the sandbox flag is safe. Steam's later builds create the CEF
+        // helper fine without it, but `-cef-disable-gpu*`, `-allpackagedcontent`,
+        // `-noverifyfiles`, and `-allosarches` leave steamwebhelper in a
+        // message-window crash loop, so the UI never opens.
+        launch_args.push("-no-cef-sandbox".to_string());
     }
 
     // Append any user-defined custom launch arguments
