@@ -16,12 +16,18 @@ export function GlobalDropZone({
 }: GlobalDropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [hoveredFileNames, setHoveredFileNames] = useState<string[]>([]);
-  const [dragTargetBottleId, setDragTargetBottleId] = useState<string>(
-    selectedBottleId || (bottles.length > 0 ? bottles[0].id : "")
+  // Only an in-overlay choice overrides the current bottle selection, and that
+  // choice expires when the app's selection changes.
+  const [override, setOverride] = useState<{ selection: string | null; bottleId: string } | null>(
+    null
   );
+  const dragTargetBottleId =
+    override && override.selection === selectedBottleId ? override.bottleId : null;
 
   const effectiveTargetId =
-    dragTargetBottleId || selectedBottleId || (bottles.length > 0 ? bottles[0].id : "");
+    dragTargetBottleId ||
+    selectedBottleId ||
+    (bottles.length > 0 ? bottles[0].id : "");
 
   const targetBottle = bottles.find((b) => b.id === effectiveTargetId) || bottles[0];
 
@@ -181,7 +187,9 @@ export function GlobalDropZone({
               <select
                 aria-label="Target Bottle"
                 value={effectiveTargetId}
-                onChange={(e) => setDragTargetBottleId(e.target.value)}
+                onChange={(e) =>
+                  setOverride({ selection: selectedBottleId, bottleId: e.target.value })
+                }
                 className="bg-(--bg-card) border border-(--border-color) text-[13px] rounded-md px-2.5 py-1 text-(--text-primary) font-sans focus:outline-none focus:border-(--accent)"
               >
                 {bottles.map((b) => (

@@ -10,11 +10,11 @@ use crate::core::errors::FusionError;
 use crate::core::ids::new_id;
 use crate::core::paths;
 use crate::core::state::Application;
-use crate::manager::{dirs, FusionState};
+use crate::manager::{bottle_prefix, dirs, FusionState};
 use crate::process::{ProcessManager, RunningInfo};
 
 use super::bottles::deploy_graphics_libraries;
-use super::{build_wine_execution_context, now_ts, settings_bool, wine_binary_for};
+use super::{build_wine_execution_context, now_ts, settings_bool, settings_value, wine_binary_for};
 
 #[derive(Debug, Clone, Serialize)]
 #[allow(dead_code)]
@@ -50,7 +50,7 @@ pub fn launch_application(app: AppHandle, app_id: String) -> Result<RunningInfo,
     }
     let binary = wine_binary_for(&app, &bottle.runtime)?;
     let d = dirs(&app);
-    let prefix = paths::safe_join(&d.bottles, &bottle.id)?;
+    let prefix = bottle_prefix(&d.bottles, &bottle)?;
     let executable_relative = Path::new(&application.executable_path)
         .strip_prefix(Path::new(&bottle.path))
         .or_else(|_| Path::new(&application.executable_path).strip_prefix(&prefix))
@@ -67,7 +67,9 @@ pub fn launch_application(app: AppHandle, app_id: String) -> Result<RunningInfo,
         crate::wine::prefix::ensure_graphics_registry(&prefix, &bottle.graphics).ok();
     }
 
-    let (mut override_env, dll_overrides) = build_wine_execution_context(&binary, &bottle, safe);
+    let hud = settings_value(&app, "dxvk_hud").unwrap_or_else(|| "compiler,fps".into());
+    let (mut override_env, dll_overrides) =
+        build_wine_execution_context(&binary, &bottle, safe, &hud);
 
     // Detect launch arguments: Unreal Engine games (like Raji) benefit from -dx11 to force D3D11 RHI
     let mut launch_args = Vec::new();
@@ -213,14 +215,14 @@ pub fn register_application(
         &["games", "applications", "productivity", "utilities"],
     )?;
     let st = app.state::<FusionState>();
-    st.with_state(|s| {
+    let bottle = st.with_state(|s| {
         s.bottles
             .iter()
             .find(|b| b.id == bottle_id)
+            .cloned()
             .ok_or(FusionError::BottleNotFound)
-            .map(|_| ())
     })?;
-    let prefix = paths::safe_join(&dirs(&app).bottles, &bottle_id)?;
+    let prefix = bottle_prefix(&dirs(&app).bottles, &bottle)?;
     let executable_path = paths::safe_file(&prefix, &executable_rel_path)?
         .to_string_lossy()
         .into_owned();

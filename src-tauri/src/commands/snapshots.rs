@@ -6,7 +6,7 @@ use tauri::{AppHandle, Manager};
 use crate::core::errors::FusionError;
 use crate::core::ids::new_id;
 use crate::core::state::Snapshot;
-use crate::manager::{dirs, FusionState};
+use crate::manager::{bottle_prefix, dirs, FusionState};
 
 use super::now_ts;
 
@@ -25,8 +25,8 @@ pub fn create_snapshot(
             .cloned()
             .ok_or(FusionError::BottleNotFound)
     })?;
-    let (archive_path, size) =
-        crate::snapshots::create_snapshot(&d.bottles, &d.snapshots, &bottle)?;
+    let prefix = bottle_prefix(&d.bottles, &bottle)?;
+    let (archive_path, size) = crate::snapshots::create_snapshot(&prefix, &d.snapshots)?;
     let snapshot = Snapshot {
         id: new_id(),
         bottle_id,
@@ -69,7 +69,8 @@ pub fn restore_snapshot(app: AppHandle, snapshot_id: String) -> Result<(), Fusio
     {
         return Err(FusionError::AlreadyRunning);
     }
-    crate::snapshots::restore_snapshot(&d.bottles, &d.snapshots, Path::new(&snap.path), &bottle)?;
+    let prefix = bottle_prefix(&d.bottles, &bottle)?;
+    crate::snapshots::restore_snapshot(&prefix, &d.snapshots, Path::new(&snap.path))?;
     Ok(())
 }
 

@@ -20,7 +20,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   const isSafeModeOn = settings.some(([k, v]) => k === "safe_mode" && v === "on");
-  const [defaultArch, setDefaultArch] = useState(() => getSetting("default_arch", "win64"));
   const [dxvkHud, setDxvkHud] = useState(() => getSetting("dxvk_hud", "compiler,fps"));
   const [wineBinaryPath, setWineBinaryPath] = useState(() => getSetting("wine_binary_path", ""));
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
@@ -100,33 +99,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </h2>
 
         <div className="space-y-3 text-[13px]">
-          {/* Architecture Setting */}
-          <div className="p-3.5 rounded-lg bg-(--bg-elevated) border border-(--border-color) flex items-center justify-between flex-wrap gap-3">
-            <div>
-              <span className="font-bold text-(--text-main)">Default Windows Architecture</span>
-              <div className="group relative inline-block ml-2 cursor-pointer text-(--accent-primary)">
-                <Info className="w-3.5 h-3.5 inline" aria-hidden="true" />
-                <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block w-64 p-2 bg-(--bg-surface) border border-(--border-color) text-[12px] text-(--text-main) rounded-md shadow-xl z-50">
-                  Specifies whether new bottles default to 64-bit (win64) or 32-bit (win32) prefix layout.
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <select
-                aria-label="Default Windows architecture"
-                value={defaultArch}
-                onChange={(e) => {
-                  setDefaultArch(e.target.value);
-                  handleSaveSetting("default_arch", e.target.value);
-                }}
-                className="px-2.5 py-1 rounded-md bg-(--bg-surface) border border-(--border-color) text-(--text-main) text-[13px] cursor-pointer"
-              >
-                <option value="win64">win64 (64-bit default)</option>
-                <option value="win32">win32 (32-bit legacy)</option>
-              </select>
-            </div>
-          </div>
-
           {/* DXVK HUD Setting */}
           <div className="p-3.5 rounded-lg bg-(--bg-elevated) border border-(--border-color) flex items-center justify-between flex-wrap gap-3">
             <div>

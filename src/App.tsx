@@ -280,6 +280,7 @@ export function App() {
           {currentView === "installer" && (
             <InstallerWizardView
               bottles={state?.bottles || []}
+              initialBottleId={selectedBottleId || ""}
               onFinish={() => setCurrentView("all_apps")}
               onRefreshState={refreshState}
             />

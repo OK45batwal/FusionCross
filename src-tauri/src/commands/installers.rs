@@ -8,7 +8,7 @@ use crate::core::errors::FusionError;
 use crate::core::ids::new_id;
 use crate::core::state::{AppState, Application};
 use crate::installer::{self, InstallerAnalysis};
-use crate::manager::{FusionState, Jobs};
+use crate::manager::{dirs, FusionState, Jobs};
 use crate::wine::scanner::{self, DiscoveredExe};
 
 use super::{build_wine_execution_context, wine_binary_for};
@@ -106,13 +106,13 @@ pub fn install_job(
             .ok_or(FusionError::BottleNotFound)
     })?;
     let binary = wine_binary_for(app, &bottle.runtime)?;
-    let prefix = Path::new(&bottle.path);
+    let prefix = crate::manager::bottle_prefix(&dirs(app).bottles, &bottle)?;
 
     control.check()?;
-    if !crate::wine::prefix::prefix_prepared(prefix) {
+    if !crate::wine::prefix::prefix_prepared(&prefix) {
         let status = control.run(
             std::process::Command::new(&binary)
-                .env("WINEPREFIX", prefix)
+                .env("WINEPREFIX", &prefix)
                 .env("WINEDLLOVERRIDES", "mscoree,mshtml=")
                 .args(["wineboot", "-i"]),
         )?;
@@ -122,8 +122,8 @@ pub fn install_job(
     }
     let safe = super::settings_bool(app, "safe_mode");
     if !safe {
-        super::bottles::deploy_graphics_libraries(app, prefix);
-        crate::wine::prefix::ensure_graphics_registry(prefix, &bottle.graphics).ok();
+        super::bottles::deploy_graphics_libraries(app, &prefix);
+        crate::wine::prefix::ensure_graphics_registry(&prefix, &bottle.graphics).ok();
     }
     let mut dependencies = bottle.dependencies.clone();
     for dependency in extra_dependencies {
@@ -131,7 +131,7 @@ pub fn install_job(
             dependencies.push(dependency.clone());
         }
     }
-    crate::wine::prefix::install_verbs_cancellable(&binary, prefix, &dependencies, control)?;
+    crate::wine::prefix::install_verbs_cancellable(&binary, &prefix, &dependencies, control)?;
 
     // Copy the installer into the prefix so Wine can reach it.
     let target_dir = prefix.join("drive_c").join("installers");
@@ -139,9 +139,10 @@ pub fn install_job(
     let target = target_dir.join(file_name);
     std::fs::copy(installer_path, &target).map_err(|_| FusionError::InvalidExecutable)?;
 
-    let (override_env, dll_overrides) = build_wine_execution_context(&binary, &bottle, safe);
+    let hud = super::settings_value(app, "dxvk_hud").unwrap_or_else(|| "compiler,fps".into());
+    let (override_env, dll_overrides) = build_wine_execution_context(&binary, &bottle, safe, &hud);
     let mut cmd = std::process::Command::new(&binary);
-    cmd.env("WINEPREFIX", prefix);
+    cmd.env("WINEPREFIX", &prefix);
     cmd.env("WINEDLLOVERRIDES", &dll_overrides);
     for (k, v) in override_env {
         cmd.env(k, v);
@@ -152,9 +153,9 @@ pub fn install_job(
     }
 
     // Discover whatever the installer laid down.
-    let found = scanner::scan_prefix(prefix);
+    let found = scanner::scan_prefix(&prefix);
     control.seal()?;
-    let registered = st.update(|s| Ok(register_discovered(s, bottle_id, prefix, &found)))?;
+    let registered = st.update(|s| Ok(register_discovered(s, bottle_id, &prefix, &found)))?;
     Ok(format!(
         "Installed. Discovered {registered} application(s)."
     ))

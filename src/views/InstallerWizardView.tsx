@@ -27,6 +27,7 @@ import {
 
 interface InstallerWizardViewProps {
   bottles: Bottle[];
+  initialBottleId?: string;
   onFinish: () => void;
   onRefreshState: () => void | Promise<void>;
 }
@@ -46,9 +47,11 @@ const POPULAR_PRESETS = [
 
 export const InstallerWizardView: React.FC<InstallerWizardViewProps> = ({
   bottles,
+  initialBottleId,
   onFinish,
   onRefreshState,
 }) => {
+  const defaultBottleId = initialBottleId || bottles[0]?.id || "";
   const lifetime = useRef(new AbortController());
   useEffect(() => { lifetime.current = new AbortController(); return () => lifetime.current.abort(); }, []);
   const [step, setStep] = useState<number>(1);
@@ -57,9 +60,10 @@ export const InstallerWizardView: React.FC<InstallerWizardViewProps> = ({
   const [analysis, setAnalysis] = useState<InstallerAnalysis | null>(null);
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState<boolean>(false);
 
-  const [selectedBottleId, setSelectedBottleId] = useState<string>("");
+  const [selectedBottleId, setSelectedBottleId] = useState<string>(defaultBottleId);
   const [createNewBottle, setCreateNewBottle] = useState<boolean>(false);
   const [newBottleName, setNewBottleName] = useState<string>("");
 
@@ -70,25 +74,31 @@ export const InstallerWizardView: React.FC<InstallerWizardViewProps> = ({
     setSelectedPresetId(preset.id);
     setAnalyzing(true);
     setError(null);
+    setNotice(null);
     try {
       const rec = await getRecommendation(preset.name);
       setRecommendation(rec);
+      setNewBottleName(`${preset.name} Environment`);
+      setSelectedBottleId(defaultBottleId);
+      if (!defaultBottleId) setCreateNewBottle(true);
+
+      if (!preset.direct) {
+        // These presets only carry a recipe: the user must supply the game's
+        // own installer, so stay here until a real file is analyzed.
+        setAnalysis(null);
+        setNotice(`Select your ${preset.name} installer (.exe or .msi) below to continue.`);
+        return;
+      }
+
       setAnalysis({
         path: preset.name,
         file_name: `${preset.name} Installer`,
         extension: "exe",
-        size_bytes: 120 * 1024 * 1024,
-        arch: "x86_64",
+        size_bytes: 0,
+        arch: "Unknown",
         suggested_name: preset.name,
         is_windows_installer: true,
       });
-      setNewBottleName(`${preset.name} Environment`);
-
-      if (bottles.length > 0) {
-        setSelectedBottleId(bottles[0].id);
-      } else {
-        setCreateNewBottle(true);
-      }
       setStep(2);
     } catch (e) {
       const err = e as FusionErrorPayload;
@@ -101,6 +111,7 @@ export const InstallerWizardView: React.FC<InstallerWizardViewProps> = ({
   const handleAnalyzeFile = async (path: string) => {
     if (!path.trim()) return;
     setSelectedPresetId(null);
+    setNotice(null);
     setAnalyzing(true);
     setError(null);
     try {
@@ -109,12 +120,8 @@ export const InstallerWizardView: React.FC<InstallerWizardViewProps> = ({
       const rec = await getRecommendation(result.suggested_name);
       setRecommendation(rec);
       setNewBottleName(result.suggested_name + " Environment");
-
-      if (bottles.length > 0) {
-        setSelectedBottleId(bottles[0].id);
-      } else {
-        setCreateNewBottle(true);
-      }
+      setSelectedBottleId(defaultBottleId);
+      if (!defaultBottleId) setCreateNewBottle(true);
       setStep(2);
     } catch (e) {
       const err = e as FusionErrorPayload;
@@ -211,6 +218,12 @@ export const InstallerWizardView: React.FC<InstallerWizardViewProps> = ({
             <AlertTriangle className="w-4 h-4" /> Installation Error
           </p>
           <p>{error}</p>
+        </div>
+      )}
+
+      {notice && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-[13px] text-amber-500 font-mono">
+          {notice}
         </div>
       )}
 
@@ -312,7 +325,9 @@ export const InstallerWizardView: React.FC<InstallerWizardViewProps> = ({
               <div className="p-3 rounded-lg bg-(--bg-elevated) border border-(--border-color)">
                 <span className="text-(--text-muted) text-[11px] block">SIZE ESTIMATE</span>
                 <p className="font-bold text-(--text-main) mt-0.5">
-                  {(analysis.size_bytes / (1024 * 1024)).toFixed(1)} MB
+                  {analysis.size_bytes > 0
+                    ? `${(analysis.size_bytes / (1024 * 1024)).toFixed(1)} MB`
+                    : "Unknown"}
                 </p>
               </div>
               <div className="p-3 rounded-lg bg-(--bg-elevated) border border-(--border-color)">

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Activity,
   CheckCircle2,
@@ -27,32 +27,51 @@ export const DiagnosticsView: React.FC<DiagnosticsViewProps> = ({
   const [selectedAppId, setSelectedAppId] = useState<string>(
     applications.length > 0 ? applications[0].id : ""
   );
+  // Results belong to the application that produced them; a stale response or
+  // a changed selection must never apply one app's fix to another.
+  const [diagnosedAppId, setDiagnosedAppId] = useState<string | null>(null);
+  const runToken = useRef(0);
   const [checks, setChecks] = useState<DiagnosticCheck[]>([]);
   const [runningChecks, setRunningChecks] = useState<boolean>(false);
   const [fixing, setFixing] = useState<string | null>(null);
   const [fixResult, setFixResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const handleSelectApp = (appId: string) => {
+    runToken.current += 1;
+    setSelectedAppId(appId);
+    setChecks([]);
+    setDiagnosedAppId(null);
+    setFixResult(null);
+    setError(null);
+  };
+
   const handleRunChecks = async () => {
     if (!selectedAppId) return;
+    const appId = selectedAppId;
+    const token = ++runToken.current;
     setRunningChecks(true);
     setError(null);
     setFixResult(null);
     try {
-      const res = await runDiagnostics(selectedAppId);
+      const res = await runDiagnostics(appId);
+      if (token !== runToken.current) return;
       setChecks(res);
+      setDiagnosedAppId(appId);
     } catch (e) {
+      if (token !== runToken.current) return;
       setError((e as FusionErrorPayload).message || "Diagnostics failed.");
     } finally {
-      setRunningChecks(false);
+      if (token === runToken.current) setRunningChecks(false);
     }
   };
 
   const handleApplyFix = async (fixId: string) => {
+    if (!diagnosedAppId || diagnosedAppId !== selectedAppId) return;
     setFixing(fixId);
     setError(null);
     try {
-      const msg = await applyFix(fixId, selectedAppId);
+      const msg = await applyFix(fixId, diagnosedAppId);
       setFixResult(msg);
       onRefreshState();
       // Re-run checks
@@ -87,7 +106,7 @@ export const DiagnosticsView: React.FC<DiagnosticsViewProps> = ({
           </label>
           <select
             value={selectedAppId}
-            onChange={(e) => setSelectedAppId(e.target.value)}
+            onChange={(e) => handleSelectApp(e.target.value)}
             className="w-full md:w-80 px-3 py-2 rounded-lg bg-graphite-850 border border-graphite-700 font-mono text-[13px] text-graphite-100 focus:outline-none"
           >
             {applications.map((app) => (
@@ -187,7 +206,7 @@ export const DiagnosticsView: React.FC<DiagnosticsViewProps> = ({
                                   : check.fix === "install_rosetta"
                                   ? "Install Apple Rosetta 2 Runtime"
                                   : check.fix === "switch_graphics"
-                                  ? "Switch to WineD3D (OpenGL)"
+                                  ? "Switch to D3DMetal (Metal)"
                                   : check.fix === "init_prefix"
                                   ? "Initialize bottle prefix files"
                                   : check.fix === "install_runtime"

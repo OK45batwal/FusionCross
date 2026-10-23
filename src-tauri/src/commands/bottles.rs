@@ -8,10 +8,10 @@ use crate::core::ids::new_id;
 use crate::core::paths;
 use crate::core::state::{Application, Bottle};
 use crate::core::templates;
-use crate::manager::{dirs, FusionState, Jobs};
+use crate::manager::{bottle_prefix, dirs, FusionState, Jobs};
 use crate::process::ProcessManager;
 
-use super::{build_wine_execution_context, now_ts, settings_bool, wine_binary_for};
+use super::{build_wine_execution_context, now_ts, settings_bool, settings_value, wine_binary_for};
 
 #[tauri::command]
 pub fn create_bottle(
@@ -217,7 +217,9 @@ pub fn delete_bottle(app: AppHandle, bottle_id: String) -> Result<(), FusionErro
             .cloned()
             .ok_or(FusionError::BottleNotFound)
     })?;
-    paths::safe_remove_all(&d.bottles, Path::new(&bottle.path))?;
+    let prefix = bottle_prefix(&d.bottles, &bottle)?;
+    let base = prefix.parent().ok_or(FusionError::InvalidPath)?;
+    paths::safe_remove_all(base, &prefix)?;
     st.update(|s| {
         s.bottles.retain(|b| b.id != bottle_id);
         s.applications.retain(|a| a.bottle_id != bottle_id);
@@ -394,7 +396,7 @@ pub fn run_executable_in_bottle(
     })?;
     let binary = wine_binary_for(&app, &bottle.runtime)?;
     let d = dirs(&app);
-    let prefix = paths::safe_join(&d.bottles, &bottle.id)?;
+    let prefix = bottle_prefix(&d.bottles, &bottle)?;
     let executable = paths::safe_file(&prefix, &executable_rel_path)?;
     if !is_windows_executable(&executable) {
         return Err(FusionError::InvalidExecutable);
@@ -408,7 +410,8 @@ pub fn run_executable_in_bottle(
         crate::wine::prefix::ensure_graphics_registry(&prefix, &bottle.graphics).ok();
     }
 
-    let (override_env, dll_overrides) = build_wine_execution_context(&binary, &bottle, safe);
+    let hud = settings_value(&app, "dxvk_hud").unwrap_or_else(|| "compiler,fps".into());
+    let (override_env, dll_overrides) = build_wine_execution_context(&binary, &bottle, safe, &hud);
 
     let mut cmd = std::process::Command::new(&binary);
     cmd.env("WINEPREFIX", &prefix);

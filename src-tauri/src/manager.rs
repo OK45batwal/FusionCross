@@ -1,12 +1,13 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
 use crate::core::errors::FusionError;
-use crate::core::state::AppState;
+use crate::core::paths;
+use crate::core::state::{AppState, Bottle};
 
 fn app_data_dir(app: &AppHandle) -> Option<PathBuf> {
     // Disposable data directories for local debug smoke tests only.
@@ -206,6 +207,26 @@ fn legacy_bases() -> Vec<PathBuf> {
         .into_iter()
         .map(|name| home.join("Library/Application Support").join(name))
         .collect()
+}
+
+/// Resolve a bottle prefix. Only the current layout and prefixes registered in
+/// place from a legacy app-data directory are accepted; a corrupted state file
+/// cannot redirect launches, snapshots or deletion at an arbitrary path.
+pub fn bottle_prefix(bottles_dir: &Path, bottle: &Bottle) -> Result<PathBuf, FusionError> {
+    let path = PathBuf::from(&bottle.path);
+    let current = bottles_dir.join(&bottle.id);
+    let allowed = paths::same_file(&path, &current)
+        || legacy_bases()
+            .into_iter()
+            .any(|base| paths::same_file(&path, &base.join("bottles").join(&bottle.id)));
+    if !allowed {
+        return Err(FusionError::InvalidPath);
+    }
+    match std::fs::symlink_metadata(&path) {
+        Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => Ok(path),
+        Ok(_) => Err(FusionError::InvalidPath),
+        Err(_) => Err(FusionError::BottleNotFound),
+    }
 }
 
 /// Drop entries that point outside the bottle, at helper binaries, or at the
@@ -543,6 +564,40 @@ mod tests {
         assert_eq!(state.bottles[0].id, "kept");
         assert_eq!(state.runtimes.len(), 1);
         assert_eq!(state.runtimes[0].id, "wine");
+
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn bottle_prefix_accepts_only_the_registered_layout() {
+        let root = std::env::temp_dir().join(format!("fc_prefix_{}", new_id()));
+        let bottles = root.join("bottles");
+        let prefix = bottles.join("current");
+        std::fs::create_dir_all(prefix.join("drive_c")).unwrap();
+
+        assert_eq!(
+            bottle_prefix(&bottles, &bottle("current", &prefix)).unwrap(),
+            prefix
+        );
+
+        let elsewhere = root.join("elsewhere");
+        std::fs::create_dir_all(&elsewhere).unwrap();
+        assert!(matches!(
+            bottle_prefix(&bottles, &bottle("current", &elsewhere)),
+            Err(FusionError::InvalidPath)
+        ));
+
+        let link = root.join("linked");
+        std::os::unix::fs::symlink(&prefix, &link).unwrap();
+        assert!(matches!(
+            bottle_prefix(&bottles, &bottle("current", &link)),
+            Err(FusionError::InvalidPath)
+        ));
+
+        assert!(matches!(
+            bottle_prefix(&bottles, &bottle("missing", &bottles.join("missing"))),
+            Err(FusionError::BottleNotFound)
+        ));
 
         std::fs::remove_dir_all(root).ok();
     }

@@ -3,8 +3,24 @@ use std::path::{Path, PathBuf};
 
 use crate::core::errors::FusionError;
 
-const MAX_ARCHIVE_ENTRIES: usize = 20_000;
-const MAX_UNCOMPRESSED_ARCHIVE_BYTES: u64 = 8 * 1024 * 1024 * 1024;
+const RUNTIME_LIMITS: Limits = Limits {
+    max_entries: 20_000,
+    max_bytes: 8 * 1024 * 1024 * 1024,
+};
+
+/// A Wine prefix stores games, so it can be far larger than a runtime tarball.
+/// The same bounds are enforced when creating a snapshot, which guarantees
+/// that every archive we write can be restored.
+const SNAPSHOT_LIMITS: Limits = Limits {
+    max_entries: 500_000,
+    max_bytes: 256 * 1024 * 1024 * 1024,
+};
+
+#[derive(Debug, Clone, Copy)]
+struct Limits {
+    max_entries: usize,
+    max_bytes: u64,
+}
 
 /// Verify a file's SHA-256 against an expected digest using the platform
 /// `shasum` binary. Non-matches are a hard error (PRD §54).
@@ -46,9 +62,26 @@ pub fn detect_kind(path: &Path) -> Option<ArchiveKind> {
     }
 }
 
-/// Extract an archive into `dest`, refusing any entry that would escape it.
-/// Symlinks are skipped (no path traversal, no surprising links inside a runtime).
+/// Extract a runtime archive into `dest`, refusing any entry that would
+/// escape it. Symlinks are skipped: runtime tarballs have no legitimate links
+/// and must not plant them in the app data directory.
 pub fn extract_archive(archive: &Path, dest: &Path) -> Result<(), FusionError> {
+    extract_with(archive, dest, RUNTIME_LIMITS, false)
+}
+
+/// Extract a bottle snapshot. Unlike runtimes, Wine prefixes rely on symlinks
+/// (`dosdevices/c:` points at `drive_c`, `z:` at the host root), so they are
+/// recreated without ever being traversed during extraction.
+pub fn extract_snapshot_archive(archive: &Path, dest: &Path) -> Result<(), FusionError> {
+    extract_with(archive, dest, SNAPSHOT_LIMITS, true)
+}
+
+fn extract_with(
+    archive: &Path,
+    dest: &Path,
+    limits: Limits,
+    preserve_symlinks: bool,
+) -> Result<(), FusionError> {
     match std::fs::symlink_metadata(dest) {
         Ok(metadata) if metadata.file_type().is_symlink() || !metadata.file_type().is_dir() => {
             return Err(FusionError::ArchiveValidationFailed);
@@ -60,8 +93,8 @@ pub fn extract_archive(archive: &Path, dest: &Path) -> Result<(), FusionError> {
         Err(_) => return Err(FusionError::PermissionDenied),
     }
     match detect_kind(archive).ok_or(FusionError::ArchiveValidationFailed)? {
-        ArchiveKind::TarXz => extract_tar(decoder::xz(archive)?, archive, dest),
-        ArchiveKind::TarGz => extract_tar(decoder::gz(archive)?, archive, dest),
+        ArchiveKind::TarXz => extract_tar(decoder::xz(archive)?, dest, limits, preserve_symlinks),
+        ArchiveKind::TarGz => extract_tar(decoder::gz(archive)?, dest, limits, preserve_symlinks),
         ArchiveKind::Zip => Err(FusionError::Unsupported),
     }
 }
@@ -82,8 +115,9 @@ mod decoder {
 
 fn extract_tar(
     reader: Box<dyn Read + Send>,
-    archive: &Path,
     dest: &Path,
+    limits: Limits,
+    preserve_symlinks: bool,
 ) -> Result<(), FusionError> {
     let mut ar = tar::Archive::new(reader);
     let dest_canon = dest.canonicalize().unwrap_or_else(|_| dest.to_path_buf());
@@ -97,13 +131,13 @@ fn extract_tar(
         entry_count = entry_count
             .checked_add(1)
             .ok_or(FusionError::ArchiveValidationFailed)?;
-        if entry_count > MAX_ARCHIVE_ENTRIES {
+        if entry_count > limits.max_entries {
             return Err(FusionError::ArchiveValidationFailed);
         }
         extracted_bytes = extracted_bytes
             .checked_add(entry.size())
             .ok_or(FusionError::ArchiveValidationFailed)?;
-        if extracted_bytes > MAX_UNCOMPRESSED_ARCHIVE_BYTES {
+        if extracted_bytes > limits.max_bytes {
             return Err(FusionError::ArchiveValidationFailed);
         }
         let path = entry
@@ -117,10 +151,14 @@ fn extract_tar(
         {
             return Err(FusionError::ArchiveValidationFailed);
         }
-        // skip any symlink entries outright
+        // Hardlinks, devices and other special entries have no place in a
+        // prefix snapshot; skip them rather than guessing at their target.
         use tar::EntryType;
-        if entry.header().entry_type() != EntryType::Regular
-            && entry.header().entry_type() != EntryType::Directory
+        let entry_type = entry.header().entry_type();
+        let is_symlink = entry_type == EntryType::Symlink;
+        if entry_type != EntryType::Regular
+            && entry_type != EntryType::Directory
+            && !(preserve_symlinks && is_symlink)
         {
             continue;
         }
@@ -128,9 +166,26 @@ fn extract_tar(
         if !target.starts_with(&dest_canon) {
             return Err(FusionError::ArchiveValidationFailed);
         }
-        match entry.header().entry_type() {
+        match entry_type {
             EntryType::Directory => {
                 ensure_directory(&dest_canon, &target)?;
+            }
+            EntryType::Symlink => {
+                let link = entry
+                    .link_name()
+                    .map_err(|_| FusionError::ArchiveValidationFailed)?
+                    .ok_or(FusionError::ArchiveValidationFailed)?
+                    .into_owned();
+                if let Some(parent) = target.parent() {
+                    ensure_directory(&dest_canon, parent)?;
+                }
+                if std::fs::symlink_metadata(&target).is_ok() {
+                    return Err(FusionError::ArchiveValidationFailed);
+                }
+                // Recreate the link; never write through it. Later entries
+                // whose parent resolves to a symlink are rejected above.
+                std::os::unix::fs::symlink(&link, &target)
+                    .map_err(|_| FusionError::ArchiveValidationFailed)?;
             }
             _ => {
                 if let Some(parent) = target.parent() {
@@ -148,7 +203,6 @@ fn extract_tar(
             }
         }
     }
-    let _ = archive;
     Ok(())
 }
 
@@ -180,12 +234,15 @@ fn ensure_directory(dest: &Path, target: &Path) -> Result<(), FusionError> {
 }
 
 /// Create a `.tar.gz` of a directory — used for bottle snapshots/backups.
-/// Fails if the source escapes... the source is expected to be a bottle path
-/// already validated by the caller via `paths::is_inside`.
+/// Symlinks are archived as links (Wine needs them) and never followed, so a
+/// prefix's `dosdevices/z:` cannot pull the host filesystem into a backup.
+/// The tree is measured first against the same limits restore enforces.
 pub fn create_tar_gz(src_dir: &Path, out_file: &Path) -> Result<(), FusionError> {
+    measure_tree(src_dir, SNAPSHOT_LIMITS)?;
     let file = std::fs::File::create(out_file).map_err(|_| FusionError::PermissionDenied)?;
     let enc = flate2::write::GzEncoder::new(file, flate2::Compression::default());
     let mut builder = tar::Builder::new(enc);
+    builder.follow_symlinks(false);
     builder
         .append_dir_all(".", src_dir)
         .map_err(|_| FusionError::PermissionDenied)?;
@@ -196,6 +253,38 @@ pub fn create_tar_gz(src_dir: &Path, out_file: &Path) -> Result<(), FusionError>
         .finish()
         .map_err(|_| FusionError::PermissionDenied)?;
     Ok(())
+}
+
+/// Count entries and regular-file bytes without following symlinks.
+fn measure_tree(root: &Path, limits: Limits) -> Result<(usize, u64), FusionError> {
+    let mut stack = vec![root.to_path_buf()];
+    let mut entries = 0usize;
+    let mut bytes = 0u64;
+    while let Some(path) = stack.pop() {
+        let metadata =
+            std::fs::symlink_metadata(&path).map_err(|_| FusionError::PermissionDenied)?;
+        entries += 1;
+        if entries > limits.max_entries {
+            return Err(FusionError::ArchiveValidationFailed);
+        }
+        if metadata.file_type().is_symlink() {
+            continue;
+        }
+        if metadata.is_dir() {
+            let children = std::fs::read_dir(&path).map_err(|_| FusionError::PermissionDenied)?;
+            for child in children {
+                stack.push(child.map_err(|_| FusionError::PermissionDenied)?.path());
+            }
+        } else {
+            bytes = bytes
+                .checked_add(metadata.len())
+                .ok_or(FusionError::ArchiveValidationFailed)?;
+            if bytes > limits.max_bytes {
+                return Err(FusionError::ArchiveValidationFailed);
+            }
+        }
+    }
+    Ok((entries, bytes))
 }
 
 #[cfg(test)]
@@ -280,6 +369,55 @@ mod tests {
 
         assert!(extract_archive(&archive, &destination).is_err());
         assert!(!outside.join("blocked.txt").exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn measure_tree_enforces_entry_and_byte_limits() {
+        let dir = std::env::temp_dir().join(format!("fc_measure_{}", new_id()));
+        let src = dir.join("src");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(src.join("a.bin"), b"1234").unwrap();
+        std::fs::write(src.join("b.bin"), b"5678").unwrap();
+
+        // root + two files exceed a two-entry budget
+        assert!(measure_tree(
+            &src,
+            Limits {
+                max_entries: 2,
+                max_bytes: 1024
+            }
+        )
+        .is_err());
+        assert!(measure_tree(
+            &src,
+            Limits {
+                max_entries: 100,
+                max_bytes: 4
+            }
+        )
+        .is_err());
+        assert!(measure_tree(&src, SNAPSHOT_LIMITS).is_ok());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn measure_tree_does_not_follow_symlinks() {
+        let dir = std::env::temp_dir().join(format!("fc_measure_link_{}", new_id()));
+        let src = dir.join("src");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(dir.join("big.bin"), vec![0u8; 4096]).unwrap();
+        std::os::unix::fs::symlink(dir.join("big.bin"), src.join("link")).unwrap();
+        std::fs::write(src.join("tiny.txt"), b"ok").unwrap();
+
+        let limits = Limits {
+            max_entries: 100,
+            max_bytes: 10,
+        };
+        assert!(measure_tree(&src, limits).is_ok());
+
         std::fs::remove_dir_all(&dir).ok();
     }
 }

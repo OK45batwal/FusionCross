@@ -175,6 +175,7 @@ export const createBottle = (name: string, templateType: string) =>
 export const deleteBottle = (bottleId: string) => invoke<void>("delete_bottle", { bottleId });
 export const cloneBottle = (bottleId: string, newName: string) =>
   invoke<Bottle>("clone_bottle", { bottleId, newName });
+// Tauri exposes snake_case Rust arguments as camelCase, so map them here.
 export const updateBottle = (
   bottleId: string,
   params: {
@@ -187,7 +188,18 @@ export const updateBottle = (
     environment?: [string, string][];
     dll_overrides?: string[];
   }
-) => invoke<void>("update_bottle", { bottleId, ...params });
+) =>
+  invoke<void>("update_bottle", {
+    bottleId,
+    windowsVersion: params.windows_version,
+    graphics: params.graphics,
+    dxvkEnabled: params.dxvk_enabled,
+    msyncEnabled: params.msync_enabled,
+    performanceHud: params.performance_hud,
+    retinaMode: params.retina_mode,
+    environment: params.environment,
+    dllOverrides: params.dll_overrides,
+  });
 export const killBottleProcesses = (bottleId: string) =>
   invoke<void>("kill_bottle_processes", { bottleId });
 export const launchWineTool = (bottleId: string, tool: string) =>

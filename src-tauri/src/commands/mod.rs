@@ -135,27 +135,33 @@ fn wine_in_app_bundles(root: &Path) -> Option<String> {
 }
 
 pub fn settings_bool(app: &AppHandle, key: &str) -> bool {
-    app.state::<FusionState>()
-        .0
-        .lock()
-        .ok()
-        .and_then(|g| {
-            g.settings
-                .iter()
-                .find(|(k, _)| k == key)
-                .map(|(_, v)| v == "on")
-        })
-        .unwrap_or(false)
+    settings_value(app, key).as_deref() == Some("on")
+}
+
+pub fn settings_value(app: &AppHandle, key: &str) -> Option<String> {
+    app.state::<FusionState>().0.lock().ok().and_then(|g| {
+        g.settings
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.clone())
+    })
 }
 
 /// Construct the complete Wine execution context (environment variables and DLL overrides)
 /// ensuring full support for Apple D3DMetal (GPTK), DXVK, Rosetta 2 AVX, and Mach semaphores.
+/// Safe Mode strips every user override so a broken launch can recover on a
+/// plain WineD3D baseline.
 pub fn build_wine_execution_context(
     wine_binary: &str,
     bottle: &crate::core::state::Bottle,
     safe_mode: bool,
+    hud_preset: &str,
 ) -> (Vec<(String, String)>, String) {
-    let mut env = bottle.environment.clone();
+    let mut env = if safe_mode {
+        Vec::new()
+    } else {
+        bottle.environment.clone()
+    };
     // Older state files may still contain this reserved override.
     env.retain(|(key, _)| key != "WINEPREFIX");
 
@@ -205,8 +211,9 @@ pub fn build_wine_execution_context(
         env.push(("D3DM_SUPPORT_DXR".into(), "1".into()));
     }
 
-    // 4. Synchronization (MSync / Mach Semaphores)
-    if bottle.msync_enabled {
+    // 4. Synchronization (MSync / Mach Semaphores). Safe Mode uses Wine's
+    // default path so a suspected sync bug cannot block recovery.
+    if !safe_mode && bottle.msync_enabled {
         env.push(("WINEMSYNC".into(), "1".into()));
         env.push(("WINE_MSYNC".into(), "1".into()));
         env.push(("WINEESYNC".into(), "0".into()));
@@ -219,7 +226,7 @@ pub fn build_wine_execution_context(
     // 5. Diagnostics HUD
     if bottle.performance_hud && !safe_mode {
         env.push(("MTL_HUD_ENABLED".into(), "1".into()));
-        env.push(("DXVK_HUD".into(), "compiler,fps,frametimes,gpuload".into()));
+        env.push(("DXVK_HUD".into(), hud_preset.to_string()));
     } else {
         env.push(("MTL_HUD_ENABLED".into(), "0".into()));
         env.push(("DXVK_HUD".into(), "0".into()));
@@ -231,23 +238,36 @@ pub fn build_wine_execution_context(
     }
 
     // 7. Graphics Backend Routing & Overrides
-    let mut overrides = bottle.dll_overrides.clone();
+    let mut overrides = if safe_mode {
+        Vec::new()
+    } else {
+        bottle.dll_overrides.clone()
+    };
     overrides.push("mscoree,mshtml=".into()); // Silence gecko/mono prompts
 
-    match bottle.graphics.as_str() {
-        "d3dmetal" => {
-            // GPTK / D3DMetal provides native d3d11, d3d12, dxgi, d3d10core on Metal
-            overrides.push("d3d11,d3d12,dxgi,d3d10core=n,b".into());
-            env.push(("WINE_D3D_CONFIG".into(), "renderer=metal".into()));
-        }
-        "dxvk" => {
-            // DXVK translates DirectX 9, 10, 11 to Vulkan (MoltenVK on macOS)
-            overrides.push("d3d11,d3d10core,dxgi,d3d9=n,b".into());
-            env.push(("DXVK_ASYNC".into(), "1".into()));
-        }
-        _ => {
-            // Pure Wine builtin OpenGL
-            overrides.push("d3d11,d3d12,dxgi=b".into());
+    if safe_mode {
+        // Recovery baseline: Wine's builtin Direct3D, no custom DLLs.
+        overrides.push("d3d11,d3d12,dxgi=b".into());
+    } else {
+        match bottle.graphics.as_str() {
+            "d3dmetal" => {
+                // GPTK / D3DMetal provides native d3d11, d3d12, dxgi, d3d10core on Metal
+                overrides.push("d3d11,d3d12,dxgi,d3d10core=n,b".into());
+                env.push(("WINE_D3D_CONFIG".into(), "renderer=metal".into()));
+            }
+            "dxvk" => {
+                // DXVK translates DirectX 9, 10, 11 to Vulkan (MoltenVK on macOS)
+                overrides.push("d3d11,d3d10core,dxgi,d3d9=n,b".into());
+                env.push(("DXVK_ASYNC".into(), "1".into()));
+            }
+            "dxmt" => {
+                // DXMT ships its own d3d11/dxgi built on Apple Metal.
+                overrides.push("d3d11,d3d10core,dxgi=n,b".into());
+            }
+            _ => {
+                // Pure Wine builtin OpenGL
+                overrides.push("d3d11,d3d12,dxgi=b".into());
+            }
         }
     }
 
@@ -280,7 +300,8 @@ mod tests {
             dependencies: vec![],
         };
 
-        let (env, overrides) = build_wine_execution_context("/fake/runtime/bin/wine64", &b, false);
+        let (env, overrides) =
+            build_wine_execution_context("/fake/runtime/bin/wine64", &b, false, "fps");
 
         assert!(overrides.contains("d3d11,d3d12,dxgi,d3d10core=n,b"));
         assert!(overrides.contains("custom_dll=n"));
@@ -290,6 +311,7 @@ mod tests {
         assert_eq!(env_map.get("CUSTOM_KEY"), Some(&"CUSTOM_VAL".to_string()));
         assert_eq!(env_map.get("WINEMSYNC"), Some(&"1".to_string()));
         assert_eq!(env_map.get("MTL_HUD_ENABLED"), Some(&"1".to_string()));
+        assert_eq!(env_map.get("DXVK_HUD"), Some(&"fps".to_string()));
         if std::env::consts::ARCH == "aarch64" {
             assert_eq!(env_map.get("ROSETTA_ADVERTISE_AVX"), Some(&"1".to_string()));
         }
@@ -305,12 +327,48 @@ mod tests {
         .unwrap();
         let wine = root.join("bin/wine64");
 
-        let (env, _) = build_wine_execution_context(&wine.to_string_lossy(), &bottle, true);
+        let (env, _) = build_wine_execution_context(&wine.to_string_lossy(), &bottle, true, "fps");
         let keys: Vec<&str> = env.iter().map(|(k, _)| k.as_str()).collect();
         assert!(!keys.contains(&"DYLD_LIBRARY_PATH"));
         assert!(keys.contains(&"DYLD_FALLBACK_LIBRARY_PATH"));
 
         std::fs::remove_dir_all(root).ok();
+    }
+
+    fn bottle_with_graphics(graphics: &str) -> Bottle {
+        serde_json::from_value(serde_json::json!({
+            "id": "b", "name": "Bottle", "path": "/tmp/prefix",
+            "graphics": graphics,
+            "msync_enabled": true,
+            "performance_hud": true,
+            "environment": [["CUSTOM_KEY", "CUSTOM_VAL"]],
+            "dll_overrides": ["custom_dll=n"]
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn safe_mode_strips_user_overrides_and_forces_builtin_d3d() {
+        let b = bottle_with_graphics("dxvk");
+        let (env, overrides) = build_wine_execution_context("/fake/wine64", &b, true, "full");
+
+        assert!(!overrides.contains("custom_dll=n"));
+        assert!(overrides.contains("d3d11,d3d12,dxgi=b"));
+        assert!(overrides.contains("mscoree,mshtml="));
+
+        let env_map: std::collections::HashMap<_, _> = env.into_iter().collect();
+        assert!(!env_map.contains_key("CUSTOM_KEY"));
+        assert_eq!(env_map.get("WINEMSYNC"), Some(&"0".to_string()));
+        assert_eq!(env_map.get("DXVK_HUD"), Some(&"0".to_string()));
+    }
+
+    #[test]
+    fn dxmt_uses_native_overrides_instead_of_builtin() {
+        let b = bottle_with_graphics("dxmt");
+        let (_, overrides) = build_wine_execution_context("/fake/wine64", &b, false, "fps");
+
+        assert!(overrides.contains("d3d11,d3d10core,dxgi=n,b"));
+        assert!(!overrides.contains("d3d11,d3d12,dxgi=b"));
     }
 
     #[test]

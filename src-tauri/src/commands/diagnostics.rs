@@ -1,12 +1,11 @@
 #![allow(dead_code)]
 
-use std::path::Path;
 use tauri::{AppHandle, Manager};
 
 use crate::compatibility::{self, Recommendation};
 use crate::core::errors::FusionError;
 use crate::diagnostics::{self, FixIntent};
-use crate::manager::FusionState;
+use crate::manager::{bottle_prefix, dirs, FusionState};
 
 use super::wine_binary_for;
 
@@ -47,7 +46,8 @@ pub fn apply_fix(app: AppHandle, fix_id: String, app_id: String) -> Result<Strin
                     .ok_or(FusionError::BottleNotFound)
             })?;
             let binary = wine_binary_for(&app, &bottle.runtime)?;
-            crate::wine::prefix::init_prefix(&binary, Path::new(&bottle.path))?;
+            let prefix = bottle_prefix(&dirs(&app).bottles, &bottle)?;
+            crate::wine::prefix::init_prefix(&binary, &prefix)?;
             Ok("Prefix initialized.".into())
         }
         FixIntent::InstallDependency(verb) => {
@@ -61,11 +61,8 @@ pub fn apply_fix(app: AppHandle, fix_id: String, app_id: String) -> Result<Strin
                     .ok_or(FusionError::BottleNotFound)
             })?;
             let binary = wine_binary_for(&app, &bottle.runtime)?;
-            crate::wine::prefix::install_verbs(
-                &binary,
-                Path::new(&bottle.path),
-                &[verb.to_string()],
-            )?;
+            let prefix = bottle_prefix(&dirs(&app).bottles, &bottle)?;
+            crate::wine::prefix::install_verbs(&binary, &prefix, &[verb.to_string()])?;
             Ok(format!("Installed {verb}."))
         }
         FixIntent::SwitchGraphics => {
